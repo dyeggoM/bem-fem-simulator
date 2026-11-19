@@ -1,0 +1,13 @@
+[project]
+name = "ultrasound-simulator"
+version = "0.1.0"
+description = "Ultrasound simulator with BEM and FEM for cross-verification"
+requires-python = ">=3.10"
+dependencies = ["numpy", "scipy", "matplotlib"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
