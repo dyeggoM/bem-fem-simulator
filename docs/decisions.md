@@ -888,6 +888,23 @@ repetir:
    `p = −i·ω·ρ·Q·e^{ikr}/(4πr)`. Con el signo opuesto la amplitud coincide al 1 % y el desfase es un
    **+178° constante**: un error de fase perfectamente plausible si no se mira el número complejo.
 
-**Lo que falta para llamar a esto "cóclea 3D"**: el estratificado R/T en 3D (el 1D ya existe y en 2D
-está resuelto), la dispersión contra un obstáculo (`assemble_scattered` está escrito y sin test),
-elasticidad 3D, y la geometría de CT. Cada uno es una fase, no un detalle.
+**Estratificado en 3D — validado** (`test_estratificado_rt_contra_la_matriz_de_transferencia`): una
+losa de un fluido de prueba (c = 2000 m/s, ρ = 1200) en agua, con contraste de impedancia real.
+Contra la matriz de transferencia 1D: **R al 2.91 %** (complejo, 0.2493+0.2114j contra 0.2424+0.2179j)
+y **|T| al 2.11 %** (0.9254 contra 0.9454).
+
+Por qué se ajustan R y T en una ventana pegada a las interfaces y no se compara el campo punto a
+punto: **la dispersión de P1 se acumula con la distancia**. Medido en la misma caja: el error crece
+13 % → 27 % → 39 % de izquierda a derecha, y es *idéntico* en el caso homogéneo — es el mismo techo
+que D10 documentó en 2D, no un problema del estratificado. La fase de `T` además depende de si se
+refiere a `x = 0` o a la salida de la losa; R y |T| no, por eso son los que se exigen.
+
+**Campo dispersado: sólo obstáculo rígido, y sin validar**. `assemble_scattered` no arma el término de
+contraste voluminoso `−(k² − k_i²)·p_i/ρ`, así que con un dispersor **penetrable** devuelve `p_s = 0`
+exacto (medido). Lo que sí está es el camino de obstáculo rígido (`neumann_faces` +
+`dp_dn_incident = −∂p_i/∂n`), sin test todavía. Lo único verificado es el sanity: en medio homogéneo
+`p_s = 0` **exacto**, que descarta términos incidentes espurios.
+
+**Lo que falta para llamar a esto "cóclea 3D"**: el término de contraste para dispersores penetrables
+(y su validación contra algún caso con solución conocida), elasticidad 3D, y la geometría de CT. Cada
+uno es una fase, no un detalle.
