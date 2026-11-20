@@ -850,17 +850,44 @@ respectivamente. Con t = 6 mm y c_s = 1500: `0.2963`.
 también es VERIFY (D20), así que es un candidato obvio a ser el cuarto campo; queda anotado. La
 membrana usa `BASILAR_MEMBRANE_BALLPARK` (VERIFY) y la app lo dice en el pie.
 
+---
 
+## D32 — Núcleo 3D: converge como P1 tiene que converger, y el techo es el costo
 
+Fase 6a. Tres módulos nuevos: `meshing3d.py` (malla de cajas: cada celda en 6 tetraedros con
+orientación positiva verificada), `fem/helmholtz3d.py` (P1 en tetraedros, ABC-1 y BGT-2 en caras
+planas, campo total y dispersado, fuente puntual) y `aperture3d.py` (integral de Rayleigh en 3D con
+pistón circular o rectangular y foco). No hay geometría de cóclea ni elasticidad 3D todavía.
 
+**Lo medido** (`tests/test_helmholtz3d.py`, 5 tests; `tests/test_aperture3d.py`, 14):
 
+| criterio | medido |
+|---|---|
+| malla: volúmenes positivos y suma = volumen de la caja | exacto a 1e-12; 176 caras de frontera en 4×2×6 |
+| onda plana con ABC (caja 2 λ × 1 λ × 1 λ) | 20.50 % a ppw 8 → **3.53 % a ppw 20** |
+| orden de convergencia | **1.88 / 1.94 / 1.97** (P1, como corresponde) |
+| ABC contra pared rígida | **9.57 %** contra **100.0 %** |
+| fase del campo: `d(arg p)/dx` contra `k` | 4.192e2 contra 4.189e2 (0.07 %) |
+| fuente puntual contra el Green 3D | amplitud **0.9903** del teórico; L2 8.4 % en caja de 1.1 λ |
+| pistón 3D en el eje contra Rayleigh-Sommerfeld | 0.0000 %; último máximo en `a²/λ − λ/4` exacto |
+| `|p|` en el pico axial | `2·ρ·c·v₀` exacto |
 
+**El costo es el techo, no la física**: 2 λ × 1 λ × 1 λ a ppw 20 son 18 081 nodos y 96 000 tets →
+5.3 s por solve. Un cubo de 3 λ a ppw 12 (50 653 nodos) no terminó en 10 minutos. O sea: en 3D el
+presupuesto se gasta en la LU dispersa, y por eso el dominio útil con este ensamblado es de pocas
+longitudes de onda — exactamente lo que el plan anticipaba (D8/D10) cuando decía que a 1 MHz hay que
+pasar a FEniCSx+MPI, a k-Wave o resolver el exterior por BEM.
 
+**Dos errores que fueron míos, no del módulo**, y quedan escritos porque el primero es fácil de
+repetir:
 
+1. **Factor ρ**: la ecuación se ensambla dividida por `element_rho`, que por defecto vale **1**. Sin
+   pasar `element_rho=W.rho` la fuente puntual da `1/ρ` de la amplitud (medido: 0.0010 del teórico).
+   El módulo está bien; el que se olvidó la densidad fui yo.
+2. **Signo de `i` en el Green**: con la convención del repo y un RHS `−i·ω·Q`, la solución es
+   `p = −i·ω·ρ·Q·e^{ikr}/(4πr)`. Con el signo opuesto la amplitud coincide al 1 % y el desfase es un
+   **+178° constante**: un error de fase perfectamente plausible si no se mira el número complejo.
 
-
-
-
-
-
-
+**Lo que falta para llamar a esto "cóclea 3D"**: el estratificado R/T en 3D (el 1D ya existe y en 2D
+está resuelto), la dispersión contra un obstáculo (`assemble_scattered` está escrito y sin test),
+elasticidad 3D, y la geometría de CT. Cada uno es una fase, no un detalle.
