@@ -144,6 +144,14 @@ es la señal de un error o de una suposición mal puesta.
   **hoy no es prioritario**: la incertidumbre de material (2.4–3.3×, D20) es mucho mayor.
   *Referencia externa (Elmer/openCFS): pendiente, no están instalados; los límites de arriba son el
   sustituto hasta entonces.*
+  **5b-2 ENTREGADA (D29)**: la membrana basilar es un segmento con impedancia
+  `Z_m = R + iωm + k/(iω)` sobre un diámetro del fluido interior. Rompe la resonancia de cavidad:
+  el `Q` medido baja de **287** a **< 5** (factor > 57), y `t_interior` deja de tener el lóbulo que
+  lo hacía no monótono (2 cambios de signo → 1, 12 de 13 tramos decrecientes y el último +0.97 %).
+  El `n = 0` acompaña: 0.3866 → 0.0761 sin membrana (5.08×) contra 0.1813 → 0.1169 con membrana
+  (1.55×). Propiedades de la membrana: **todas VERIFY** (no hay conjunto citable en nuestra banda);
+  los criterios se validan por límites (Z→∞ rígido, Z→0 presión nula) y balance de energía, no por
+  esos números.
 - **Fase 6 — 3D con geometría de CT** y mapas heterogéneos. *Aceptación*: resultados de literatura
   para skull / hueso temporal.
 - **Fase 7 — Opcional**: híbrido FEM-BEM, pulsos en tiempo, GUI (frontend C# si se quiere).

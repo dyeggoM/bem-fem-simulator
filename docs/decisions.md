@@ -646,6 +646,132 @@ seguía ahí.
 está limitado por el techo de P1 (D8), así que se puede pedir 1 MHz en 2D y el resultado es correcto
 pero caro de interpretar.
 
+---
+
+## D28 — El baffle no cambia el campo delantero; lo que niega es la radiación trasera
+
+El dashboard tenía un solo modelo de radiación: la integral de Rayleigh sobre baffle rígido infinito,
+`p = 2·i·ω·ρ·Σ ∫ v·G`. Se agregó el mismo problema resuelto **sin baffle**
+(`dashboard/bem_field.py`): la apertura es una lámina delgada de ancho finito con fluido a los dos
+lados, representada por una capa simple. Como la lámina es simétrica, la densidad queda determinada
+por el salto de velocidad —`σ = −2·i·ω·ρ·v`— y **no hay sistema lineal que invertir**: no hay cuerpo
+cerrado ni dominio interior, así que Burton-Miller y CHIEF (que existen para cerrar la ecuación en
+superficies cerradas) no aplican. Todo el trabajo numérico es la cuadratura con la singularidad
+logarítmica de `H₀`, resuelta por refinamiento graduado.
+
+**El resultado, que no era el esperado**: en `x > 0` los dos modelos dan **el mismo módulo con 180° de
+fase**. Es una identidad, no una coincidencia numérica:
+
+- `p_libre + p_baffle` sobre una malla en `x > 0`: máximo `6.5e-12` relativo → `p_libre = −p_baffle`
+  exacto.
+- Reparto de potencia con la lámina: atrás/adelante = *0.9871* (la lámina radia igual a los dos lados,
+  como debe).
+
+O sea que **el supuesto de baffle no sesga nada de lo que el dashboard venía mostrando delante**. Lo
+que sí hace es negar el semiespacio trasero, donde la lámina libre radia con la misma fuerza: el
+máximo global del modelo libre puede caer *detrás* del plano (medido: −75.6 mm en la configuración por
+defecto). Eso es lo que la UI ahora deja ver y avisa en el panel.
+
+**Costo**: 80×80 con 32 paneles en *1.30 s*, contra ~0.35 s del modelo de Rayleigh (la cuadratura
+graduada es cara). A 120×120 son ~3 s, así que el modelo libre no baja a 80×80 durante el arrastre de
+asas: el jalón se siente más lento con este modelo y está documentado.
+
+**Verificación del módulo** (`tests/test_bem_field.py`, 31 tests):
+
+| criterio | medido |
+|---|---|
+| panel de 1e-4·λ contra el cilindro pulsante exacto | **2.155e-3** relativo (fuente lineal: 2.151e-3) |
+| residuo de `∇²p + k²p = 0` a h = λ/40 | **1.9e-3 … 2.7e-3** |
+| decaimiento `|p|·√r` entre 0.3 y 3 m | dispersión **8.64e-7** |
+| reciprocidad (3 pares) | **1.2e-16** |
+| contraste con el modelo con baffle en el foco | **ΔdB = 0.0000**, desfase π |
+| 19 entradas inválidas | `ValueError` con mensaje; salida `complex128` finita siempre |
+
+**Dos correcciones de convención que salieron de acá**:
+
+1. La fórmula que escribí en el enunciado de la tarea, `p = −ρc·v·H₀(kr)/H₀′(ka)`, **tenía un −i de
+   menos**. La correcta, derivada de `u = ∇p/(i·ω·ρ)`, es `p = i·ρ·c·v·H₀(kr)/H₀′(ka)`, y es la que
+   verifica el test contra el cilindro. El error era mío, en el pedido, no del módulo.
+2. `aperture.py` y `dashboard/field.py` tienen un **−1 global** frente a `u = ∇p/(i·ω·ρ)`: implican
+   `p = −ρc·v` para un pistón infinito con baffle. Es un cambio de fase benigno —todas las métricas
+   del repo son de módulo— pero obliga a comparar módulos cuando se cruza con `bem_field`. Queda
+   anotado y **sin arreglar**: cambiarlo rompería las comparaciones bit a bit con los números ya
+   publicados, y no cambia ninguna conclusión.
+
+**Lo que esto NO es**: no es un BEM de contorno cerrado resolviendo un sistema. Para contrastar contra
+un obstáculo real (cápsula ótica) haría falta usar `bem/helmholtz2d.py` con el campo incidente de las
+aperturas: eso queda como el siguiente paso natural, y es otra cosa que la capa simple de acá. El
+docstring del módulo lo dice explícitamente y `equation` sólo acepta `single_layer`: pedir
+`burton_miller` o `chief` levanta `ValueError` explicando que regularizan resonancias interiores de
+cuerpos cerrados y acá `[p] = 0` por simetría.
+
+---
+
+## D29 — La membrana basilar rompe la resonancia de cavidad: Q de 287 a menos de 5
+
+Fase 5b-2. La membrana es un **segmento con impedancia distribuida** sobre un diámetro del fluido
+interior, `Z_m = R + i·ω·m + k/(i·ω)`, ensamblada con el mismo bloque de borde que la ventana
+resistiva de D23 —no hay operador nuevo, y con `Z = ρ_f·c_f` el bloque es **bit-idéntico** a la ABC-1
+(`max|ΔB|/max|B| = 0.00e+00`). La membrana divide el fluido en scala vestibuli y tympani y, sobre todo,
+le da al problema el camino de pérdida que D18 pedía.
+
+**Criterio 1 — amortiguamiento (pedía Q_antes/Q_después > 2)**:
+
+- Sin membrana: pico en *98.00 kHz* = 1.6698 con FWHM *0.341 kHz* ⇒ **Q = 287**.
+- Con membrana: máximo *0.6731* en 97.0 kHz; en [88, 108] kHz no baja a A/√2 (mínimo 0.4787 contra
+  nivel 0.4760) ⇒ FWHM > 19.6 kHz ⇒ **Q < 5**. Relación **> 57×**.
+- Control de malla a ppw=20: el pico da 1.735 contra 1.670 de esta malla (+3.9 %) ⇒ el pico es físico,
+  no ruido de discretización. **Pero el Q no está convergido en malla**: D21 ya midió que este modelo
+  no converge monótono, así que el 287 es un número de esta malla, no una propiedad del modelo.
+
+**Criterio 2 — monotonía con el espesor** (`t_interior`, a = 20 mm, 100 kHz, ppw = 20). La columna
+"sin membrana" reproduce D24 **dígito a dígito** (test con tolerancia 5e-5), que es la no-regresión
+de todo lo anterior:
+
+| t [mm] | D24 / sin membrana | con membrana | n=0 sin | n=0 con |
+|---|---|---|---|---|
+| 1.0 | 1.0996 | 0.6040 | 0.3866 | 0.1813 |
+| 2.0 | 0.9722 | 0.5319 | 0.2547 | 0.1791 |
+| 3.0 | 1.1839 | 0.4571 | 0.1936 | 0.1443 |
+| 4.0 | 1.3649 | 0.3876 | 0.1657 | 0.1261 |
+| 5.0 | 1.1920 | 0.3520 | 0.1220 | 0.1256 |
+| 6.0 | 0.8968 | 0.3276 | 0.0831 | 0.1214 |
+| 7.0 | 0.6635 | 0.3247 | 0.0761 | 0.1169 |
+
+Sin membrana: rango 2.06× y **dos** cambios de signo en Δt (el lóbulo de resonancia de D24). Con
+membrana: rango 1.88×, **un** cambio de signo, *12 de 13 tramos decrecientes* y el último **+0.97 %**.
+Ese repunte es reproducible a ppw=30 (+1.1 %) y significa que **con la pared gruesa el nivel ya no lo
+fija la pared sino la membrana**: la curva satura en ~0.32. No se fuerza la monotonía estricta; se
+documenta el tramo.
+
+**Criterio 5 — el armónico n=0 sigue acompañando** (regla de D24): sin membrana 0.3866 → 0.0761
+(*5.08×*), con membrana 0.1813 → 0.1169 (*1.55×*). La membrana reduce la dependencia del espesor casi
+a la mitad también en esa métrica.
+
+**Criterios 3 y 4 — límites y energía**, con los números finos: `Z = 10⁶·ρc` contra el rígido impuesto
+da Δ`t_interior` = *−1e-4 %* y `max|Δp|/max|p|` = *2e-4 %*; `Z = 10⁻⁶·ρc` contra `p = 0`, lo mismo; la
+convergencia con el factor de impedancia es monótona (2.0 %, 0.02 %, 2e-4 %). El balance cierra al
+*0.46 %* con la membrana (`−P_total(R_out)` = 0.7281 contra `P_memb` = 0.7327), 0.39 % con Z/2, 0.47 %
+con 2Z y 0.11 % en el caso rígido con `P_abs = 0`. Con derivada radial de 2º orden el balance daba
+1.97 %: por eso el flujo se mide con 5 anillos. La membrana absorbe *P_memb/P_inc = 0.733*. A 90°
+(perpendicular a la incidencia) absorbe más que a 30°: la orientación no es cosmética. Se rechaza
+`Re(Z) ≤ 0` en vez de devolver un cero silencioso (D22).
+
+**Sensibilidad a las propiedades de la membrana** (que son VERIFY, pero conviene saber cuánto pesan):
+a 100 kHz la reactancia total es el *0.91 %* de `R`, así que el comportamiento lo fija la resistencia;
+multiplicar la masa por 10 mueve `t_interior` un *1.75 %* y multiplicar la rigidez por 10, un *0.02 %*.
+Conclusión: mientras `|X| ≪ R`, el resultado no depende del ballpark de masa y rigidez —que es
+justamente lo que no tenemos medido—, y eso es lo que hace que el criterio 1 sea defendible.
+
+**Lo que sigue siendo VERIFY**: todas las propiedades de la membrana. `BASILAR_MEMBRANE_BALLPARK` usa
+m = 0.022 kg/m² (1100 kg/m³ × 20 µm), R = ρ_f·c_f y k = 1e8 Pa/m, cada uno con su rango publicado y su
+`provenance`, y **ninguno se usa como validación**: los criterios se sostienen por límites, balance de
+energía y no-regresión contra D24, que son relativos.
+
+**Bug reportado y no arreglado**: el redondeo `n_theta + n_theta % 4` no garantiza múltiplo de 4 (a
+ppw=20 da 502). Se corrigió la descripción y se agregó redondeo a par cuando hay membrana; la fórmula
+original quedó intacta para no mover los números publicados.
+
 
 
 

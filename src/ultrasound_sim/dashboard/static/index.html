@@ -26,6 +26,15 @@
     </section>
 
     <section>
+      <label>Modelo</label>
+      <select id="model">
+        <option value="baffle" selected>baffle rígido (Rayleigh)</option>
+        <option value="libre">espacio libre (radia hacia atrás)</option>
+      </select>
+      <p class="hint" id="modeloHint">El baffle niega el semiespacio trasero.</p>
+    </section>
+
+    <section>
       <label>Frecuencia <b id="freqVal">250 kHz</b></label>
       <input type="range" id="freq" min="20" max="1000" step="5" value="250">
       <p class="hint" id="lamHint">λ = 6.00 mm</p>

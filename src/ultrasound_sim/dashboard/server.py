@@ -25,6 +25,7 @@ from urllib.parse import parse_qs, urlparse
 import numpy as np
 
 from .. import materials as mats
+from . import bem_field
 from . import field as campo
 
 ESTATICOS = Path(__file__).resolve().parent / "static"
@@ -40,6 +41,10 @@ TIPOS = {
     ".png": "image/png",
     ".svg": "image/svg+xml",
 }
+
+#: Modelos de radiación disponibles. ``baffle`` = integral de Rayleigh (semiespacio);
+#: ``libre`` = lámina finita en espacio libre (capa simple), que además radia hacia atrás.
+MODELOS = ("baffle", "libre")
 
 MAX_NX = 400
 MAX_NY = 400
@@ -64,6 +69,10 @@ def calcular(payload: dict) -> dict:
         raise ValueError(f"frequency_khz fuera de rango [1, 20000]: {f_khz}")
     frecuencia = f_khz * 1e3
 
+    modelo = str(payload.get("modelo", "baffle"))
+    if modelo not in MODELOS:
+        raise ValueError(f"modelo desconocido: {modelo!r}; opciones: {sorted(MODELOS)}")
+
     grilla = payload.get("grid") or {}
 
     def g(clave: str, defecto: float) -> float:
@@ -80,8 +89,13 @@ def calcular(payload: dict) -> dict:
     ny = int(g("ny", 120))
     if not 2 <= nx <= MAX_NX or not 2 <= ny <= MAX_NY:
         raise ValueError(f"nx/ny deben estar en [2, {MAX_NX}]; recibido nx={nx}, ny={ny}")
-    if not (0.0 < x0 < x1):
-        raise ValueError(f"la malla necesita 0 < x0 < x1; recibido x0={x0}, x1={x1}")
+    if not (x0 < x1):
+        raise ValueError(f"la malla necesita x0 < x1; recibido x0={x0}, x1={x1}")
+    if modelo == "baffle" and not (0.0 < x0):
+        raise ValueError(
+            "el modelo con baffle sólo está definido en x > 0; para ver la radiación trasera "
+            f"elegí modelo='libre'. Recibido x0={x0}"
+        )
     if not (y0 < y1):
         raise ValueError(f"la malla necesita y0 < y1; recibido y0={y0}, y1={y1}")
 
@@ -105,7 +119,17 @@ def calcular(payload: dict) -> dict:
 
     xs = np.linspace(x0, x1, nx)
     ys = np.linspace(y0, y1, ny)
-    p = campo.evaluate(xs, ys, fuentes, frecuencia, material)
+
+    if modelo == "libre":
+        # Sin baffle: la lámina radia a los dos lados y el campo existe también en x < 0.
+        # El punto sobre la lámina (x = 0) no es evaluable (H0 singular), así que se corre la
+        # malla medio paso y ningún nodo cae exactamente sobre ella.
+        paneles = bem_field.panels_from_sources(fuentes)
+        if np.any(np.abs(xs) < 1e-9) and xs.size > 1:
+            xs = xs + 0.5 * (xs[1] - xs[0])
+        p = bem_field.free_space_field(xs, ys, paneles, frecuencia, material)
+    else:
+        p = campo.evaluate(xs, ys, fuentes, frecuencia, material)
     met = campo.metrics(xs, ys, p, pitch=pitch, frequency=frecuencia, material=material)
 
     intensidad = np.abs(p) ** 2
@@ -127,6 +151,7 @@ def calcular(payload: dict) -> dict:
             "near_field_mm": None if apertura is None
             else float(apertura ** 2 / (4.0 * material.wavelength(frecuencia))) * 1e3,
             "focus_x_mm": None if foco_x is None else foco_x * 1e3,
+            "modelo": modelo,
             "nx": nx,
             "ny": ny,
             "quad": campo.DEFAULT_QUAD,
