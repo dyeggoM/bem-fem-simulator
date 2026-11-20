@@ -101,18 +101,19 @@ es la señal de un error o de una suposición mal puesta.
 
   | pitch | N | FWHM | desvío vs continua | correlación 2D |
   |---|---|---|---|---|
-  | λ   | 4  | 12.74 mm | +47.6 % | 0.904 |
-  | λ/2 | 8  | 10.97 mm | +27.0 % | 0.998 |
-  | λ/4 | 16 |  9.17 mm | +6.3 %  | 0.9999 |
-  | λ/8 | 32 |  8.77 mm | +1.5 %  | ~1 |
+  | λ   | 4  | 10.96 mm | +27.0 % | 0.9564 |
+  | λ/2 | 8  |  9.16 mm |  +6.1 % | 0.9977 |
+  | λ/4 | 16 |  8.75 mm |  +1.4 % | 0.9999 |
+  | λ/8 | 32 |  8.66 mm |  +0.3 % | 1.0000 |
 
-  Continua de referencia: FWHM *8.63 mm*, con el máximo axial en *29.5 mm* (no en F=40 mm: el
+  Continua de referencia: FWHM *8.66 mm*, con el máximo axial en *29.6 mm* (no en F=40 mm: el
   corrimiento focal no paraxial de un foco de semiángulo 37° es −10.5 mm, confirmado por trapecio
   directo, por la cuadratura del paquete y por la misma apertura a 500 kHz, que enfoca en 39.4 mm).
 
   *Criterio corregido*: "equivalente" depende de la métrica y hay que decir cuál. Por *FWHM en el
-  foco* hace falta pitch ≤ λ/8 para el 2 % y ≤ λ/4 para el 7 %; por *correlación de campo en la
-  región* (métrica mucho más tolerante) λ/2 ya da 0.998. Ganancia en F: 15.95 dB contra
+  foco*, λ/4 ya da +1.4 % (cumple el 2 %) y λ/2 +6.1 % (cumple el 7 %); λ/8 lo baja a +0.3 %. Y el
+  pitch solo no decide: con 256 elementos y D = 50–133 λ, λ/1.9 da +1.8 % (D25).
+  Ganancia en F: 15.95 dB contra
   ``20log10(N)=18.06`` porque los elementos de borde iluminan a 37° y su propia directividad los
   atenúa (|p_j| cae a 0.54 en el borde): *la ganancia de N sólo vale en régimen paraxial*.
   (e) campo lejano decae como ``1/√r`` dentro de 3 %.
