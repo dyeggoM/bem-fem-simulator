@@ -680,6 +680,64 @@ asas: el jalón se siente más lento con este modelo y está documentado.
 un obstáculo real (cápsula ótica) haría falta usar `bem/helmholtz2d.py` con el campo incidente de las
 aperturas: eso queda como el siguiente paso natural, y es otra cosa que la capa simple de acá.
 
+---
+
+## D29 — La membrana basilar rompe la resonancia de cavidad: Q de 287 a menos de 5
+
+Fase 5b-2. La membrana es un **segmento con impedancia distribuida** sobre un diámetro del fluido
+interior, `Z_m = R + i·ω·m + k/(i·ω)`, ensamblada con el mismo bloque de borde que la ventana
+resistiva de D23 —no hay operador nuevo, y con `Z = ρ_f·c_f` el bloque es **bit-idéntico** a la ABC-1
+(`max|ΔB|/max|B| = 0.00e+00`). La membrana divide el fluido en scala vestibuli y tympani y, sobre todo,
+le da al problema el camino de pérdida que D18 pedía.
+
+**Criterio 1 — amortiguamiento (pedía Q_antes/Q_después > 2)**:
+
+- Sin membrana: pico en *98.00 kHz* = 1.6698 con FWHM *0.341 kHz* ⇒ **Q = 287**.
+- Con membrana: máximo *0.6731* en 97.0 kHz; en [88, 108] kHz no baja a A/√2 (mínimo 0.4787 contra
+  nivel 0.4760) ⇒ FWHM > 19.6 kHz ⇒ **Q < 5**. Relación **> 57×**.
+- Control de malla a ppw=20: el pico da 1.735 contra 1.670 de esta malla (+3.9 %) ⇒ el pico es físico,
+  no ruido de discretización. **Pero el Q no está convergido en malla**: D21 ya midió que este modelo
+  no converge monótono, así que el 287 es un número de esta malla, no una propiedad del modelo.
+
+**Criterio 2 — monotonía con el espesor** (`t_interior`, a = 20 mm, 100 kHz, ppw = 20). La columna
+"sin membrana" reproduce D24 **dígito a dígito** (test con tolerancia 5e-5), que es la no-regresión
+de todo lo anterior:
+
+| t [mm] | D24 / sin membrana | con membrana | n=0 sin | n=0 con |
+|---|---|---|---|---|
+| 1.0 | 1.0996 | 0.6040 | 0.3866 | 0.1813 |
+| 2.0 | 0.9722 | 0.5319 | 0.2547 | 0.1791 |
+| 3.0 | 1.1839 | 0.4571 | 0.1936 | 0.1443 |
+| 4.0 | 1.3649 | 0.3876 | 0.1657 | 0.1261 |
+| 5.0 | 1.1920 | 0.3520 | 0.1220 | 0.1256 |
+| 6.0 | 0.8968 | 0.3276 | 0.0831 | 0.1214 |
+| 7.0 | 0.6635 | 0.3247 | 0.0761 | 0.1169 |
+
+Sin membrana: rango 2.06× y **dos** cambios de signo en Δt (el lóbulo de resonancia de D24). Con
+membrana: rango 1.88×, **un** cambio de signo, *12 de 13 tramos decrecientes* y el último **+0.97 %**.
+Ese repunte es reproducible a ppw=30 (+1.1 %) y significa que **con la pared gruesa el nivel ya no lo
+fija la pared sino la membrana**: la curva satura en ~0.32. No se fuerza la monotonía estricta; se
+documenta el tramo.
+
+**Criterio 5 — el armónico n=0 sigue acompañando** (regla de D24): sin membrana 0.3866 → 0.0761
+(*5.08×*), con membrana 0.1813 → 0.1169 (*1.55×*). La membrana reduce la dependencia del espesor casi
+a la mitad también en esa métrica.
+
+**Criterios 3 y 4 — límites y energía**: `Z_m → ∞` (rígida) reproduce la condición rígida impuesta
+directamente y `Z_m → 0` (libre) la de presión nula, ambos dentro del 1 %; el balance
+`P_inc = P_refl + P_trans + P_abs` cierra dentro del 1 % y con `Re(Z) = 0` la absorción es exactamente
+0 (se rechaza `Re(Z) ≤ 0` en vez de devolver un cero silencioso, D22). A 90° (perpendicular a la
+incidencia) absorbe más que a 30°: la orientación no es cosmética.
+
+**Lo que sigue siendo VERIFY**: todas las propiedades de la membrana. `BASILAR_MEMBRANE_BALLPARK` usa
+m = 0.022 kg/m² (1100 kg/m³ × 20 µm), R = ρ_f·c_f y k = 1e8 Pa/m, cada uno con su rango publicado y su
+`provenance`, y **ninguno se usa como validación**: los criterios se sostienen por límites, balance de
+energía y no-regresión contra D24, que son relativos.
+
+**Bug reportado y no arreglado**: el redondeo `n_theta + n_theta % 4` no garantiza múltiplo de 4 (a
+ppw=20 da 502). Se corrigió la descripción y se agregó redondeo a par cuando hay membrana; la fórmula
+original quedó intacta para no mover los números publicados.
+
 
 
 

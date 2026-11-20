@@ -114,6 +114,8 @@ __all__ = [
     "abc_chain_ends",
     "abc_incident_rhs",
     "interface_edges",
+    "segment_absorbed_power",
+    "segment_impedance_block",
     "solve_coupled",
     "tangential_derivative",
 ]
@@ -515,6 +517,84 @@ def abc_incident_rhs(nodes, edges, p_inc, k, rho=1.0, *, abc_order: int = 1, abc
     return b
 
 
+def segment_impedance_block(nodes, edges, impedance, *, frequency, rho=1.0):
+    """Bloque de presión de un **segmento con impedancia distribuida** ``p = Z·(v·n)``.
+
+    Es la condición de una membrana delgada tratada como impedancia local (masa-resorte-resistencia
+    por unidad de área), escrita de forma que reusa exactamente el operador de la ABC-1. Con
+    ``e^{−iωt}`` y ``v_n = (1/(i·ω·ρ_f))·∂p/∂n`` (``n`` **saliente del fluido**, o sea hacia la
+    membrana):
+
+        p = Z·v_n   ⇒   ∂p/∂n = (i·ω·ρ_f/Z)·p ≡ i·k_w·p ,   k_w = ω·ρ_f/Z   [1/m]
+
+    y el término débil es el mismo de siempre, ``−∫ (i·k_w/ρ_f)·p·q ds``, que es lo que devuelve
+    :func:`abc_boundary_block` con ``k = k_w``. No hay una fórmula nueva que auditar: la identidad
+    con la ABC-1 en el caso ``Z = ρ_f·c_f`` (``k_w = k_f``) es exacta término a término.
+
+    **Límites (los dos son casos conocidos y por eso sirven de test)**: ``Z → ∞`` ⇒ ``k_w → 0`` ⇒ el
+    término se anula y queda ``∂p/∂n = 0`` (pared rígida); ``Z → 0`` ⇒ ``k_w → ∞`` ⇒ ``p → 0``
+    (pared blanda / presión nula). Los dos se alcanzan numéricamente porque ``Z`` sólo entra en el
+    coeficiente, no en la incógnita.
+
+    **Qué NO es**: no es la condición de salto de una placa elástica entre dos fluidos
+    (``p⁺ − p⁻ = Z·v_n`` con ``v_n`` continuo). En una línea interior compartida por dos dominios,
+    aplicar esto sobre las dos caras equivale a dos membranas locales independientes —el modelo
+    "locally reacting" bilateral, que es el que da los dos límites pedidos: en el salto, ``Z → 0``
+    daría transparencia, no ``p = 0``.
+
+    Parameters
+    ----------
+    nodes : ``(N, 2)`` coordenadas [m]; ``edges : (B, 2)`` aristas del segmento (interiores o no).
+    impedance : ``Z`` [Pa·s/m], complejo, ``Re Z > 0`` para que absorba.
+    frequency : frecuencia [Hz].
+    rho : densidad del fluido [kg/m³].
+
+    Returns
+    -------
+    ``scipy.sparse`` CSR ``(N, N)`` compleja, lista para ensamblar en el bloque de presión. La
+    potencia real que el segmento absorbe es ``½·∫|p|²·Re(1/Z) ds`` (positiva si ``Re Z > 0``),
+    :func:`segment_absorbed_power`.
+    """
+    z = complex(impedance)
+    if not (np.isfinite(z.real) and np.isfinite(z.imag)):
+        raise ValueError(f"impedance debe ser finita; recibido {z!r}")
+    if z.real <= 0.0:
+        raise ValueError(
+            "impedance necesita Re(Z) > 0 para que el segmento absorba potencia real "
+            f"(½∫|p|²·Re(1/Z) ds); recibido {z!r}"
+        )
+    k_w = _TWO_PI * float(frequency) * float(rho) / z
+    return abc_boundary_block(nodes, edges, k_w, rho=rho, abc_order=1)
+
+
+def segment_absorbed_power(nodes, p, edges, impedance) -> float:
+    """Potencia real **[W/m]** absorbida por un segmento con ``p = Z·(v·n)``.
+
+    ``P = ½·∫ Re(p·v_n*) ds = ½·Re(1/Z)·∫|p|² ds``, con la masa P1 de arista
+    (``L/6·[[2,1],[1,2]]``). Es cuadrática en ``p`` y no depende de diferencias finitas, así que es
+    la medida **exacta** de lo que el ensamblado de :func:`segment_impedance_block` disipa. Positivo
+    = potencia saliendo del fluido hacia la membrana (absorbida) cuando ``Re Z > 0``; con
+    ``Re Z ≤ 0`` no tiene sentido físico y se rechaza.
+
+    En una línea interior con dos caras hay que sumar **las dos** (cada una con su ``p`` local): la
+    membrana recibe fluido por los dos lados.
+    """
+    z = complex(impedance)
+    if not (np.isfinite(z.real) and np.isfinite(z.imag)):
+        raise ValueError(f"impedance debe ser finita; recibido {z!r}")
+    if z.real <= 0.0:
+        raise ValueError(f"impedance necesita Re(Z) > 0; recibido {z!r}")
+    x = np.asarray(nodes, dtype=float)
+    e = np.asarray(edges, dtype=int).reshape(-1, 2)
+    if e.shape[0] == 0:
+        return 0.0
+    lengths = np.linalg.norm(x[e[:, 1]] - x[e[:, 0]], axis=1)
+    m_loc = weights_to_local(lengths)
+    pe = np.asarray(p, dtype=complex)[e]
+    dens = np.einsum("ei,ej,eij->e", pe, np.conj(pe), m_loc).real
+    return float(0.5 * (1.0 / z).real * np.sum(dens))
+
+
 def interface_edges(nodes, triangles, regions) -> tuple[np.ndarray, np.ndarray]:
     """Aristas interiores con un elemento de cada lado y normal saliente del sólido.
 
@@ -633,6 +713,8 @@ def solve_coupled(
     dirichlet=None,
     periodic_pairs=None,
     abc_center=None,
+    robin_edges=None,
+    robin_impedance=None,
 ) -> CoupledSolution:
     """Resuelve el sistema acoplado fluido/sólido 2D en plano deformación.
 
@@ -697,6 +779,16 @@ def solve_coupled(
         velocidad ``c_p`` (ver el docstring del módulo).
     periodic_pairs : ``(K, 2)`` pares de nodos que se identifican (malla periódica). Comparten los
         tres gdl; sirve para incidencia oblicua sin paredes (ver el docstring del módulo).
+    robin_edges : ``(B, 2)`` aristas de un **segmento interior** con impedancia distribuida
+        ``p = Z·(v·n)`` (membrana delgada, p. ej. la basilar). Se ensambla el mismo bloque de borde
+        de :func:`segment_impedance_block` —``−∫(i·k_w/ρ_f)·p·q ds`` con ``k_w = ω·ρ_f/Z``— en el
+        bloque de presión, sin tocar el acoplamiento. A diferencia de ``abc_edges`` **no** tienen
+        que ser frontera de la malla: la línea puede ser interior (en una malla partida, las dos
+        caras coincidentes son nodos distintos y cada una lleva su término). Requiere
+        ``robin_impedance``.
+    robin_impedance : ``Z`` [Pa·s/m] del segmento; complejo con ``Re Z > 0`` para que absorba.
+        ``Z → ∞`` reproduce la pared rígida (el término se anula) y ``Z → 0`` la de presión nula
+        (``k_w → ∞`` fija ``p = 0`` en los nodos del segmento).
 
     Returns
     -------
@@ -892,6 +984,52 @@ def solve_coupled(
             )
             has = p_dof >= 0
             np.add.at(b_full, p_dof[has], rhs[has])
+
+    # ---- segmento interior con impedancia distribuida (membrana delgada) ----
+    if robin_edges is not None:
+        if robin_impedance is None:
+            raise ValueError(
+                "robin_edges requiere robin_impedance (Z [Pa·s/m] del segmento); sin Z no hay "
+                "condición que imponer"
+            )
+        if periodic_pairs is not None:
+            raise ValueError(
+                "robin_edges con periodic_pairs no está soportado: los nodos identificados "
+                "comparten gdl de presión y el término de borde se sumaría dos veces sobre la misma "
+                "incógnita"
+            )
+        redges = np.asarray(robin_edges, dtype=int).reshape(-1, 2)
+        if redges.size and (np.any(redges < 0) or np.any(redges >= n)):
+            raise ValueError("robin_edges tiene índices de nodo fuera de rango")
+        if np.any(redges[:, 0] == redges[:, 1]):
+            raise ValueError("robin_edges tiene una arista con sus dos nodos iguales")
+        if redges.shape[0]:
+            keys = np.sort(redges, axis=1)
+            if np.unique(keys, axis=0).shape[0] != keys.shape[0]:
+                raise ValueError(
+                    "robin_edges repite una arista: el término se ensamblaría dos veces y la "
+                    "impedancia efectiva sería Z/2"
+                )
+            if abc.shape[0] and np.intersect1d(keys, np.sort(abc, axis=1)).size:
+                raise ValueError(
+                    "una arista está en abc_edges y en robin_edges a la vez: la ABC y la "
+                    "impedancia del segmento son condiciones distintas sobre la misma superficie"
+                )
+            rlen = np.linalg.norm(x[redges[:, 1]] - x[redges[:, 0]], axis=1)
+            if np.any(rlen <= 0.0):
+                raise ValueError("robin_edges tiene una arista de longitud nula")
+            blk = segment_impedance_block(
+                x, redges, robin_impedance, frequency=frequency, rho=fluid.rho
+            )
+            coo = blk.tocoo()
+            row_dof = p_dof[coo.row]
+            col_dof = p_dof[coo.col]
+            if np.any(row_dof < 0) or np.any(col_dof < 0):
+                raise RuntimeError(
+                    "el segmento con impedancia toca nodos sin gdl de presión; la membrana sólo "
+                    "puede apoyarse en nodos de fluido (o de interfaz)"
+                )
+            _add_triplets(row_dof, col_dof, coo.data)
 
     a_full = sp.coo_matrix(
         (np.concatenate(vals), (np.concatenate(rows), np.concatenate(cols))),
