@@ -148,7 +148,9 @@ def test_fuente_puntual_reproduce_el_green_3d():
     r = np.linalg.norm(m.nodes - fuente, axis=1)
     anillo = (r > 0.25 * LAMBDA) & (r < 0.45 * LAMBDA)
     omega = 2.0 * np.pi * f
-    exacto = -1j * omega * WATER.rho * np.exp(1j * K * r) / (4.0 * np.pi * r)
+    # sólo en el anillo: en el nodo de la fuente r = 0 y el Green diverge (ahí no se evalúa)
+    r_seguro = np.where(r > 0.0, r, 1.0)
+    exacto = -1j * omega * WATER.rho * np.exp(1j * K * r_seguro) / (4.0 * np.pi * r_seguro)
     err = np.linalg.norm(p[anillo] - exacto[anillo]) / np.linalg.norm(exacto[anillo])
     amplitud = float(np.mean(np.abs(p[anillo]) * r[anillo]) / (omega * WATER.rho / (4 * np.pi)))
 
