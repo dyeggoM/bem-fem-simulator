@@ -201,6 +201,58 @@ def test_paquete_importable_como_modulo():
     assert callable(entrada.main)
 
 
+# ------------------------------------------------------------------ los dos modelos de radiación
+def test_el_campo_delantero_no_depende_del_baffle():
+    """Identidad física que sostiene el dashboard: con baffle y sin baffle, el campo en x>0 es el
+    mismo módulo con 180° de fase. La diferencia entre los dos modelos no está adelante: está en
+    que sin baffle hay campo detrás.
+    """
+    from ultrasound_sim.dashboard import bem_field
+
+    f = 250e3
+    fuentes = campo.array_sources(16, 0.040, 0.090, 0.0, f, W)
+    xs = np.linspace(0.055, 0.095, 9)
+    ys = np.array([0.0, 0.006, -0.006])
+
+    con_baffle = campo.evaluate(xs, ys, fuentes, f, W)
+    sin_baffle = bem_field.free_space_field(xs, ys, bem_field.panels_from_sources(fuentes), f, W)
+
+    desvio = np.abs(sin_baffle + con_baffle).max() / np.abs(con_baffle).max()
+    assert desvio < 1e-6, f"p_libre debería ser -p_baffle exacto; desvío {desvio:.2e}"
+    # y el módulo es idéntico, que es lo que se ve en pantalla
+    assert np.allclose(np.abs(sin_baffle), np.abs(con_baffle), rtol=1e-6)
+
+
+def test_modelo_libre_extiende_la_malla_al_semiespacio_trasero():
+    r = calcular({"modelo": "libre", "frequency_khz": 250, "n_elements": 16, "aperture_mm": 40,
+                  "focus_x_mm": 90, "grid": {"nx": 40, "ny": 30, "x0": -0.05, "x1": 0.08}})
+    assert r["meta"]["modelo"] == "libre"
+    assert r["x_mm"][0] < 0.0
+    atras = [fila[i] for fila in r["p2_db"] for i, x in enumerate(r["x_mm"]) if x < 0.0]
+    # el lóbulo trasero es tan fuerte como el delantero: no está a −40 dB, está cerca de 0
+    assert max(atras) > -3.0, f"no hay campo trasero: máximo {max(atras):.1f} dB"
+
+
+def test_modelo_baffle_rechaza_malla_negativa_y_modelo_desconocido():
+    with pytest.raises(ValueError, match="baffle"):
+        calcular({"modelo": "baffle", "grid": {"x0": -0.01, "x1": 0.10, "nx": 20, "ny": 20}})
+    with pytest.raises(ValueError, match="modelo"):
+        calcular({"modelo": "difraccion-exacta"})
+
+
+def test_modelo_libre_por_http(servidor):
+    pedido = json.dumps({"modelo": "libre", "frequency_khz": 250, "n_elements": 8,
+                         "aperture_mm": 20, "focus_x_mm": 60,
+                         "grid": {"nx": 30, "ny": 20, "x0": -0.04, "x1": 0.07}}).encode()
+    req = urllib.request.Request(servidor + "/api/field", data=pedido,
+                                 headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(req, timeout=90) as r:
+        datos = json.loads(r.read())
+    assert datos["meta"]["modelo"] == "libre"
+    assert datos["x_mm"][0] < 0.0
+    assert len(datos["x_mm"]) == 30
+
+
 def test_la_pagina_expone_arrastre_y_configuracion():
     """Contrato de la UI: el overlay de arrastre y los botones de guardar/cargar tienen que estar.
 

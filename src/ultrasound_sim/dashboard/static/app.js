@@ -6,6 +6,7 @@
 
 const S = {
   material: 'agua',
+  modelo: 'baffle',
   freq: 250,
   modo: 'array',
   n: 32,
@@ -47,13 +48,17 @@ function pedir() {
 async function enviar() {
   if (control) control.abort();
   control = new AbortController();
+  const xmax = Math.max(0.06, S.fx / 1000 * 1.6);
+  const ym = Math.max(0.02, S.d / 1000 * 1.1);
+  // con el modelo libre la malla se extiende al semiespacio trasero: ahí está lo que el baffle niega
+  const x0 = S.modelo === 'libre' ? -xmax * 0.62 : 0.004;
   const cuerpo = {
     material: S.material,
+    modelo: S.modelo,
     frequency_khz: S.freq,
     // mientras se arrastra un asa se baja la malla: 80×80 tarda ~0.4 s y el jalón se sigue
-    grid: { x0: 0.004, x1: Math.max(0.06, S.fx / 1000 * 1.6), y0: -Math.max(0.02, S.d / 1000 * 1.1),
-            y1: Math.max(0.02, S.d / 1000 * 1.1), nx: arrastre ? 80 : S.grid,
-            ny: arrastre ? 80 : S.grid },
+    grid: { x0, x1: xmax, y0: -ym, y1: ym,
+            nx: arrastre ? 80 : S.grid, ny: arrastre ? 80 : S.grid },
   };
   if (S.modo === 'manual' && S.fuentes) {
     cuerpo.sources = S.fuentes;
@@ -75,7 +80,7 @@ async function enviar() {
     S.ultimo = datos;
     pintar(datos);
     $('estado').textContent =
-      `${datos.meta.n_sources} fuentes · ${datos.meta.nx}×${datos.meta.ny} · ` +
+      `${datos.meta.n_sources} fuentes · ${datos.meta.modelo} · ${datos.meta.nx}×${datos.meta.ny} · ` +
       `λ = ${fmt(datos.meta.lambda_mm)} mm · ${fmt(datos.meta.seconds, 2)} s`;
   } catch (e) {
     if (e.name === 'AbortError') return;
@@ -315,6 +320,14 @@ enlazar('ap', 'd');
 enlazar('fx', 'fx');
 enlazar('fy', 'fy');
 $('mat').addEventListener('change', (e) => { S.material = e.target.value; sincronizarEtiquetas(); pedir(); });
+$('model').addEventListener('change', (e) => {
+  S.modelo = e.target.value;
+  $('modeloHint').textContent = S.modelo === 'libre'
+    ? 'Sin baffle: el campo también existe detrás. Los dos lóbulos son igual de fuertes '
+      + '(180° de fase), así que el máximo global puede caer del lado de atrás.'
+    : 'El baffle niega el semiespacio trasero: con este modelo no hay campo en x < 0.';
+  pedir();
+});
 $('res').addEventListener('change', (e) => { S.grid = parseInt(e.target.value, 10); pedir(); });
 $('btnManual').addEventListener('click', () => cambiarModo('manual'));
 $('btnArray').addEventListener('click', () => { generarDesdeArreglo(); pedir(); });
@@ -439,6 +452,7 @@ function instantanea() {
     formato: 'ultrasound-sim/config',
     version: 1,
     material: S.material,
+    modelo: S.modelo,
     frequency_khz: S.freq,
     modo: S.modo,
     n_elements: S.n,
@@ -455,6 +469,7 @@ function aplicar(cfg) {
     throw new Error('no es un archivo de configuración del simulador');
   }
   S.material = cfg.material || S.material;
+  S.modelo = cfg.modelo === 'libre' ? 'libre' : 'baffle';
   S.freq = Number(cfg.frequency_khz) || S.freq;
   S.n = Number(cfg.n_elements) || S.n;
   S.d = Number(cfg.aperture_mm) || S.d;
@@ -466,6 +481,7 @@ function aplicar(cfg) {
                                 amp: Number(s.amp ?? 1), phase: Number(s.phase ?? 0) }))
     : null;
   $('mat').value = S.material;
+  $('model').value = S.modelo;
   $('freq').value = S.freq;
   $('nEl').value = S.n;
   $('ap').value = S.d;

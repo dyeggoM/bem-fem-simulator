@@ -646,6 +646,40 @@ seguía ahí.
 está limitado por el techo de P1 (D8), así que se puede pedir 1 MHz en 2D y el resultado es correcto
 pero caro de interpretar.
 
+---
+
+## D28 — El baffle no cambia el campo delantero; lo que niega es la radiación trasera
+
+El dashboard tenía un solo modelo de radiación: la integral de Rayleigh sobre baffle rígido infinito,
+`p = 2·i·ω·ρ·Σ ∫ v·G`. Se agregó el mismo problema resuelto **sin baffle**
+(`dashboard/bem_field.py`): la apertura es una lámina delgada de ancho finito con fluido a los dos
+lados, representada por una capa simple. Como la lámina es simétrica, la densidad queda determinada
+por el salto de velocidad —`σ = −2·i·ω·ρ·v`— y **no hay sistema lineal que invertir**: no hay cuerpo
+cerrado ni dominio interior, así que Burton-Miller y CHIEF (que existen para cerrar la ecuación en
+superficies cerradas) no aplican. Todo el trabajo numérico es la cuadratura con la singularidad
+logarítmica de `H₀`, resuelta por refinamiento graduado.
+
+**El resultado, que no era el esperado**: en `x > 0` los dos modelos dan **el mismo módulo con 180° de
+fase**. Es una identidad, no una coincidencia numérica:
+
+- `p_libre + p_baffle` sobre una malla en `x > 0`: máximo `6.5e-12` relativo → `p_libre = −p_baffle`
+  exacto.
+- Reparto de potencia con la lámina: atrás/adelante = *0.9871* (la lámina radia igual a los dos lados,
+  como debe).
+
+O sea que **el supuesto de baffle no sesga nada de lo que el dashboard venía mostrando delante**. Lo
+que sí hace es negar el semiespacio trasero, donde la lámina libre radia con la misma fuerza: el
+máximo global del modelo libre puede caer *detrás* del plano (medido: −75.6 mm en la configuración por
+defecto). Eso es lo que la UI ahora deja ver y avisa en el panel.
+
+**Costo**: 80×80 con 32 paneles en *1.30 s*, contra ~0.35 s del modelo de Rayleigh (la cuadratura
+graduada es cara). A 120×120 son ~3 s, así que el modelo libre no baja a 80×80 durante el arrastre de
+asas: el jalón se siente más lento con este modelo y está documentado.
+
+**Lo que esto NO es**: no es un BEM de contorno cerrado resolviendo un sistema. Para contrastar contra
+un obstáculo real (cápsula ótica) haría falta usar `bem/helmholtz2d.py` con el campo incidente de las
+aperturas: eso queda como el siguiente paso natural, y es otra cosa que la capa simple de acá.
+
 
 
 

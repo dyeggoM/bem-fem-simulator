@@ -71,6 +71,12 @@ Dos cosas que el dashboard dice en voz alta en vez de esconder: cuando el pico r
 el foco pedido (corrimiento no paraxial, D13) y cuándo el foco pedido está más allá del campo cercano
 de la apertura.
 
+Hay dos modelos de radiación, y la diferencia entre ellos está medida: *baffle rígido* (integral de
+Rayleigh, sólo semiespacio) y *espacio libre* (lámina finita, capa simple, radia a los dos lados).
+En `x > 0` dan el mismo módulo con 180° de fase —una identidad, no una aproximación— así que el
+supuesto de baffle no sesga el campo delantero; lo único que niega es la radiación trasera, que en el
+modelo libre es tan fuerte como la delantera (D28).
+
 ## Limitaciones conocidas (medidas, no estimadas)
 
 - **El material manda sobre la malla.** El espesor del hueso explica el `72 %` de la dispersión del
