@@ -71,4 +71,4 @@ Ningún número entra sin fuente. Los materiales llevan `provenance`; lo que la 
 se marca `VERIFY`; los modelos que no reproducen su propia fuente quedan registrados como
 **rechazados** en `attenuation.REJECTED_MODELS`, con el test que lo demuestra.
 
-Licencia: pendiente de definir.
+Licencia: **MIT** — ver `LICENSE`. Copyright (c) 2026 Juan Diego Morales del Corral.
