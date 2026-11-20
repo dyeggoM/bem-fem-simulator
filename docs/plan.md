@@ -152,6 +152,9 @@ es la señal de un error o de una suposición mal puesta.
   (1.55×). Propiedades de la membrana: **todas VERIFY** (no hay conjunto citable en nuestra banda);
   los criterios se validan por límites (Z→∞ rígido, Z→0 presión nula) y balance de energía, no por
   esos números.
+  *Re-barrido de sensibilidad con la membrana puesta* (D30, 85 puntos): el espesor baja de 72 % a
+  **53 %**, la atenuación sube de 5.5 % a **9.6 %**, `c_s` sale del piso numérico (2.2 % → **8.2 %**)
+  y `Z_r` se cae a **0.3 %**. `c_p` no se mueve (16.1 %).
 - **Fase 6 — 3D con geometría de CT** y mapas heterogéneos. *Aceptación*: resultados de literatura
   para skull / hueso temporal.
 - **Fase 7 — Opcional**: híbrido FEM-BEM, pulsos en tiempo, GUI (frontend C# si se quiere).

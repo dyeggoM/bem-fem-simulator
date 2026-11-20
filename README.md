@@ -79,9 +79,11 @@ modelo libre es tan fuerte como la delantera (D28).
 
 ## Limitaciones conocidas (medidas, no estimadas)
 
-- **El material manda sobre la malla.** El espesor del hueso explica el `72 %` de la dispersión del
-  resultado y `c_p` el `16 %`; la atenuación, el `5 %`. Refinar la malla por debajo del `8–9 %` de
-  piso P1 no cambia ninguna conclusión hasta que los datos de material mejoren.
+- **El material manda sobre la malla.** Con el modelo completo (membrana basilar incluida) el
+  espesor de la cápsula explica el `53 %` de la dispersión del resultado, `c_p` el `16 %`, la
+  atenuación el `10 %` y `c_s` el `8 %`; por debajo del `5 %` (`ρ`, `Z_r`) no se distingue del piso
+  numérico de `0.93 %`. Refinar la malla no cambia ninguna conclusión hasta que los datos de
+  material mejoren (D24, D30).
 - **No hay datos de atenuación de hueso humano por debajo de 270 kHz**, que es justo la banda de
   diseño. Dos estudios serios (Pichardo 2011, White 2006) difieren por `2.4×–3.3×`.
 - **La cápsula ótica no tiene propiedades medidas citables**; los valores usados son un sustituto

@@ -512,7 +512,7 @@ modelo es *conservador por ~16 %*; (2) espesor real de la cápsula (domina con 7
 
 *Advertencia de método*: el 72 % del espesor es en buena parte resonancia de cavidad, y la membrana
 basilar (5b-2) es justamente lo que rompe ese Q. **Hay que re-correr este barrido después de 5b-2**; el
-ranking no es definitivo.
+ranking no es definitivo. -> *Hecho*: el barrido con membrana esta en **D30** y este ranking queda superado (el espesor baja a 53 %, `c_s` sube a 8 % y `Z_r` se cae a 0.3 %).
 
 ---
 
@@ -770,7 +770,50 @@ energía y no-regresión contra D24, que son relativos.
 
 **Bug reportado y no arreglado**: el redondeo `n_theta + n_theta % 4` no garantiza múltiplo de 4 (a
 ppw=20 da 502). Se corrigió la descripción y se agregó redondeo a par cuando hay membrana; la fórmula
-original quedó intacta para no mover los números publicados.
+formula original quedó intacta para no mover los números publicados.
+
+---
+
+## D30 — Con la membrana puesta el ranking cambia: el espesor pesa menos, `c_s` deja de ser ruido
+
+D24 lo pedía explícito y acá está: el mismo barrido one-at-a-time, con la membrana de D29
+(`scripts/sensitivity_cochlea.py --membrane`, 85 puntos, *171.9 s*,
+`out/sensitivity_membrane.csv`). El script reproduce el caso base sin membrana **al dígito**
+(`t_interior = 0.97218`, la referencia de `solve_cross_section`), así que las dos columnas son
+comparables.
+
+| # | parámetro | rango rel. **con membrana** | D24 (sin membrana) | qué pasó |
+|---|---|---|---|---|
+| 1 | espesor | **53.11 %** | 72.15 % | sigue dominando, pero 19 puntos menos |
+| 2 | `c_p` | **16.06 %** | 16.09 % | *idéntico*: no dependía de la resonancia |
+| 3 | atenuación | **9.60 %** | 5.46 % | sube: con la membrana el camino importa más |
+| 4 | `c_s` | **8.22 %** | 2.17 % | **estaba en el piso numérico y deja de estarlo** |
+| 5 | `ρ` | 1.03 % | 1.19 % | sigue al nivel del piso (0.93 %) |
+| 6 | `Z_r` | **0.28 %** | 3.18 % | colapsa: la pérdida ya no pasa por la ventana |
+
+El piso numérico medido (ppw 20 → 40) es *0.93 %*: por debajo de eso el ranking no distingue.
+
+**Las tres conclusiones que cambian de verdad**:
+
+1. **El 72 % del espesor era, en buena parte, la resonancia.** Sin cavidad resonante baja a 53 %: sigue
+   siendo el parámetro más influyente —y por lo tanto lo primero que hay que medir—, pero dejó de ser
+   "casi todo".
+2. **`c_s` sale del piso numérico.** Con 2.17 % estaba al nivel del error de malla, y D24 decía
+   explícitamente "no vale calibrarlos antes de subir la discretización". Con la membrana da *8.22 %*,
+   nueve veces el piso: ahora importa y ahora hay que reportarlo con su incertidumbre.
+3. **`Z_r` se vuelve irrelevante (3.18 % → 0.28 %).** Es lo más limpio de todo: la ventana resistiva era
+   el amortiguador en el modelo cerrado de D23, y con la membrana el camino de pérdida se mudó a ella.
+   Confirma que la ventana **no** es la palanca del modelo.
+
+**Lo que NO cambió, y hay que decirlo**: `t_interior` sigue sin ser estrictamente monótona (el último
+tramo sube +0.97 %, D29) y el armónico `n = 0` tampoco (0.1813 → 0.1959 a 1.5 mm, +8.0 % de ese tramo,
+dentro del piso). La membrana saca la resonancia grande, no toda la estructura fina.
+
+**Qué le pide esto a la parte experimental**: el orden de D24 se mantiene en el primer puesto
+(espesor) y sube en el tercero (atenuación), y *agrega* `c_s` a la lista de parámetros que hay que
+medir — antes se podía ignorar por estar dentro del ruido numérico. `ρ` y `Z_r` se pueden seguir
+dejando en el ballpark.
+
 
 
 

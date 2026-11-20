@@ -43,6 +43,33 @@ T_BASE = 0.972180
 T_THICKNESS_1_TO_7_MM = (1.099587, 0.972180, 1.183929, 1.364903, 1.191993, 0.896818, 0.663523)
 
 
+def test_el_barrido_con_membrana_reproduce_la_tabla_de_d29():
+    """``--membrane`` tiene que dar los números de D29/D30, no parecerse a los de D24.
+
+    A t = 2 mm y ppw = 20: ``0.972180`` sin membrana (ancla de D22) y ``0.531870`` con la membrana
+    basilar. Si el bloque de borde se cableara mal —o no se aplicara— el valor volvería a ~0.97 y
+    este test lo detecta; el ranking de D30 entero depende de que este número sea el correcto.
+    """
+    from ultrasound_sim.cochlea import BASILAR_MEMBRANE_BALLPARK
+
+    # setattr: el módulo se carga con importlib, así que el chequeador de tipos no ve sus globales
+    setattr(SC, "MEMBRANE_IMPEDANCE", None)
+    sin = SC.evaluate(SC.Scenario(), ppw=20.0)["t_interior"]
+    setattr(SC, "MEMBRANE_IMPEDANCE", BASILAR_MEMBRANE_BALLPARK.impedance(SC.FREQUENCY_HZ))
+    try:
+        con = SC.evaluate(SC.Scenario(), ppw=20.0)
+    finally:
+        setattr(SC, "MEMBRANE_IMPEDANCE", None)   # no contaminar los demás tests
+
+    print(f"\n  t = 2 mm: sin membrana {sin:.5f} | con membrana {con['t_interior']:.5f} "
+          f"| n=0 {con['t_interior_complex']:.5f}")
+    assert abs(sin - T_BASE) < 0.01 * T_BASE, f"el caso base sin membrana se movió: {sin:.5f}"
+    assert con["t_interior"] == pytest.approx(0.53187, rel=2e-3), (
+        f"con membrana esperaba 0.5319 (D29), medí {con['t_interior']:.5f}"
+    )
+    assert con["t_interior_complex"] == pytest.approx(0.17913, rel=2e-3)
+
+
 def _load_script():
     """Carga ``scripts/sensitivity_cochlea.py`` como módulo (no es un paquete)."""
     name = "sensitivity_cochlea"
