@@ -188,4 +188,16 @@ cómodo de P1 es ~100–250 kHz, y subir de ahí es un problema de *orden de ele
 En 3D el techo práctico es aún más bajo; a 1 MHz hay que pasar a FEniCSx+MPI, a k-Wave o resolver
 el exterior por BEM, que escala con la superficie y no con el volumen.
 
+## Herramientas de inspección
+
+- `scripts/bench_frequency.py` — costo de malla y error por ppw en un ducto.
+- `scripts/cross_validate.py` — FEM contra BEM sobre el mismo problema.
+- `scripts/sensitivity_cochlea.py` — barrido one-at-a-time del modelo de cóclea (CSV de 87 filas).
+- `scripts/focusing_study.py` — las 15 configuraciones de focalización (CSV + figuras, 139 s).
+- `scripts/report.py` — `out/report.html`, página de estado autocontenida (sin servidor).
+- `python -m ultrasound_sim.dashboard` — *dashboard interactivo local* en `http://127.0.0.1:8765/`:
+  sliders de frecuencia, elementos, apertura y foco; mapa del campo con los cortes axial y lateral;
+  editor de fuentes (posición, ancho, amplitud y fase por fuente) sobre el mismo motor (D27).
+
+
 

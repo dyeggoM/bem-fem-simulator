@@ -16,6 +16,11 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# El dashboard sirve plotly.min.js, app.js, index.html y style.css desde el paquete: sin esto no
+# entran en un wheel (en editable funcionan porque se leen del árbol de fuentes).
+[tool.setuptools.package-data]
+ultrasound_sim = ["dashboard/static/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]

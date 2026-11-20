@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>bem-fem-simulator · dashboard</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/plotly.min.js"></script>
+</head>
+<body>
+<div class="app">
+
+  <aside class="panel" id="panel">
+    <div class="marca">
+      <h1>bem-fem<span>·</span>dashboard</h1>
+      <p class="sub">modelo 2D · apertura sobre baffle rígido</p>
+    </div>
+
+    <section>
+      <label>Material</label>
+      <select id="mat">
+        <option value="agua" selected>agua (1500 m/s)</option>
+        <option value="tejido">tejido blando</option>
+        <option value="hueso">hueso cortical</option>
+      </select>
+    </section>
+
+    <section>
+      <label>Frecuencia <b id="freqVal">250 kHz</b></label>
+      <input type="range" id="freq" min="20" max="1000" step="5" value="250">
+      <p class="hint" id="lamHint">λ = 6.00 mm</p>
+    </section>
+
+    <section class="modo">
+      <div class="tabs">
+        <button class="tab activo" data-modo="array">arreglo</button>
+        <button class="tab" data-modo="manual">fuentes</button>
+      </div>
+    </section>
+
+    <section id="ctrlArray">
+      <label>Elementos <b id="nVal">32</b></label>
+      <input type="range" id="nEl" min="1" max="256" step="1" value="32">
+
+      <label>Apertura D <b id="apVal">60 mm</b></label>
+      <input type="range" id="ap" min="5" max="120" step="1" value="60">
+
+      <label>Foco F <b id="fxVal">90 mm</b></label>
+      <input type="range" id="fx" min="20" max="190" step="5" value="90">
+
+      <label>Foco lateral <b id="fyVal">0 mm</b></label>
+      <input type="range" id="fy" min="-30" max="30" step="1" value="0">
+
+      <button class="btn" id="btnManual">pasar a fuentes editables →</button>
+    </section>
+
+    <section id="ctrlManual" hidden>
+      <p class="hint">Cada fila es una apertura sobre el baffle. Posición y ancho en mm,
+      fase en radianes (0 = todas en fase).</p>
+      <table class="fuentes">
+        <colgroup><col class="c-y"><col class="c-ancho"><col class="c-amp"><col class="c-fase"><col class="c-del"></colgroup>
+        <thead><tr><th>y</th><th>ancho</th><th>amp</th><th>fase</th><th></th></tr></thead>
+        <tbody id="srcBody"></tbody>
+      </table>
+      <div class="fila">
+        <button class="btn mini" id="btnAdd">+ fuente</button>
+        <button class="btn mini" id="btnArray">← desde arreglo</button>
+      </div>
+      <p class="hint">Arrastrá las asas azules sobre el mapa para mover una fuente;
+      doble clic sobre el mapa agrega una en esa altura.</p>
+    </section>
+
+    <section class="fila">
+      <button class="btn mini" id="btnGuardar">guardar</button>
+      <button class="btn mini" id="btnCargar">cargar</button>
+      <input type="file" id="archivo" accept=".json,application/json" hidden>
+    </section>
+
+    <section>
+      <label>Resolución de malla</label>
+      <select id="res">
+        <option value="80">80 × 80 (rápido)</option>
+        <option value="120" selected>120 × 120</option>
+        <option value="180">180 × 180 (fino)</option>
+      </select>
+    </section>
+
+    <section class="metricas">
+      <div class="chip"><span>pico</span><b id="mPico">—</b></div>
+      <div class="chip"><span>FWHM lateral</span><b id="mFwhm">—</b></div>
+      <div class="chip"><span>FWHM axial</span><b id="mFwhmAx">—</b></div>
+      <div class="chip"><span>lóbulo lateral</span><b id="mLobe">—</b></div>
+      <div class="chip"><span>grataje</span><b id="mGrat">—</b></div>
+      <div class="chip"><span>cálculo</span><b id="mTime">—</b></div>
+    </section>
+
+    <p class="aviso" id="aviso" hidden></p>
+    <p class="pie" id="estado">listo</p>
+  </aside>
+
+  <main class="vista">
+    <div class="mapa-wrap">
+      <div id="mapa" class="mapa"></div>
+      <div id="arrastre" class="arrastre"></div>
+    </div>
+    <div class="cortes">
+      <div id="axial" class="corte"></div>
+      <div id="lateral" class="corte"></div>
+    </div>
+  </main>
+
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>
