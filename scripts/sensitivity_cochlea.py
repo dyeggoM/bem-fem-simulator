@@ -123,6 +123,7 @@ from ultrasound_sim.cochlea import (  # noqa: E402
     build_cross_section,
     plate_reference,
     window_arc_edges,
+    BASILAR_MEMBRANE_BALLPARK,
 )
 from ultrasound_sim.fem.assembly import (  # noqa: E402
     p1_tri_local,
@@ -133,6 +134,7 @@ from ultrasound_sim.fem.assembly import (  # noqa: E402
 from ultrasound_sim.fem.coupled2d import (  # noqa: E402
     abc_boundary_block,
     abc_incident_rhs,
+    segment_impedance_block,
     interface_edges,
 )
 from ultrasound_sim.fem.elastic2d import p1_elastic_local, strain_matrix  # noqa: E402
@@ -146,6 +148,10 @@ from ultrasound_sim.materials import WATER, ElasticSolid  # noqa: E402
 FREQUENCY_HZ = 1.0e5
 RADIUS_M = 20.0e-3
 BASE_THICKNESS_M = 2.0e-3
+
+#: Impedancia de la membrana basilar [Pa·s/m], o ``None`` (cavidad sin membrana, lo de D24).
+#: La fija ``main()`` cuando se pasa ``--membrane``; entra en la clave de caché de ``evaluate``.
+MEMBRANE_IMPEDANCE: complex | None = None
 PPW = 20.0
 PAD_WAVELENGTHS = 2.5  # el del caso 0.972180 (D22); 2.0 cambiaría el número base
 MIN_ELEMENTS_ACROSS_WALL = 2
@@ -214,7 +220,8 @@ class Scenario:
         return f"{self.law}·t={self.thickness_m * 1e3:g}mm·{self.c_p:.0f}/{self.c_s:.0f}/{self.rho:.0f}"
 
 
-def solve_section(section, *, alpha: float = 0.0, abc_order: int = 1):
+def solve_section(section, *, alpha: float = 0.0, abc_order: int = 1,
+                  membrane_impedance: complex | None = None):
     """Resuelve el corte acoplado con la rigidez del sólido posiblemente compleja.
 
     Es el mismo ensamblado de ``cochlea._assemble_and_solve_arc`` (mismos bloques, mismos signos,
@@ -343,6 +350,24 @@ def solve_section(section, *, alpha: float = 0.0, abc_order: int = 1):
         coo = arc_blk.tocoo()
         _add(p_dof[coo.row], p_dof[coo.col], coo.data)
 
+    if membrane_impedance is not None:
+        # Misma condición de borde que la ventana (p = Z·v_n) pero sobre un segmento INTERIOR:
+        # el fluido está partido en dos scalae y la membrana es la línea donde se tocan.
+        if not getattr(section, "has_membrane", False):
+            raise ValueError(
+                "se pidió membrane_impedance pero la sección no tiene membrana: "
+                "build_cross_section(..., membrane_angle=...)"
+            )
+        medges = np.asarray(section.membrane_edges, dtype=int).reshape(-1, 2)
+        if medges.shape[0] == 0:
+            raise ValueError("la sección tiene membrana pero sin aristas: revisar el mallado")
+        m_blk = segment_impedance_block(
+            x, medges, complex(membrane_impedance),
+            frequency=section.frequency, rho=fluid.rho,
+        )
+        coo = m_blk.tocoo()
+        _add(p_dof[coo.row], p_dof[coo.col], coo.data)
+
     a_full = sp.coo_matrix(
         (np.concatenate(vals), (np.concatenate(rows), np.concatenate(cols))),
         shape=(size, size),
@@ -370,7 +395,7 @@ def evaluate(
     abc_order: int = 1,
 ) -> dict:
     """Construye, resuelve y mide un escenario. Cacheado (el barrido repite puntos)."""
-    key = (scn, float(ppw), int(abc_order))
+    key = (scn, float(ppw), int(abc_order), MEMBRANE_IMPEDANCE)
     if key in _CACHE:
         return _CACHE[key]
 
@@ -387,9 +412,12 @@ def evaluate(
         window_center_angle=WINDOW_CENTER_ANGLE_DEG,
         window_model="impedance",
         window_impedance=scn.impedance(),
+        # la membrana corta el fluido a lo largo de un diámetro (90° = perpendicular al haz)
+        membrane_angle=90.0 if MEMBRANE_IMPEDANCE is not None else None,
     )
     p, _, size = solve_section(
-        section, alpha=scn.alpha(), abc_order=abc_order
+        section, alpha=scn.alpha(), abc_order=abc_order,
+        membrane_impedance=MEMBRANE_IMPEDANCE,
     )
     ring = section.ring_nodes(section.probe_radius)
     vals = p[ring]
@@ -770,9 +798,22 @@ def main(argv=None) -> int:
     ap.add_argument("--step", type=float, default=0.5, help="paso del barrido de espesor [mm]")
     ap.add_argument("--ppw", type=float, default=PPW, help="puntos por longitud de onda")
     ap.add_argument("--abc-order", type=int, default=1, choices=(1, 2))
-    ap.add_argument("--out", type=Path, default=OUT_CSV)
+    ap.add_argument("--out", type=Path, default=None,
+                    help="CSV de salida (por defecto out/sensitivity_cochlea.csv, o "
+                         "out/sensitivity_membrane.csv con --membrane)")
     ap.add_argument("--no-csv", action="store_true")
+    ap.add_argument("--membrane", action="store_true",
+                    help="pone la membrana basilar (D29) y barre el mismo OAT de D24 para "
+                         "comparar el ranking con y sin ella")
     args = ap.parse_args(argv)
+
+    global MEMBRANE_IMPEDANCE
+    if args.membrane:
+        MEMBRANE_IMPEDANCE = BASILAR_MEMBRANE_BALLPARK.impedance(FREQUENCY_HZ)
+        print(f"  membrana basilar: Z_m = {MEMBRANE_IMPEDANCE:.4e} Pa·s/m "
+              f"({BASILAR_MEMBRANE_BALLPARK.name}, propiedades VERIFY)")
+    if args.out is None:
+        args.out = OUT_CSV.with_name("sensitivity_membrane.csv") if args.membrane else OUT_CSV
 
     step = args.step * 1e-3
     n = int(round((7.0e-3 - 1.0e-3) / step)) + 1

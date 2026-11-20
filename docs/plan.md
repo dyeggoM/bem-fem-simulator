@@ -152,8 +152,18 @@ es la señal de un error o de una suposición mal puesta.
   (1.55×). Propiedades de la membrana: **todas VERIFY** (no hay conjunto citable en nuestra banda);
   los criterios se validan por límites (Z→∞ rígido, Z→0 presión nula) y balance de energía, no por
   esos números.
+  *Re-barrido de sensibilidad con la membrana puesta* (D30, 85 puntos): el espesor baja de 72 % a
+  **53 %**, la atenuación sube de 5.5 % a **9.6 %**, `c_s` sale del piso numérico (2.2 % → **8.2 %**)
+  y `Z_r` se cae a **0.3 %**. `c_p` no se mueve (16.1 %).
 - **Fase 6 — 3D con geometría de CT** y mapas heterogéneos. *Aceptación*: resultados de literatura
   para skull / hueso temporal.
+  **6a ENTREGADA (D32)**: núcleo acústico 3D — `meshing3d.py`, `fem/helmholtz3d.py` (P1, ABC-1 y
+  BGT-2) y `aperture3d.py`. Onda plana al **3.53 % a ppw 20** con orden medido **1.88 / 1.94 / 1.97**;
+  la ABC baja el error de **100 %** (pared rígida) a **9.57 %**; la fuente puntual reproduce el Green
+  3D con amplitud **0.9903**; el pistón coincide con Rayleigh-Sommerfeld al **0.0000 %** y su último
+  máximo axial cae en `a²/λ − λ/4`. El techo es el costo: 2 λ × 1 λ × 1 λ a ppw 20 son 18 081 nodos y
+  **5.3 s** por solve; un cubo de 3 λ a ppw 12 no termina en 10 min. Falta para "cóclea 3D": R/T
+  estratificado en 3D, dispersión contra obstáculo, elasticidad 3D y geometría de CT.
 - **Fase 7 — Opcional**: híbrido FEM-BEM, pulsos en tiempo, GUI (frontend C# si se quiere).
 
 ## Herramientas

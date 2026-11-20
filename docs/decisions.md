@@ -512,7 +512,7 @@ modelo es *conservador por ~16 %*; (2) espesor real de la cápsula (domina con 7
 
 *Advertencia de método*: el 72 % del espesor es en buena parte resonancia de cavidad, y la membrana
 basilar (5b-2) es justamente lo que rompe ese Q. **Hay que re-correr este barrido después de 5b-2**; el
-ranking no es definitivo.
+ranking no es definitivo. -> *Hecho*: el barrido con membrana esta en **D30** y este ranking queda superado (el espesor baja a 53 %, `c_s` sube a 8 % y `Z_r` se cae a 0.3 %).
 
 ---
 
@@ -770,17 +770,124 @@ energía y no-regresión contra D24, que son relativos.
 
 **Bug reportado y no arreglado**: el redondeo `n_theta + n_theta % 4` no garantiza múltiplo de 4 (a
 ppw=20 da 502). Se corrigió la descripción y se agregó redondeo a par cuando hay membrana; la fórmula
-original quedó intacta para no mover los números publicados.
+formula original quedó intacta para no mover los números publicados.
 
+---
 
+## D30 — Con la membrana puesta el ranking cambia: el espesor pesa menos, `c_s` deja de ser ruido
 
+D24 lo pedía explícito y acá está: el mismo barrido one-at-a-time, con la membrana de D29
+(`scripts/sensitivity_cochlea.py --membrane`, 85 puntos, *171.9 s*,
+`out/sensitivity_membrane.csv`). El script reproduce el caso base sin membrana **al dígito**
+(`t_interior = 0.97218`, la referencia de `solve_cross_section`), así que las dos columnas son
+comparables.
 
+| # | parámetro | rango rel. **con membrana** | D24 (sin membrana) | qué pasó |
+|---|---|---|---|---|
+| 1 | espesor | **53.11 %** | 72.15 % | sigue dominando, pero 19 puntos menos |
+| 2 | `c_p` | **16.06 %** | 16.09 % | *idéntico*: no dependía de la resonancia |
+| 3 | atenuación | **9.60 %** | 5.46 % | sube: con la membrana el camino importa más |
+| 4 | `c_s` | **8.22 %** | 2.17 % | **estaba en el piso numérico y deja de estarlo** |
+| 5 | `ρ` | 1.03 % | 1.19 % | sigue al nivel del piso (0.93 %) |
+| 6 | `Z_r` | **0.28 %** | 3.18 % | colapsa: la pérdida ya no pasa por la ventana |
 
+El piso numérico medido (ppw 20 → 40) es *0.93 %*: por debajo de eso el ranking no distingue.
 
+**Las tres conclusiones que cambian de verdad**:
 
+1. **El 72 % del espesor era, en buena parte, la resonancia.** Sin cavidad resonante baja a 53 %: sigue
+   siendo el parámetro más influyente —y por lo tanto lo primero que hay que medir—, pero dejó de ser
+   "casi todo".
+2. **`c_s` sale del piso numérico.** Con 2.17 % estaba al nivel del error de malla, y D24 decía
+   explícitamente "no vale calibrarlos antes de subir la discretización". Con la membrana da *8.22 %*,
+   nueve veces el piso: ahora importa y ahora hay que reportarlo con su incertidumbre.
+3. **`Z_r` se vuelve irrelevante (3.18 % → 0.28 %).** Es lo más limpio de todo: la ventana resistiva era
+   el amortiguador en el modelo cerrado de D23, y con la membrana el camino de pérdida se mudó a ella.
+   Confirma que la ventana **no** es la palanca del modelo.
 
+**Lo que NO cambió, y hay que decirlo**: `t_interior` sigue sin ser estrictamente monótona (el último
+tramo sube +0.97 %, D29) y el armónico `n = 0` tampoco (0.1813 → 0.1959 a 1.5 mm, +8.0 % de ese tramo,
+dentro del piso). La membrana saca la resonancia grande, no toda la estructura fina.
 
+**Qué le pide esto a la parte experimental**: el orden de D24 se mantiene en el primer puesto
+(espesor) y sube en el tercero (atenuación), y *agrega* `c_s` a la lista de parámetros que hay que
+medir — antes se podía ignorar por estar dentro del ruido numérico. `ρ` y `Z_r` se pueden seguir
+dejando en el ballpark.
 
+**Ajuste de rendimiento que salió de acá**: al exponer el corte en la UI quedó en evidencia que
+`solve_cross_section` usaba el ordenamiento **COLAMD** que trae scipy por defecto para el LU disperso.
+Un A/B en el mismo proceso (mismo sistema, 45 240 gdl, 345 556 nnz) dio *MMD_AT_PLUS_A* ≈ 1.0 s contra
+*COLAMD* 1.0–29.4 s según la corrida, con la solución **idéntica a 8 decimales** (`t_interior =
+0.48069574` en los cuatro casos). La librería pasó a MMD; el barrido de D30 ya lo usaba, y ahora los
+dos coinciden a *0.00e+00*.
 
+---
 
+## D31 — Los tres parámetros que faltan medir, editables en la UI
 
+D30 dejó una lista corta de lo que la parte experimental tiene que medir: espesor de la cápsula (53 %),
+atenuación bajo 270 kHz (10 %) y `c_s` (8 %, nuevo). Los tres estaban hardcodeados en el ballpark. Ahora
+se editan en el panel **cóclea · corte transversal** del dashboard, cada uno con un tooltip que dice
+qué es, su rango publicado, cuánto pesa y de qué ADR sale.
+
+- **espesor** 0.5–8 mm (arranca en 2 mm): es el que más pesa; el rango medido es 1–7 mm.
+- **c_s** 1000–2500 m/s (arranca en 1900): White 2006 da 1500 ± 140 m/s; 1900 es el ballpark del plan y
+  está en el extremo alto. Tiene que ser menor que `c_p`.
+- **α** 0–40 Np/m (arranca en 0): las tres leyes de D19 dan 3.78 / 6.24 / 15.31 Np/m a 100 kHz.
+
+`solve_cross_section` no sabía de atenuación en el sólido (el script de sensibilidad tiene su propio
+ensamblado con `D` compleja desde antes). Se agregó `alpha` [Np/m] a la librería por el camino de
+módulos complejos (`p1_elastic_local_damped`, `c~ = c/(1 + i·α·c/ω)`), y el criterio de aceptación es
+fuerte: **la librería tiene que reproducir el ensamblado independiente del script**. Ahora da
+*0.00e+00* de diferencia relativa (antes 1.39e-14, antes de igualar el ordenamiento del LU), y
+`alpha = 0` es **bit-idéntico** al camino sin el parámetro.
+
+Números de referencia del panel (t = 2 mm, c_s = 1900 m/s): α = 0 → `t_interior = 0.5319` (el de D29),
+α = 15.31 → `0.4808` (el de D30 con la ley de Pinton), y la membrana absorbe 72.9 % y 66.8 %
+respectivamente. Con t = 6 mm y c_s = 1500: `0.2963`.
+
+**Qué NO se expone y por qué**: `c_p = 3500 m/s` y `ρ = 1950 kg/m³` siguen fijos. `c_p` pesa 16 % y
+también es VERIFY (D20), así que es un candidato obvio a ser el cuarto campo; queda anotado. La
+membrana usa `BASILAR_MEMBRANE_BALLPARK` (VERIFY) y la app lo dice en el pie.
+
+---
+
+## D32 — Núcleo 3D: converge como P1 tiene que converger, y el techo es el costo
+
+Fase 6a. Tres módulos nuevos: `meshing3d.py` (malla de cajas: cada celda en 6 tetraedros con
+orientación positiva verificada), `fem/helmholtz3d.py` (P1 en tetraedros, ABC-1 y BGT-2 en caras
+planas, campo total y dispersado, fuente puntual) y `aperture3d.py` (integral de Rayleigh en 3D con
+pistón circular o rectangular y foco). No hay geometría de cóclea ni elasticidad 3D todavía.
+
+**Lo medido** (`tests/test_helmholtz3d.py`, 5 tests; `tests/test_aperture3d.py`, 14):
+
+| criterio | medido |
+|---|---|
+| malla: volúmenes positivos y suma = volumen de la caja | exacto a 1e-12; 176 caras de frontera en 4×2×6 |
+| onda plana con ABC (caja 2 λ × 1 λ × 1 λ) | 20.50 % a ppw 8 → **3.53 % a ppw 20** |
+| orden de convergencia | **1.88 / 1.94 / 1.97** (P1, como corresponde) |
+| ABC contra pared rígida | **9.57 %** contra **100.0 %** |
+| fase del campo: `d(arg p)/dx` contra `k` | 4.192e2 contra 4.189e2 (0.07 %) |
+| fuente puntual contra el Green 3D | amplitud **0.9903** del teórico; L2 8.4 % en caja de 1.1 λ |
+| pistón 3D en el eje contra Rayleigh-Sommerfeld | 0.0000 %; último máximo en `a²/λ − λ/4` exacto |
+| `|p|` en el pico axial | `2·ρ·c·v₀` exacto |
+
+**El costo es el techo, no la física**: 2 λ × 1 λ × 1 λ a ppw 20 son 18 081 nodos y 96 000 tets →
+5.3 s por solve. Un cubo de 3 λ a ppw 12 (50 653 nodos) no terminó en 10 minutos. O sea: en 3D el
+presupuesto se gasta en la LU dispersa, y por eso el dominio útil con este ensamblado es de pocas
+longitudes de onda — exactamente lo que el plan anticipaba (D8/D10) cuando decía que a 1 MHz hay que
+pasar a FEniCSx+MPI, a k-Wave o resolver el exterior por BEM.
+
+**Dos errores que fueron míos, no del módulo**, y quedan escritos porque el primero es fácil de
+repetir:
+
+1. **Factor ρ**: la ecuación se ensambla dividida por `element_rho`, que por defecto vale **1**. Sin
+   pasar `element_rho=W.rho` la fuente puntual da `1/ρ` de la amplitud (medido: 0.0010 del teórico).
+   El módulo está bien; el que se olvidó la densidad fui yo.
+2. **Signo de `i` en el Green**: con la convención del repo y un RHS `−i·ω·Q`, la solución es
+   `p = −i·ω·ρ·Q·e^{ikr}/(4πr)`. Con el signo opuesto la amplitud coincide al 1 % y el desfase es un
+   **+178° constante**: un error de fase perfectamente plausible si no se mira el número complejo.
+
+**Lo que falta para llamar a esto "cóclea 3D"**: el estratificado R/T en 3D (el 1D ya existe y en 2D
+está resuelto), la dispersión contra un obstáculo (`assemble_scattered` está escrito y sin test),
+elasticidad 3D, y la geometría de CT. Cada uno es una fase, no un detalle.

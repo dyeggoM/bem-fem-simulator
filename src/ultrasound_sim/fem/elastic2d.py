@@ -49,6 +49,8 @@ usa el acoplamiento (``σ·n = −p·n``).
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import scipy.sparse as sp
 
@@ -127,6 +129,63 @@ def plane_strain_matrix(solid: ElasticSolid) -> np.ndarray:
         [[lam + 2.0 * mu, lam, 0.0], [lam, lam + 2.0 * mu, 0.0], [0.0, 0.0, mu]],
         dtype=float,
     )
+
+
+def plane_strain_matrix_damped(
+    solid: ElasticSolid, *, frequency: float, alpha: float
+) -> np.ndarray:
+    """``D`` (3×3) compleja con atenuación de **amplitud** ``alpha`` [Np/m] en el sólido.
+
+    Con la convención del repo (``e^{−iωt}``, D4) una atenuación de amplitud equivale a una
+    velocidad compleja ``c̃ = c / (1 + i·α·c/ω)``, o sea ``k = ω/c + i·α``, y de ahí
+
+        ``μ̃ = ρ·c̃_s²``,   ``λ̃ = ρ·(c̃_p² − 2·c̃_s²)``.
+
+    Es el mismo camino que usa ``scripts/sensitivity_cochlea.py`` en su ensamblado propio: los dos
+    tienen que dar lo mismo (se verifica en ``tests/test_cochlea_damping.py``).
+    """
+    if not (frequency > 0.0):
+        raise ValueError(f"frequency debe ser > 0; recibido {frequency!r}")
+    if not (alpha >= 0.0):
+        raise ValueError(f"alpha debe ser >= 0 [Np/m]; recibido {alpha!r}")
+    sol = _check_solid(solid)
+    omega = 2.0 * math.pi * float(frequency)
+    if alpha == 0.0:
+        return plane_strain_matrix(sol)
+    c_p = sol.c_p / (1.0 + 1j * float(alpha) * sol.c_p / omega)
+    c_s = sol.c_s / (1.0 + 1j * float(alpha) * sol.c_s / omega)
+    mu = sol.rho * c_s**2
+    lam = sol.rho * (c_p**2 - 2.0 * c_s**2)
+    return np.array(
+        [[lam + 2.0 * mu, lam, 0.0], [lam, lam + 2.0 * mu, 0.0], [0.0, 0.0, mu]],
+        dtype=complex,
+    )
+
+
+def p1_elastic_local_damped(
+    nodes, triangles, solid: ElasticSolid, *, frequency: float, alpha: float
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Como :func:`p1_elastic_local` pero con ``D`` compleja por atenuación (``alpha > 0``).
+
+    La masa no cambia (es el mismo ``ρ``); la que se vuelve compleja es la rigidez.
+    """
+    x = _as_nodes(nodes)
+    t = _as_triangles(triangles, x.shape[0])
+    _check_ccw(x, t)
+    area = triangle_element_areas(x, t)
+    grads = triangle_gradients(x, t)
+    b = strain_matrix(grads)
+    d = plane_strain_matrix_damped(solid, frequency=frequency, alpha=alpha)
+    stiff = area[:, None, None] * np.einsum("mki,kl,mlj->mij", b, d, b)
+
+    m = area.size
+    base = np.broadcast_to((area / 12.0)[:, None, None], (m, 3, 3)).copy()
+    idx = np.arange(3)
+    base[:, idx, idx] += (area / 12.0)[:, None]
+    mass = np.zeros((m, 6, 6), dtype=float)
+    mass[:, 0::2, 0::2] = base
+    mass[:, 1::2, 1::2] = base
+    return stiff, mass, area
 
 
 def strain_matrix(grads: np.ndarray) -> np.ndarray:

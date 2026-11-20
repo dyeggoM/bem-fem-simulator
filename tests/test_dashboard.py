@@ -253,6 +253,44 @@ def test_modelo_libre_por_http(servidor):
     assert len(datos["x_mm"]) == 30
 
 
+def test_api_coclea_con_los_tres_parametros(servidor):
+    """El corte se resuelve por HTTP y con los tres parámetros del panel.
+
+    El valor de referencia es el de D29: t = 2 mm, c_s = 1900 m/s, sin atenuación → 0.5319 con la
+    membrana puesta (sin ella sería 0.9722). Si el cableado de `alpha` o del hueso configurable se
+    rompe, este número se mueve.
+    """
+    pedido = json.dumps({"thickness_mm": 2.0, "c_s": 1900.0, "alpha_np_m": 0.0}).encode()
+    req = urllib.request.Request(servidor + "/api/cochlea", data=pedido,
+                                 headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(req, timeout=120) as r:
+        d = json.loads(r.read())
+    print(f"\n  t_interior = {d['t_interior']:.4f}  n0 = {d['t_interior_n0']:.4f}  "
+          f"absorbe = {100 * d['absorbido']:.1f} %  ({d['meta']['seconds']} s)")
+    assert d["t_interior"] == pytest.approx(0.5319, abs=2e-3)
+    assert d["t_interior_n0"] == pytest.approx(0.1791, abs=2e-3)
+    assert 0.5 < d["absorbido"] < 0.95      # la membrana absorbe la mayor parte de lo que entra
+    assert d["meta"]["thickness_mm"] == 2.0
+
+    # con atenuación la transmisión tiene que bajar
+    pedido = json.dumps({"thickness_mm": 2.0, "c_s": 1900.0, "alpha_np_m": 15.31}).encode()
+    req = urllib.request.Request(servidor + "/api/cochlea", data=pedido,
+                                 headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(req, timeout=120) as r:
+        con_alpha = json.loads(r.read())
+    assert con_alpha["t_interior"] < d["t_interior"]
+    assert con_alpha["t_interior"] == pytest.approx(0.4808, abs=3e-3)
+
+
+def test_api_coclea_rechaza_parametros_fuera_de_rango(servidor):
+    for malo in ({"thickness_mm": 20}, {"c_s": 4000}, {"alpha_np_m": -1}):
+        req = urllib.request.Request(servidor + "/api/cochlea", data=json.dumps(malo).encode(),
+                                     headers={"Content-Type": "application/json"}, method="POST")
+        with pytest.raises(urllib.error.HTTPError) as exc:
+            urllib.request.urlopen(req, timeout=60)
+        assert exc.value.code == 400
+
+
 def test_la_pagina_expone_arrastre_y_configuracion():
     """Contrato de la UI: el overlay de arrastre y los botones de guardar/cargar tienen que estar.
 

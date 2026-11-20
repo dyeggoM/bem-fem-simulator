@@ -94,6 +94,48 @@
       </select>
     </section>
 
+    <section class="coclea">
+      <label class="titulo">cóclea · corte transversal
+        <span class="tip" title="Modelo aparte del mapa: la cápsula ótica como sólido elástico con
+fluido adentro y la membrana basilar. Resuelve el corte 2D a 100 kHz y devuelve t_interior (media de
+|p| en r/2, la métrica de D24) y el armónico n=0. Los tres campos de abajo son los parámetros que la
+medición experimental todavía no fija (D20, D30).">?</span>
+      </label>
+      <p class="hint">Tres números que faltan medir. El resto queda en el ballpark documentado.</p>
+
+      <label for="cocEsp">espesor de la cápsula <b id="cocEspVal">2.0 mm</b>
+        <span class="tip" title="Espesor de la cápsula ótica. Rango medido 1–7 mm (el cráneo reportado
+es 6–8 mm). Es el parámetro que más pesa: 53 % del rango del resultado en D30, y era 72 % en el modelo
+sin membrana (D24). Punto de partida: 2 mm.">?</span>
+      </label>
+      <input type="range" id="cocEsp" min="0.5" max="8" step="0.5" value="2">
+
+      <label for="cocCs">c_s del hueso <b id="cocCsVal">1900 m/s</b>
+        <span class="tip" title="Velocidad de cizalla del hueso. White 2006 da 1500 ± 140 m/s (sustituto
+de calvaria); 1900 es el ballpark del plan y queda en el extremo alto. Pesa 8 % del rango, pero en el
+modelo sin membrana estaba dentro del ruido numérico (2.2 %, D30). Tiene que ser menor que c_p.">?</span>
+      </label>
+      <input type="range" id="cocCs" min="1000" max="2500" step="10" value="1900">
+
+      <label for="cocAlpha">atenuación α <b id="cocAlphaVal">0 Np/m</b>
+        <span class="tip" title="Atenuación de AMPLITUD del hueso a 100 kHz. No hay datos citables por
+debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2011) y 15.31 (Pinton
+2012) Np/m. Pesa 10 % del rango (D30). Entra al solver como módulos complejos.">?</span>
+      </label>
+      <input type="range" id="cocAlpha" min="0" max="40" step="0.5" value="0">
+
+      <div class="fila">
+        <button class="btn mini" id="btnCoclea">resolver corte</button>
+      </div>
+      <div class="metricas coclea-metricas">
+        <div class="chip"><span>t_interior</span><b id="cocT">—</b></div>
+        <div class="chip"><span>armónico n=0</span><b id="cocN0">—</b></div>
+        <div class="chip"><span>absorbe</span><b id="cocAbs">—</b></div>
+        <div class="chip"><span>cálculo</span><b id="cocTiempo">—</b></div>
+      </div>
+      <p class="pie" id="cocEstado">sin resolver</p>
+    </section>
+
     <section class="metricas">
       <div class="chip"><span>pico</span><b id="mPico">—</b></div>
       <div class="chip"><span>FWHM lateral</span><b id="mFwhm">—</b></div>

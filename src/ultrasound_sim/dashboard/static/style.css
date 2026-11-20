@@ -73,6 +73,12 @@ table.fuentes button:hover { color:var(--no); }
 .chip span { display:block; color:var(--dim); font-size:10px; text-transform:uppercase;
              letter-spacing:.4px; }
 .chip b { font-size:13px; font-variant-numeric:tabular-nums; font-weight:600; }
+.coclea { border-top:1px solid var(--linea); padding-top:14px; margin-top:6px; }
+.coclea .titulo { font-size:11.5px; }
+.tip { display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px;
+  margin-left:6px; border-radius:50%; border:1px solid var(--linea); color:var(--dim);
+  font-size:10px; font-weight:700; cursor:help; text-transform:none; letter-spacing:0; }
+.tip:hover { color:var(--acento); border-color:var(--acento); }
 .aviso { color:var(--warn); background:#241d0e; border-left:2px solid var(--warn);
          padding:7px 9px; border-radius:4px; font-size:11.5px; margin:12px 0 0; }
 .pie { color:var(--dim); font-size:11.5px; margin:14px 0 0; }

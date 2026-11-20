@@ -461,6 +461,8 @@ function instantanea() {
     focus_y_mm: S.fy,
     grid: S.grid,
     sources: S.modo === 'manual' && S.fuentes ? S.fuentes : null,
+    // los tres parámetros de la cóclea viajan con la configuración: son parte de lo que el usuario fijó
+    coclea: { thickness_mm: COC.espesor, c_s: COC.c_s, alpha_np_m: COC.alpha },
   };
 }
 
@@ -480,6 +482,15 @@ function aplicar(cfg) {
     ? cfg.sources.map((s) => ({ y: Number(s.y), width: Number(s.width),
                                 amp: Number(s.amp ?? 1), phase: Number(s.phase ?? 0) }))
     : null;
+  if (cfg.coclea) {
+    COC.espesor = Number(cfg.coclea.thickness_mm) || COC.espesor;
+    COC.c_s = Number(cfg.coclea.c_s) || COC.c_s;
+    COC.alpha = Number(cfg.coclea.alpha_np_m) || 0;
+    $('cocEsp').value = COC.espesor;
+    $('cocCs').value = COC.c_s;
+    $('cocAlpha').value = COC.alpha;
+    sincronizarCoclea();
+  }
   $('mat').value = S.material;
   $('model').value = S.modelo;
   $('freq').value = S.freq;
@@ -540,6 +551,54 @@ function olvidar() {
 }
 
 window.addEventListener('resize', () => { clearTimeout(window.__tAsas); window.__tAsas = setTimeout(pintarAsas, 150); });
+
+/* ---------------------------------------------------------------- cóclea (corte transversal)
+ * Estos tres números son los que faltan medir (D20/D30): se editan acá y el corte se resuelve aparte
+ * del mapa, porque es otro modelo (cápsula elástica + fluido + membrana), no una apertura radiando.
+ * La resolución cuesta ~2.5 s, así que se dispara con el botón y no en cada movimiento del slider.
+ */
+const COC = { espesor: 2.0, c_s: 1900.0, alpha: 0.0 };
+
+function sincronizarCoclea() {
+  $('cocEspVal').textContent = `${COC.espesor.toFixed(1)} mm`;
+  $('cocCsVal').textContent = `${COC.c_s.toFixed(0)} m/s`;
+  $('cocAlphaVal').textContent = `${COC.alpha.toFixed(1)} Np/m`;
+}
+
+async function resolverCoclea() {
+  const est = $('cocEstado');
+  est.className = 'pie';
+  est.textContent = 'resolviendo el corte…';
+  try {
+    const r = await fetch('/api/cochlea', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ thickness_mm: COC.espesor, c_s: COC.c_s, alpha_np_m: COC.alpha }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+    $('cocT').textContent = d.t_interior.toFixed(4);
+    $('cocN0').textContent = d.t_interior_n0.toFixed(4);
+    $('cocAbs').textContent = `${(100.0 * d.absorbido).toFixed(1)} %`;
+    $('cocTiempo').textContent = `${d.meta.seconds.toFixed(1)} s`;
+    est.textContent = `${d.gdl} nodos · ${d.meta.seconds} s · t=2 mm sin membrana daría 0.9722`;
+    est.scrollIntoView({ block: 'nearest' });
+  } catch (e) {
+    est.className = 'pie error';
+    est.textContent = e.message;
+  }
+}
+
+const enlazarCoclea = (id, clave) => {
+  $(id).addEventListener('input', (e) => {
+    COC[clave] = parseFloat(e.target.value);
+    sincronizarCoclea();
+  });
+};
+enlazarCoclea('cocEsp', 'espesor');
+enlazarCoclea('cocCs', 'c_s');
+enlazarCoclea('cocAlpha', 'alpha');
+$('btnCoclea').addEventListener('click', resolverCoclea);
+sincronizarCoclea();
 
 /* ---------------------------------------------------------------- arranque */
 const previa = olvidar();
