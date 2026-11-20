@@ -160,6 +160,91 @@ def test_fuente_puntual_reproduce_el_green_3d():
     assert amplitud == pytest.approx(1.0, abs=0.02)
 
 
+def test_estratificado_rt_contra_la_matriz_de_transferencia():
+    """Una losa en un medio homogéneo: ``R`` y ``|T|`` contra la matriz de transferencia 1D.
+
+    Por qué no se compara el campo punto a punto: la **dispersión de P1 se acumula** con la
+    distancia recorrida (medido: el error crece 13 % → 27 % → 39 % de izquierda a derecha, y es
+    *idéntico* en el caso homogéneo). Eso es el mismo techo que D10 documentó en 2D, no un problema
+    del estratificado. Por eso se ajustan las dos ondas en una ventana **pegada a cada interfaz**
+    (0.5 λ a cada lado) y se comparan los coeficientes.
+
+    ``R`` es la relación entre dos ondas del *mismo* medio, así que no depende de ninguna referencia
+    de fase; ``|T|`` tampoco. La fase de ``T`` sí depende de si se refiere a ``x = 0`` o a la salida
+    de la losa, y por eso no se exige.
+    """
+    from ultrasound_sim.analytic import helmholtz1d
+
+    # material de prueba declarado (no es un valor de la literatura): contraste fuerte para que R
+    # sea medible con ppw razonable
+    fluido = materials.Material(name="fluido de prueba", c=2000.0, rho=1200.0,
+                                provenance="TEST: sintético, 2000 m/s y 1200 kg/m³")
+    f = FREQUENCY
+    lam = LAMBDA
+    ppw, pad, t = 12.0, 1.5 * lam, 0.5 * lam
+    L = pad + t + pad
+    m = box_tet_mesh(-pad, t + pad, -0.4 * lam, 0.4 * lam, -0.4 * lam, 0.4 * lam,
+                     int(round(L / (lam / ppw))), int(round(0.8 * lam / (lam / ppw))),
+                     int(round(0.8 * lam / (lam / ppw))))
+    cen = m.nodes[m.tets].mean(axis=1)[:, 0]
+    dentro = (cen > 0.0) & (cen < t)
+    k = np.where(dentro, fluido.wavenumber(f), K)
+    rho = np.where(dentro, fluido.rho, WATER.rho)
+
+    faces = boundary_faces(m.tets)
+    i0 = faces_on_plane(m.nodes, faces, 0, -pad)
+    i1 = faces_on_plane(m.nodes, faces, 0, t + pad)
+    p = h3.solve(m.nodes, m.tets, k, abc_faces=np.vstack([faces[i0], faces[i1]]), element_rho=rho,
+                 p_inc=h3.plane_wave(f, WATER, (1.0, 0.0, 0.0)))
+
+    x = m.nodes[:, 0]
+
+    def ajustar(sel, kk, dos_ondas):
+        xs = x[sel]
+        a = np.column_stack([np.exp(1j * kk * xs), np.exp(-1j * kk * xs)]) if dos_ondas \
+            else np.exp(1j * kk * xs)[:, None]
+        coef, *_ = np.linalg.lstsq(a, p[sel], rcond=None)
+        return coef
+
+    izq = ajustar((x > -0.5 * lam) & (x < -1e-9), K, True)
+    der = ajustar((x > t + 1e-9) & (x < t + 0.5 * lam), fluido.wavenumber(f), False)
+    r_num = izq[1] / izq[0]
+    t_num = der[0] / izq[0]
+
+    analitico = helmholtz1d.stack_response(f, (WATER, fluido, WATER), (t,))
+    e_r = abs(r_num - analitico.R) / abs(analitico.R)
+    e_t = abs(abs(t_num) - abs(analitico.T)) / abs(analitico.T)
+
+    print(f"\n  R: numérico {r_num:.5f}  analítico {analitico.R:.5f}  (error {100 * e_r:.2f} %)")
+    print(f"  |T|: numérico {abs(t_num):.5f}  analítico {abs(analitico.T):.5f}  "
+          f"(error {100 * e_t:.2f} %)")
+    assert e_r < 0.05, f"R fuera de 5 %: {100 * e_r:.1f} %"
+    assert e_t < 0.05, f"|T| fuera de 5 %: {100 * e_t:.1f} %"
+
+
+def test_campo_dispersado_nulo_en_un_medio_homogeneo():
+    """Sin dispersor, ``p_s = 0`` **exacto**: la onda incidente ya satisface el problema dispersado.
+
+    Es el sanity check del ensamblado dispersado: si el lado derecho tuviera algo de más (un término
+    incidente mal puesto, un signo en la ABC), acá aparecería un campo espurio en vez de cero.
+
+    Lo que este test **no** dice: que el camino sirva para un dispersor penetrable. `assemble_scattered`
+    no arma el término de contraste voluminoso `−(k² − k_i²)·p_i/ρ`, así que con un hueco blando
+    también da ``p_s = 0`` (medido). Para un obstáculo **rígido** sí está el camino: `neumann_faces`
+    con `dp_dn_incident = −∂p_i/∂n`. Queda como pendiente en D32.
+    """
+    pad = 2.0 * LAMBDA
+    m = box_tet_mesh_from_spacing((-pad, 0.0, 0.0), (pad, LAMBDA, LAMBDA), LAMBDA / 12)
+    faces = boundary_faces(m.tets)
+    abc = np.vstack([faces[faces_on_plane(m.nodes, faces, 0, -pad)],
+                     faces[faces_on_plane(m.nodes, faces, 0, pad)]])
+    p_s = h3.solve_scattered(m.nodes, m.tets, K, abc_faces=abc, element_rho=WATER.rho)
+
+    print(f"\n  |p_s| máximo / |p_i| medio = {np.abs(p_s).max() / np.abs(K).real:.3e}  "
+          f"(|p_s| máximo crudo = {np.abs(p_s).max():.3e})")
+    assert np.abs(p_s).max() < 1e-9, f"apareció campo dispersado espurio: {np.abs(p_s).max():.3e}"
+
+
 # --------------------------------------------------------------------------- costo
 @pytest.mark.slow
 def test_presupuesto_de_costo():
