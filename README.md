@@ -48,10 +48,25 @@ python -m venv .venv && .venv/bin/pip install numpy scipy matplotlib pytest
 ```
 src/ultrasound_sim/{materials,meshing,attenuation,transducers,cochlea}.py
 src/ultrasound_sim/{analytic,fem,bem}/    # un directorio por método
-scripts/    bench_frequency.py · cross_validate.py · sensitivity_cochlea.py
+src/ultrasound_sim/dashboard/             # dashboard interactivo local (HTTP + Plotly)
+scripts/    bench_frequency.py · cross_validate.py · sensitivity_cochlea.py · focusing_study.py · report.py
 tests/      un archivo por módulo, con los criterios de la fase
 docs/       plan.md (fases y criterios) · decisions.md (ADR: convenciones y lo descartado)
 ```
+
+## Dashboard
+
+```bash
+.venv/bin/python -m ultrasound_sim.dashboard        # http://127.0.0.1:8765/
+```
+
+Sliders de frecuencia, cantidad de elementos, apertura y foco; mapa de intensidad con los cortes
+axial y lateral; y un editor de fuentes donde cada elemento tiene posición, ancho, amplitud y fase.
+El motor es vectorizado (1–2 s por mapa de 120×120) y coincide con `aperture.pressure` a `1e-15`.
+
+Dos cosas que el dashboard dice en voz alta en vez de esconder: cuando el pico real no coincide con
+el foco pedido (corrimiento no paraxial, D13) y cuándo el foco pedido está más allá del campo cercano
+de la apertura.
 
 ## Limitaciones conocidas (medidas, no estimadas)
 

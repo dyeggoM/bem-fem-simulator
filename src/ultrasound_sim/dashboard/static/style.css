@@ -1,0 +1,94 @@
+:root {
+  --bg:#0d1117; --panel:#161b22; --panel2:#1b2129; --linea:#242c37; --texto:#d7dde5;
+  --dim:#79848f; --acento:#58a6ff; --ok:#3fb950; --warn:#d29922; --no:#f85149;
+}
+* { box-sizing:border-box; }
+html, body { height:100%; }
+body {
+  margin:0; background:var(--bg); color:var(--texto);
+  font:14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+.app { display:flex; height:100vh; overflow:hidden; }
+
+/* ---------- panel ---------- */
+.panel {
+  width:318px; flex:0 0 318px; background:var(--panel); border-right:1px solid var(--linea);
+  padding:18px 18px 28px; overflow-y:auto;
+}
+.marca h1 { margin:0; font-size:17px; letter-spacing:-.3px; font-weight:650; }
+.marca h1 span { color:var(--acento); }
+.marca .sub { margin:2px 0 18px; color:var(--dim); font-size:11.5px; }
+section { margin-bottom:16px; }
+label {
+  display:flex; justify-content:space-between; align-items:baseline;
+  font-size:11.5px; text-transform:uppercase; letter-spacing:.5px; color:var(--dim);
+  margin-bottom:5px; font-weight:600;
+}
+label b { color:var(--texto); text-transform:none; letter-spacing:0; font-size:12.5px;
+          font-variant-numeric:tabular-nums; }
+input[type=range] { width:100%; accent-color:var(--acento); height:18px; }
+select, input[type=number] {
+  width:100%; background:var(--panel2); color:var(--texto); border:1px solid var(--linea);
+  border-radius:6px; padding:6px 8px; font-size:13px; font-family:inherit;
+}
+.hint { margin:5px 0 0; color:var(--dim); font-size:11.5px; }
+.tabs { display:flex; gap:6px; background:var(--panel2); padding:3px; border-radius:7px; }
+.tab {
+  flex:1; background:transparent; border:0; color:var(--dim); padding:6px 0; border-radius:5px;
+  font:inherit; font-size:12.5px; cursor:pointer;
+}
+.tab.activo { background:#26303c; color:var(--texto); font-weight:600; }
+.btn {
+  width:100%; margin-top:8px; background:#21293600; border:1px solid var(--linea);
+  color:var(--acento); padding:7px 10px; border-radius:6px; font:inherit; font-size:12.5px;
+  cursor:pointer;
+}
+.btn:hover { background:#212936; }
+.btn.mini { width:auto; flex:1; margin-top:0; }
+.fila { display:flex; gap:6px; margin-top:8px; }
+
+table.fuentes { width:100%; border-collapse:collapse; font-size:12px; }
+table.fuentes th {
+  text-align:left; color:var(--dim); font-weight:600; font-size:10.5px;
+  text-transform:uppercase; letter-spacing:.4px; padding:2px 3px;
+}
+table.fuentes td { padding:2px 3px; }
+table.fuentes input {
+  width:100%; background:var(--panel2); border:1px solid var(--linea); border-radius:4px;
+  color:var(--texto); padding:3px 5px; font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size:11.5px;
+}
+table.fuentes button {
+  background:transparent; border:0; color:var(--dim); cursor:pointer; font-size:14px; padding:0 2px;
+}
+table.fuentes button:hover { color:var(--no); }
+
+.metricas { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.chip {
+  background:var(--panel2); border:1px solid var(--linea); border-radius:6px; padding:6px 8px;
+}
+.chip span { display:block; color:var(--dim); font-size:10px; text-transform:uppercase;
+             letter-spacing:.4px; }
+.chip b { font-size:13px; font-variant-numeric:tabular-nums; font-weight:600; }
+.aviso { color:var(--warn); background:#241d0e; border-left:2px solid var(--warn);
+         padding:7px 9px; border-radius:4px; font-size:11.5px; margin:12px 0 0; }
+.pie { color:var(--dim); font-size:11.5px; margin:14px 0 0; }
+.pie.error { color:var(--no); }
+
+/* ---------- vista ---------- */
+.vista { flex:1; min-width:0; display:flex; flex-direction:column; padding:12px; gap:12px; }
+.mapa { flex:1 1 auto; min-height:160px; background:var(--panel); border:1px solid var(--linea);
+        border-radius:9px; }
+.cortes { display:flex; gap:12px; height:210px; flex:0 0 210px; }
+.corte { flex:1; min-width:0; background:var(--panel); border:1px solid var(--linea);
+         border-radius:9px; }
+
+@media (max-width:880px) {
+  .app { flex-direction:column; height:auto; }
+  .panel { width:auto; flex:none; border-right:0; border-bottom:1px solid var(--linea); }
+  .vista { height:auto; }
+  /* sin esto el mapa hereda flex:1 dentro de un contenedor de alto automático y colapsa a 0 px */
+  .mapa { flex:none; height:62vh; min-height:240px; }
+  .cortes { flex-direction:column; height:auto; flex:none; }
+  .corte { height:190px; flex:none; }
+}

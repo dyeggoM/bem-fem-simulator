@@ -578,6 +578,51 @@ con corr 0.998 *y* +27 % de FWHM a la vez). Era un síntoma del bug, no de la m�
 **Lo que no cubre**: sigue siendo 2D. Un arreglo hemisférico real no es un corte lineal con la misma
 ley de fase; esto vale como cota de comparación, no como predicción de un dispositivo 3D.
 
+---
+
+## D27 — El dashboard expuso dos errores de ejes (y un colapso de layout que no era del solver)
+
+Pedido: una forma de ver lo que hace el simulador, y después poder agregar y mover fuentes. Se
+implementó `ultrasound_sim.dashboard`: servidor HTTP de la biblioteca estándar (sin dependencias
+nuevas), Plotly servido local, y un motor vectorizado. Decisión de arquitectura: **una fuente es un
+dato, no un parámetro** (`{"y", "width", "amp", "phase"}`), así que mover una fuente es cambiar su
+`y` y el arreglo enfocado no es más que un generador de esa lista.
+
+**Motor**: los nodos de Gauss de todas las fuentes se concatenan y se evalúan por fila. Contra
+`aperture.pressure` el error es *9.6e-16* (Gauss de 8 nodos alcanza porque el integrando es analítico
+en la malla). Costo: 60×60 en 117–477 ms según N; 120×120 en 1.0–2.0 s. Eso es lo que hace que los
+sliders se sientan vivos.
+
+**Los errores que encontró, en orden de aparición**:
+
+1. **Axial y lateral invertidos en `metrics`** (Python). `p` es `(len(ys), len(xs))`, o sea
+   *filas = y*, así que `intensidad[iy, :]` varía **x** y es el perfil *axial*, no el lateral. Estaban
+   cruzados, y no se notaba porque en el test las dos longitudes coincidían por casualidad (40 y 40).
+2. **FWHM en metros publicado como mm**: `focus.lateral_fwhm` devuelve metros; la clave decía `_mm`
+   sin multiplicar por 1e3. El valor "0.025" era 25 mm.
+3. **El mismo cruce de ejes, otra vez, en el JavaScript**: `p2_db[i][ix]` etiquetado como axial. Lo
+   encontró la revisión visual del render, no un test.
+4. **El índice del pico por comparación de floats**: buscar `peak_x_mm` en `x_mm` con tolerancia 1e-6
+   fallaba por redondeo y caía a la columna 0, dando −6.7 dB en vez de 0 dB. Se reemplazó por un
+   `argmax` sobre la matriz.
+5. **Lóbulo lateral medido contra el flanco del lóbulo principal** (daba ≈ −3 dB en vez de −13 dB):
+   ahora es el máximo *después del primer nulo*, y da −12.1 dB contra −13.3 dB teórico para N=32.
+
+**Lo que no era del solver**: Plotly abortaba con *"Something went wrong with axis scaling"*. La causa
+era el CSS: en vista angosta el `div` del mapa quedaba en *741×2 px* (`flex:1` con `min-height:0`
+dentro de un contenedor de alto automático), y Plotly no puede escalar un eje de 2 px. Se corrigió el
+layout, no el cálculo. Relacionado: el aspecto 1:1 no se puede pedir con `scaleanchor` + rangos fijos
+(es lo que dispara el error); se calculan los rangos a partir del área de trazado real, y como la barra
+de color se come ~65 px, el segundo paso mide el `px/mm` efectivo y corrige.
+
+**Verificación**: `tests/test_dashboard.py`, 12 tests: el motor contra `aperture.pressure`, la ley de
+fase contra `arrays.LinearArray.focused`, pico/grataje/FWHM contra lo teórico (`0.886·λ·f/#` → 6.73 mm
+contra 6.65 mm), y el servidor real en un puerto efímero por HTTP (assets, POST, GET, 400 y 404).
+
+**Deuda declarada**: no hay botón de "borrar" simetría ni de guardar una configuración; el rango de
+frecuencia no está limitado por el techo de P1 (D8), así que se puede pedir 1 MHz en 2D y el resultado
+es correcto pero caro de interpretar.
+
 
 
 
