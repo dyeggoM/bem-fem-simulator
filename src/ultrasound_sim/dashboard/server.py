@@ -24,7 +24,7 @@ from urllib.parse import parse_qs, urlparse
 
 import numpy as np
 
-from .. import materials as mats
+from .. import cochlea, materials as mats
 from . import bem_field
 from . import field as campo
 
@@ -205,8 +205,14 @@ class Handler(BaseHTTPRequestHandler):
                     for k, m in MATERIALES.items()
                 ]
             })
-        elif partes.path == "/api/field":
+        elif partes.path == "/api/cochlea":
             consulta: dict[str, object] = {k: v[0] for k, v in parse_qs(partes.query).items()}
+            try:
+                self._json(calcular_coclea(consulta))
+            except (ValueError, KeyError) as exc:
+                self._error(str(exc))
+        elif partes.path == "/api/field":
+            consulta = {k: v[0] for k, v in parse_qs(partes.query).items()}
             for clave in ("nx", "ny", "n_elements"):
                 if clave in consulta:
                     consulta[clave] = int(float(str(consulta[clave])))
@@ -218,7 +224,8 @@ class Handler(BaseHTTPRequestHandler):
             self._error("no encontrado", HTTPStatus.NOT_FOUND)
 
     def do_POST(self) -> None:  # noqa: N802
-        if urlparse(self.path).path != "/api/field":
+        ruta = urlparse(self.path).path
+        if ruta not in ("/api/field", "/api/cochlea"):
             self._error("no encontrado", HTTPStatus.NOT_FOUND)
             return
         largo = int(self.headers.get("Content-Length") or 0)
@@ -230,12 +237,72 @@ class Handler(BaseHTTPRequestHandler):
         except json.JSONDecodeError as exc:
             self._error(f"JSON inválido: {exc}")
             return
+        cuerpo = payload if isinstance(payload, dict) else {}
         try:
-            self._json(calcular(payload if isinstance(payload, dict) else {}))
+            self._json(calcular_coclea(cuerpo) if ruta == "/api/cochlea" else calcular(cuerpo))
         except (ValueError, KeyError) as exc:
             self._error(str(exc))
         except Exception as exc:  # el dashboard no debe morir por un pedido raro
             self._error(f"error interno: {type(exc).__name__}: {exc}", HTTPStatus.INTERNAL_SERVER_ERROR)
+
+
+# --------------------------------------------------------------------------- cóclea (corte 2D)
+#: Frecuencia y radio del corte con el que están calibrados D24/D29/D30; el modelo no es el mismo
+#: que el del mapa (que es una apertura radiando), así que la UI lo presenta aparte.
+COCLEA_FREQUENCY_HZ = 1.0e5
+COCLEA_RADIUS_M = 20.0e-3
+
+
+def calcular_coclea(payload: dict) -> dict:
+    """Resuelve el corte de cápsula con los tres parámetros que el usuario puede editar.
+
+    Devuelve ``t_interior`` y el armónico ``n = 0`` (D29 regla de D24) más la fracción de potencia
+    que absorbe la membrana. Todo lo demás queda en el ballpark documentado: ``c_p = 3500 m/s``,
+    ``ρ = 1950 kg/m³`` (D20, VERIFY) y la membrana de ``BASILAR_MEMBRANE_BALLPARK`` (VERIFY).
+    """
+    t0 = time.perf_counter()
+
+    espesor_mm = _float(payload, "thickness_mm", 2.0)
+    if not 0.5 <= espesor_mm <= 12.0:
+        raise ValueError(f"thickness_mm debe estar en [0.5, 12]: recibido {espesor_mm}")
+    c_s = _float(payload, "c_s", 1900.0)
+    if not 300.0 <= c_s < 3500.0:
+        raise ValueError(
+            f"c_s debe estar en [300, 3500) m/s y ser menor que c_p = 3500 m/s; recibido {c_s}"
+        )
+    alpha = _float(payload, "alpha_np_m", 0.0)
+    if not 0.0 <= alpha <= 200.0:
+        raise ValueError(f"alpha_np_m debe estar en [0, 200] Np/m; recibido {alpha}")
+
+    hueso = mats.ElasticSolid(
+        name="hueso configurado en la UI", rho=1950.0, c_p=3500.0, c_s=c_s,
+        provenance="editado por el usuario en el dashboard; c_p=3500 y rho=1950 son el ballpark "
+                   "VERIFY de D20",
+    )
+    seccion = cochlea.build_cross_section(
+        COCLEA_FREQUENCY_HZ, COCLEA_RADIUS_M, espesor_mm * 1e-3,
+        ppw=20.0, pad_wavelengths=2.5, min_elements_across_wall=2, bone=hueso,
+        window_half_angle=10.0, window_center_angle=0.0,
+        window_model="impedance", window_impedance=complex(mats.WATER.rho * mats.WATER.c),
+        membrane_angle=90.0,
+    )
+    sol = cochlea.solve_cross_section(
+        seccion, alpha=alpha,
+        membrane_impedance=cochlea.BASILAR_MEMBRANE_BALLPARK.impedance(COCLEA_FREQUENCY_HZ),
+    )
+    return {
+        "t_interior": sol.t_interior,
+        "t_interior_n0": sol.t_interior_complex,
+        "absorbido": sol.power_membrane_fraction,
+        "gdl": int(seccion.n_nodes),
+        "meta": {
+            "thickness_mm": espesor_mm,
+            "c_s": c_s,
+            "alpha_np_m": alpha,
+            "frequency_khz": COCLEA_FREQUENCY_HZ / 1e3,
+            "seconds": round(time.perf_counter() - t0, 2),
+        },
+    }
 
 
 def build_server(host: str = "127.0.0.1", port: int = 8765) -> ThreadingHTTPServer:

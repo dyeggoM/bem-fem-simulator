@@ -196,7 +196,7 @@ from .fem.coupled2d import (
     segment_impedance_block,
     solve_coupled,
 )
-from .fem.elastic2d import p1_elastic_local
+from .fem.elastic2d import p1_elastic_local, p1_elastic_local_damped
 from .fem.helmholtz2d import PlaneWave, plane_wave
 from .materials import WATER, ElasticSolid, Material
 
@@ -1462,6 +1462,7 @@ def _assemble_and_solve_arc(
     direction=(1.0, 0.0),
     robin_edges: np.ndarray | None = None,
     robin_impedance: complex | None = None,
+    alpha: float = 0.0,
 ) -> CoupledSolution:
     """Sistema acoplado del corte + término de borde en el arco (impedancia o ABC).
 
@@ -1518,7 +1519,14 @@ def _assemble_and_solve_arc(
         cols.append(np.tile(cdofs, (1, nr)).ravel())
         vals.append(np.asarray(local).reshape(-1))
 
-    k_s, m_s, _ = p1_elastic_local(x, solid_tris, section.bone)
+    # ``alpha > 0`` mete atenuación de amplitud en el hueso por módulos complejos (D4); con
+    # ``alpha = 0`` es exactamente la misma llamada que antes (la rama lo garantiza, no un redondeo).
+    if alpha:
+        k_s, m_s, _ = p1_elastic_local_damped(
+            x, solid_tris, section.bone, frequency=frequency, alpha=float(alpha)
+        )
+    else:
+        k_s, m_s, _ = p1_elastic_local(x, solid_tris, section.bone)
     _add(
         u_dof[solid_tris].reshape(-1, 6),
         u_dof[solid_tris].reshape(-1, 6),
@@ -1586,7 +1594,10 @@ def _assemble_and_solve_arc(
     ).tocsr()
 
     scale = float(np.linalg.norm(b_full))
-    full = spla.splu(a_full.tocsc()).solve(b_full)
+    # MMD_AT_PLUS_A: medido 1.9 s contra 43.5 s del COLAMD que trae scipy por defecto en este
+    # sistema (el mismo número está en scripts/sensitivity_cochlea.py, que ya lo usaba). El
+    # ordenamiento no cambia la solución: la diferencia con el ensamblado del script es 1.4e-14.
+    full = spla.splu(a_full.tocsc(), permc_spec="MMD_AT_PLUS_A").solve(b_full)
     resid = a_full @ full - b_full
     residual = float(np.linalg.norm(resid) / (scale if scale > 0.0 else 1.0))
 
@@ -2074,6 +2085,7 @@ def solve_arc_condition(
     direction=(1.0, 0.0),
     membrane_impedance: complex | None = None,
     membrane_model: str | None = None,
+    alpha: float = 0.0,
 ) -> CrossSectionSolution:
     """Resuelve el corte con una condición de borde sobre el **arco** ``r = a``.
 
@@ -2168,6 +2180,7 @@ def solve_arc_condition(
         direction=direction,
         robin_edges=robin,
         robin_impedance=z_m,
+        alpha=alpha,
     )
     return _measure_solution(
         section,
@@ -2198,6 +2211,7 @@ def solve_cross_section(
     abc_order: int = 1,
     membrane_impedance: complex | None = None,
     membrane_model: str | None = None,
+    alpha: float = 0.0,
 ) -> CrossSectionSolution:
     """Resuelve el corte con el solver acoplado de la Fase 2 y mide la transmisión.
 
@@ -2285,6 +2299,7 @@ def solve_cross_section(
             direction=direction,
             membrane_impedance=membrane_impedance,
             membrane_model=membrane_model,
+            alpha=alpha,
         )
 
     f = section.frequency

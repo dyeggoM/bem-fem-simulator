@@ -814,6 +814,43 @@ dentro del piso). La membrana saca la resonancia grande, no toda la estructura f
 medir — antes se podía ignorar por estar dentro del ruido numérico. `ρ` y `Z_r` se pueden seguir
 dejando en el ballpark.
 
+**Ajuste de rendimiento que salió de acá**: al exponer el corte en la UI quedó en evidencia que
+`solve_cross_section` usaba el ordenamiento **COLAMD** que trae scipy por defecto para el LU disperso.
+Un A/B en el mismo proceso (mismo sistema, 45 240 gdl, 345 556 nnz) dio *MMD_AT_PLUS_A* ≈ 1.0 s contra
+*COLAMD* 1.0–29.4 s según la corrida, con la solución **idéntica a 8 decimales** (`t_interior =
+0.48069574` en los cuatro casos). La librería pasó a MMD; el barrido de D30 ya lo usaba, y ahora los
+dos coinciden a *0.00e+00*.
+
+---
+
+## D31 — Los tres parámetros que faltan medir, editables en la UI
+
+D30 dejó una lista corta de lo que la parte experimental tiene que medir: espesor de la cápsula (53 %),
+atenuación bajo 270 kHz (10 %) y `c_s` (8 %, nuevo). Los tres estaban hardcodeados en el ballpark. Ahora
+se editan en el panel **cóclea · corte transversal** del dashboard, cada uno con un tooltip que dice
+qué es, su rango publicado, cuánto pesa y de qué ADR sale.
+
+- **espesor** 0.5–8 mm (arranca en 2 mm): es el que más pesa; el rango medido es 1–7 mm.
+- **c_s** 1000–2500 m/s (arranca en 1900): White 2006 da 1500 ± 140 m/s; 1900 es el ballpark del plan y
+  está en el extremo alto. Tiene que ser menor que `c_p`.
+- **α** 0–40 Np/m (arranca en 0): las tres leyes de D19 dan 3.78 / 6.24 / 15.31 Np/m a 100 kHz.
+
+`solve_cross_section` no sabía de atenuación en el sólido (el script de sensibilidad tiene su propio
+ensamblado con `D` compleja desde antes). Se agregó `alpha` [Np/m] a la librería por el camino de
+módulos complejos (`p1_elastic_local_damped`, `c~ = c/(1 + i·α·c/ω)`), y el criterio de aceptación es
+fuerte: **la librería tiene que reproducir el ensamblado independiente del script**. Ahora da
+*0.00e+00* de diferencia relativa (antes 1.39e-14, antes de igualar el ordenamiento del LU), y
+`alpha = 0` es **bit-idéntico** al camino sin el parámetro.
+
+Números de referencia del panel (t = 2 mm, c_s = 1900 m/s): α = 0 → `t_interior = 0.5319` (el de D29),
+α = 15.31 → `0.4808` (el de D30 con la ley de Pinton), y la membrana absorbe 72.9 % y 66.8 %
+respectivamente. Con t = 6 mm y c_s = 1500: `0.2963`.
+
+**Qué NO se expone y por qué**: `c_p = 3500 m/s` y `ρ = 1950 kg/m³` siguen fijos. `c_p` pesa 16 % y
+también es VERIFY (D20), así que es un candidato obvio a ser el cuarto campo; queda anotado. La
+membrana usa `BASILAR_MEMBRANE_BALLPARK` (VERIFY) y la app lo dice en el pie.
+
+
 
 
 

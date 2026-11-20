@@ -71,6 +71,11 @@ Dos cosas que el dashboard dice en voz alta en vez de esconder: cuando el pico r
 el foco pedido (corrimiento no paraxial, D13) y cuándo el foco pedido está más allá del campo cercano
 de la apertura.
 
+El panel **cóclea · corte transversal** resuelve aparte el corte de la cápsula (sólido elástico +
+fluido + membrana basilar) y expone los **tres parámetros que la medición todavía no fija** —
+espesor de la cápsula, `c_s` del hueso y atenuación α— con un tooltip cada uno que dice qué es, su
+rango publicado y cuánto pesa en el resultado (D30, D31).
+
 Hay dos modelos de radiación, y la diferencia entre ellos está medida: *baffle rígido* (integral de
 Rayleigh, sólo semiespacio) y *espacio libre* (lámina finita, capa simple, radia a los dos lados).
 En `x > 0` dan el mismo módulo con 180° de fase —una identidad, no una aproximación— así que el
