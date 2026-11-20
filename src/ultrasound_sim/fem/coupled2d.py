@@ -1070,7 +1070,10 @@ def solve_coupled(
         raise ValueError("todos los gdl quedaron restringidos por dirichlet")
 
     a_red = a_full[free][:, free].tocsc()
-    lu = spla.splu(a_red)
+    # Mismo ordenamiento que `cochlea._assemble_and_solve_arc` (MMD_AT_PLUS_A): el sistema es
+    # estructuralmente simétrico y MMD es ~20× más rápido que el COLAMD por defecto, con la misma
+    # solución. Tener el mismo en los dos caminos es lo que permite compararlos dígito a dígito.
+    lu = spla.splu(a_red, permc_spec="MMD_AT_PLUS_A")
     sol = lu.solve(b_full[free])
 
     full = np.zeros(size, dtype=complex)
