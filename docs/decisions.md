@@ -514,6 +514,70 @@ modelo es *conservador por ~16 %*; (2) espesor real de la cápsula (domina con 7
 basilar (5b-2) es justamente lo que rompe ese Q. **Hay que re-correr este barrido después de 5b-2**; el
 ranking no es definitivo.
 
+---
+
+## D25 — Focalización con transductores reales: manda la cantidad de elementos, no el `pitch/λ`
+
+15 configuraciones medidas con `scripts/focusing_study.py` (apertura 2D sobre baffle rígido; el
+supuesto 2D está en el docstring y en la columna `notas` de las 15 filas) → `out/focusing_study.csv`
+(27 columnas) y 15 figuras. FWHM lateral en el plano del pico axial real de cada configuración;
+correlación de campo complejo contra la apertura continua del mismo diámetro.
+
+**1. Los cuatro arreglos documentados alcanzan la apertura continua dentro del 2 %:**
+
+| configuración | f (kHz) | N | pitch/λ | FWHM (mm) | vs continua | corr |
+|---|---|---|---|---|---|---|
+| `aire_40k_linea` | 40 | 16 | 0.267 | 26.64 | +1.3 % | 0.9999 |
+| `transcraneal_250k` | 250 | 256 | 0.195 | 3.37 | +0.4 % | 1.0000 |
+| `transcraneal_500k` | 500 | 256 | 0.391 | 1.71 | +1.6 % | 0.9992 |
+| `diseno_1m` | 1000 | 256 | 0.521 | 1.15 | +1.8 % | 0.9991 |
+
+**2. El ancla de 4B** (D = 60 mm = 4 λ, F = 40 mm, f/# = 0.67, 100 kHz, agua): λ/4 alcanza el 2 % y
+λ/2 el 7 % — no hace falta llegar a λ/8 (ver D26, la tabla anterior estaba mal).
+
+**3. La que no llega**: `langevin_40k_foco100` (N = 1) → +13.4 %, corr 0.989. Un pistón único no
+tiene perfil de fase: no puede enfocar, sólo iluminar.
+
+**4. A 40 kHz no hay foco que comparar**: FWHM 26.6 mm contra una cóclea de ~9 mm. Ahí se mide
+iluminación, no focalización (D8).
+
+**5. El mecanismo** (16 elementos, diámetro fijo, pitch/λ de 0.267 a 6.667): la correlación cae
+0.9999 → 0.1844 y aparecen lóbulos de grataje en −36.9° (250 kHz), −17.5° (500 kHz) y −8.6° (1 MHz),
+los tres donde predice `arcsin(λ/pitch)`. Con 256 elementos y λ/1.9 la correlación sigue en 0.9991:
+**el error de cuantización del perfil de fase depende de N, no de `pitch/λ` solo**.
+
+**6. El caso literal del criterio de grataje no existe**: pitch = λ con steer = 0 predice el lóbulo
+en ±90°, justo donde el factor de elemento `sinc(w·sinθ/λ)` tiene un cero exacto (medido −75.7 dB).
+Se verificó donde el lóbulo es interior: pitch = λ, steer −30°, N = 32 → predicho +30.00°, medido
++29.96°.
+
+---
+
+## D26 — La tabla 4B tenía los elementos al doble de ancho (bug mío, no del solver)
+
+Al contrastar D25 con mi verificación independiente aparecieron dos discrepancias: λ/2 daba 10.71 mm
+contra 9.16 mm, y pitch = λ 23.4 mm contra 10.96 mm. El diagnóstico, en orden, porque el orden es la
+lección:
+
+1. **Cuadratura**: `quad_order` 16 → 128 y mi densidad 601 → 4801 puntos no movieron *nada* en
+   ninguno de los dos. Descartada la integración.
+2. **Un solo elemento**, mismo punto: `aperture.pressure()` y Gauss-200 coincidían a `1.000000` de
+   cociente y `0.00°` de fase. Kernel, normalización y ancho del elemento, correctos.
+3. **Mi trapecio** parametrizaba `y = y_c + width·sin(t)` en vez de `y_c + (width/2)·sin(t)`: cada
+   elemento de 7.5 mm se integraba como uno de 15 mm, solapado con los vecinos. De ahí la amplitud
+   2.43× y los lóbulos más anchos.
+
+Corregido, mi trapecio da `1.045312e6` contra `1.045309e6` del paquete, y λ/2 = *9.157 mm* contra
+*9.16*. **La tabla de 4B venía del trapecio, así que estaba mal**; se reemplazó por las cifras del
+estudio y el criterio de aceptación cambia: `pitch ≤ λ/4` para el 2 %, no λ/8.
+
+**Lo que esto cierra**: el estudio había detectado una incoherencia interna en la tabla vieja (λ/2
+con corr 0.998 *y* +27 % de FWHM a la vez). Era un síntoma del bug, no de la métrica: con +6.1 % y
+0.9977 la tabla es consistente.
+
+**Lo que no cubre**: sigue siendo 2D. Un arreglo hemisférico real no es un corte lineal con la misma
+ley de fase; esto vale como cota de comparación, no como predicción de un dispositivo 3D.
+
 
 
 
