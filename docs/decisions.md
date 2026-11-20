@@ -676,9 +676,34 @@ defecto). Eso es lo que la UI ahora deja ver y avisa en el panel.
 graduada es cara). A 120×120 son ~3 s, así que el modelo libre no baja a 80×80 durante el arrastre de
 asas: el jalón se siente más lento con este modelo y está documentado.
 
+**Verificación del módulo** (`tests/test_bem_field.py`, 31 tests):
+
+| criterio | medido |
+|---|---|
+| panel de 1e-4·λ contra el cilindro pulsante exacto | **2.155e-3** relativo (fuente lineal: 2.151e-3) |
+| residuo de `∇²p + k²p = 0` a h = λ/40 | **1.9e-3 … 2.7e-3** |
+| decaimiento `|p|·√r` entre 0.3 y 3 m | dispersión **8.64e-7** |
+| reciprocidad (3 pares) | **1.2e-16** |
+| contraste con el modelo con baffle en el foco | **ΔdB = 0.0000**, desfase π |
+| 19 entradas inválidas | `ValueError` con mensaje; salida `complex128` finita siempre |
+
+**Dos correcciones de convención que salieron de acá**:
+
+1. La fórmula que escribí en el enunciado de la tarea, `p = −ρc·v·H₀(kr)/H₀′(ka)`, **tenía un −i de
+   menos**. La correcta, derivada de `u = ∇p/(i·ω·ρ)`, es `p = i·ρ·c·v·H₀(kr)/H₀′(ka)`, y es la que
+   verifica el test contra el cilindro. El error era mío, en el pedido, no del módulo.
+2. `aperture.py` y `dashboard/field.py` tienen un **−1 global** frente a `u = ∇p/(i·ω·ρ)`: implican
+   `p = −ρc·v` para un pistón infinito con baffle. Es un cambio de fase benigno —todas las métricas
+   del repo son de módulo— pero obliga a comparar módulos cuando se cruza con `bem_field`. Queda
+   anotado y **sin arreglar**: cambiarlo rompería las comparaciones bit a bit con los números ya
+   publicados, y no cambia ninguna conclusión.
+
 **Lo que esto NO es**: no es un BEM de contorno cerrado resolviendo un sistema. Para contrastar contra
 un obstáculo real (cápsula ótica) haría falta usar `bem/helmholtz2d.py` con el campo incidente de las
-aperturas: eso queda como el siguiente paso natural, y es otra cosa que la capa simple de acá.
+aperturas: eso queda como el siguiente paso natural, y es otra cosa que la capa simple de acá. El
+docstring del módulo lo dice explícitamente y `equation` sólo acepta `single_layer`: pedir
+`burton_miller` o `chief` levanta `ValueError` explicando que regularizan resonancias interiores de
+cuerpos cerrados y acá `[p] = 0` por simetría.
 
 ---
 
@@ -723,11 +748,20 @@ documenta el tramo.
 (*5.08×*), con membrana 0.1813 → 0.1169 (*1.55×*). La membrana reduce la dependencia del espesor casi
 a la mitad también en esa métrica.
 
-**Criterios 3 y 4 — límites y energía**: `Z_m → ∞` (rígida) reproduce la condición rígida impuesta
-directamente y `Z_m → 0` (libre) la de presión nula, ambos dentro del 1 %; el balance
-`P_inc = P_refl + P_trans + P_abs` cierra dentro del 1 % y con `Re(Z) = 0` la absorción es exactamente
-0 (se rechaza `Re(Z) ≤ 0` en vez de devolver un cero silencioso, D22). A 90° (perpendicular a la
-incidencia) absorbe más que a 30°: la orientación no es cosmética.
+**Criterios 3 y 4 — límites y energía**, con los números finos: `Z = 10⁶·ρc` contra el rígido impuesto
+da Δ`t_interior` = *−1e-4 %* y `max|Δp|/max|p|` = *2e-4 %*; `Z = 10⁻⁶·ρc` contra `p = 0`, lo mismo; la
+convergencia con el factor de impedancia es monótona (2.0 %, 0.02 %, 2e-4 %). El balance cierra al
+*0.46 %* con la membrana (`−P_total(R_out)` = 0.7281 contra `P_memb` = 0.7327), 0.39 % con Z/2, 0.47 %
+con 2Z y 0.11 % en el caso rígido con `P_abs = 0`. Con derivada radial de 2º orden el balance daba
+1.97 %: por eso el flujo se mide con 5 anillos. La membrana absorbe *P_memb/P_inc = 0.733*. A 90°
+(perpendicular a la incidencia) absorbe más que a 30°: la orientación no es cosmética. Se rechaza
+`Re(Z) ≤ 0` en vez de devolver un cero silencioso (D22).
+
+**Sensibilidad a las propiedades de la membrana** (que son VERIFY, pero conviene saber cuánto pesan):
+a 100 kHz la reactancia total es el *0.91 %* de `R`, así que el comportamiento lo fija la resistencia;
+multiplicar la masa por 10 mueve `t_interior` un *1.75 %* y multiplicar la rigidez por 10, un *0.02 %*.
+Conclusión: mientras `|X| ≪ R`, el resultado no depende del ballpark de masa y rigidez —que es
+justamente lo que no tenemos medido—, y eso es lo que hace que el criterio 1 sea defendible.
 
 **Lo que sigue siendo VERIFY**: todas las propiedades de la membrana. `BASILAR_MEMBRANE_BALLPARK` usa
 m = 0.022 kg/m² (1100 kg/m³ × 20 µm), R = ρ_f·c_f y k = 1e8 Pa/m, cada uno con su rango publicado y su
