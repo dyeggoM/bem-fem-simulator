@@ -1,0 +1,50 @@
+# Catálogo de transductores.
+#
+# Cada bloque [transducers.<id>] describe UN equipo. El id es libre (sin espacios ni puntos) y es
+# lo que se usa para pedirlo desde el código.
+#
+# Campos OBLIGATORIOS
+#   name           = nombre legible
+#   frequency_hz   = frecuencia central [Hz]
+#   n_elements     = cantidad de elementos (1 = transductor monolítico)
+#   pitch_m        = paso entre centros de elemento [m] (= ancho de cada elemento, contiguos)
+#   source         = de dónde salieron los números (datasheet, medición, paper). NO se acepta vacío
+#
+# Campos OPCIONALES
+#   element_width_m  = ancho de elemento si difiere del pitch (hoy el modelo exige sin kerf:
+#                      si difiere, el importador tira error en vez de inventar la geometría)
+#   focus_distance_m = distancia focal geométrica [m]; si se omite, el transductor es plano
+#   amplitude        = amplitud relativa (por defecto 1.0)
+#   verified         = true sólo si los números están contrastados contra el datasheet
+#   notes            = texto libre
+#
+# Regla del proyecto: lo que no esté verificado entra con verified = false y NO se usa en una
+# validación como si fuera dato medido.
+
+# ---------------------------------------------------------------------------
+# Configuración de referencia (NO es un producto)
+# Sale de nuestro propio estudio de Fase 4B: 32 elementos de λ/8 a 100 kHz en agua, ancho total
+# 60 mm, foco a 40 mm. Sirve para ejercitar el importador y como caso de comparación.
+# ---------------------------------------------------------------------------
+[transducers.referencia_lambda8_100k]
+name = "Referencia λ/8, 100 kHz (sintética)"
+frequency_hz = 100000.0
+n_elements = 32
+pitch_m = 0.001875
+focus_distance_m = 0.040
+source = "sintético: parámetros del estudio de Fase 4B de este repo (λ/8 a 100 kHz, D=60 mm, F=40 mm); no es un producto"
+verified = false
+notes = "Sirve de baseline: es el pitch que empata con una apertura continua dentro de 1.5 % en FWHM."
+
+# ---------------------------------------------------------------------------
+# PLANTILLA — copiar, descomentar y completar con el datasheet real
+# ---------------------------------------------------------------------------
+# [transducers.mi_transductor]
+# name = "Marca Modelo"
+# frequency_hz = 40e3
+# n_elements = 1
+# pitch_m = 25e-3
+# focus_distance_m = 60e-3
+# source = "datasheet Marca Modelo rev. X, tabla de especificaciones"
+# verified = true
+# notes = ""
