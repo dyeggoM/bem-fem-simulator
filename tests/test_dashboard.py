@@ -17,7 +17,7 @@ import pytest
 
 from ultrasound_sim import aperture, arrays, materials
 from ultrasound_sim.dashboard import field as campo
-from ultrasound_sim.dashboard.server import build_server, calcular
+from ultrasound_sim.dashboard.server import ESTATICOS, build_server, calcular
 
 W = materials.WATER
 
@@ -199,3 +199,47 @@ def test_api_field_por_get_y_errores(servidor):
 def test_paquete_importable_como_modulo():
     import ultrasound_sim.dashboard.__main__ as entrada
     assert callable(entrada.main)
+
+
+def test_la_pagina_expone_arrastre_y_configuracion():
+    """Contrato de la UI: el overlay de arrastre y los botones de guardar/cargar tienen que estar.
+
+    No es un test de comportamiento (eso se verifica en un navegador real), sino de que las piezas
+    que sostienen el arrastre y la persistencia no desaparezcan sin que nadie se entere.
+    """
+    html = (ESTATICOS / "index.html").read_text(encoding="utf-8")
+    for pieza in ('id="arrastre"', 'id="btnGuardar"', 'id="btnCargar"', 'id="archivo"',
+                  'id="srcBody"', 'data-modo="manual"'):
+        assert pieza in html, f"falta {pieza} en index.html"
+
+    js = (ESTATICOS / "app.js").read_text(encoding="utf-8")
+    for pieza in ("function iniciarArrastre", "function moverArrastre", "function finArrastre",
+                  "function instantanea", "function aplicar", "ultrasound-sim/config",
+                  "localStorage"):
+        assert pieza in js, f"falta {pieza} en app.js"
+
+
+def test_la_configuracion_que_escribe_el_cliente_es_la_que_el_servidor_entiende(servidor):
+    """El JSON de `instantanea()` del cliente, aplicado como pedido al servidor, tiene que correr.
+
+    Se replica el formato en Python (el cliente no se puede importar desde acá) y se manda tal cual
+    al endpoint: así un cambio de nombres de campo en el JS rompe este test.
+    """
+    config = {
+        "formato": "ultrasound-sim/config", "version": 1, "material": "agua",
+        "frequency_khz": 300, "modo": "array", "n_elements": 24, "aperture_mm": 40,
+        "focus_x_mm": 80, "focus_y_mm": 2, "grid": 60, "sources": None,
+    }
+    pedido = json.dumps({
+        "material": config["material"], "frequency_khz": config["frequency_khz"],
+        "n_elements": config["n_elements"], "aperture_mm": config["aperture_mm"],
+        "focus_x_mm": config["focus_x_mm"], "focus_y_mm": config["focus_y_mm"],
+        "grid": {"nx": config["grid"], "ny": config["grid"]},
+    }).encode()
+    req = urllib.request.Request(servidor + "/api/field", data=pedido,
+                                 headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(req, timeout=60) as r:
+        datos = json.loads(r.read())
+    assert datos["meta"]["n_sources"] == 24
+    assert datos["meta"]["frequency_khz"] == 300.0
+    assert len(datos["x_mm"]) == 60

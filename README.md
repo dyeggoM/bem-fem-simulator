@@ -62,7 +62,10 @@ docs/       plan.md (fases y criterios) · decisions.md (ADR: convenciones y lo 
 
 Sliders de frecuencia, cantidad de elementos, apertura y foco; mapa de intensidad con los cortes
 axial y lateral; y un editor de fuentes donde cada elemento tiene posición, ancho, amplitud y fase.
-El motor es vectorizado (1–2 s por mapa de 120×120) y coincide con `aperture.pressure` a `1e-15`.
+Las fuentes se **arrastran** con el mouse sobre el mapa (doble clic agrega una en esa altura), y la
+configuración se **descarga/carga** como JSON o se autoguarda en el navegador — recargar no pierde el
+trabajo. El motor es vectorizado (1–2 s por mapa de 120×120, 0.4 s durante el arrastre) y coincide con
+`aperture.pressure` a `1e-15`.
 
 Dos cosas que el dashboard dice en voz alta en vez de esconder: cuando el pico real no coincide con
 el foco pedido (corrimiento no paraxial, D13) y cuándo el foco pedido está más allá del campo cercano

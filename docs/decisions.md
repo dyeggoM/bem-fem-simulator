@@ -619,9 +619,32 @@ de color se come ~65 px, el segundo paso mide el `px/mm` efectivo y corrige.
 fase contra `arrays.LinearArray.focused`, pico/grataje/FWHM contra lo teórico (`0.886·λ·f/#` → 6.73 mm
 contra 6.65 mm), y el servidor real en un puerto efímero por HTTP (assets, POST, GET, 400 y 404).
 
-**Deuda declarada**: no hay botón de "borrar" simetría ni de guardar una configuración; el rango de
-frecuencia no está limitado por el techo de P1 (D8), así que se puede pedir 1 MHz en 2D y el resultado
-es correcto pero caro de interpretar.
+**Arrastrar fuentes y guardar configuraciones (segunda pasada del dashboard)**: las fuentes viven
+sobre el baffle (`x = 0`), así que arrastrarlas es 1-D: el asa mueve `y`, no hay grado de libertad en
+`x`. El overlay de asas es propio (no de Plotly) y se *reposiciona* en cada render en vez de recrearse —
+si se recreara, el `pointer capture` moriría a mitad del jalón y el arrastre se cortaría en el primer
+recálculo. `setPointerCapture` va en un `try` (con pointers sintéticos tira) y los listeners de
+`pointermove`/`pointerup` viven en `window`, así el asa sigue al puntero aunque se salga del cuadrado.
+Durante el jalón la malla baja a 80×80 (~0.4 s) y al soltar vuelve a la elegida: el campo sigue al
+dedo sin pagar 2 s por paso.
+
+Configuración: `instantanea()` produce
+`{formato: 'ultrasound-sim/config', version, material, frequency_khz, modo, n_elements, aperture_mm,
+focus_x_mm, focus_y_mm, grid, sources}`; se descarga como JSON, se carga por `<input type=file>` y se
+autoguarda en `localStorage` cada 3 s, así recargar la página no pierde el trabajo. `aplicar()` valida
+el campo `formato` y avisa en la UI si el archivo no es del simulador. El test
+`test_la_configuracion_que_escribe_el_cliente_es_la_que_el_servidor_entiende` manda ese mismo formato
+al endpoint, de modo que renombrar un campo en el JS rompe el test.
+
+Verificado en un navegador real, no sólo con tests: arrastrar el asa 0 cuarenta píxeles llevó la fuente
+de −29.06 a −37.34 mm, actualizó la tabla y recalculó el campo (pico 75.8 → 71.1 mm, FWHM 7.06 →
+6.93 mm); el doble clic agregó la fuente 33 en la altura del clic; cargar un JSON por el input cambió
+material, frecuencia, elementos y malla, y recalculó; y tras recargar la página la configuración
+seguía ahí.
+
+**Deuda declarada**: no hay todavía "borrar todas" ni deshacer un arrastre; el rango de frecuencia no
+está limitado por el techo de P1 (D8), así que se puede pedir 1 MHz en 2D y el resultado es correcto
+pero caro de interpretar.
 
 
 

@@ -35,6 +35,9 @@ const CONFIG = { displayModeBar: true, displaylogo: false, responsive: true,
 
 let temporizador = null;
 let control = null;
+let arrastre = null;        // {i, y0} mientras se arrastra un asa
+const asas = [];            // elementos .asa, uno por fuente (se reposicionan, no se recrean)
+const BORDE = 1;            // borde de 1 px del div de Plotly: las coordenadas internas no lo cuentan
 
 function pedir() {
   clearTimeout(temporizador);
@@ -47,8 +50,10 @@ async function enviar() {
   const cuerpo = {
     material: S.material,
     frequency_khz: S.freq,
+    // mientras se arrastra un asa se baja la malla: 80×80 tarda ~0.4 s y el jalón se sigue
     grid: { x0: 0.004, x1: Math.max(0.06, S.fx / 1000 * 1.6), y0: -Math.max(0.02, S.d / 1000 * 1.1),
-            y1: Math.max(0.02, S.d / 1000 * 1.1), nx: S.grid, ny: S.grid },
+            y1: Math.max(0.02, S.d / 1000 * 1.1), nx: arrastre ? 80 : S.grid,
+            ny: arrastre ? 80 : S.grid },
   };
   if (S.modo === 'manual' && S.fuentes) {
     cuerpo.sources = S.fuentes;
@@ -175,6 +180,7 @@ function pintar(r) {
       const exacto = gleich(ancho, alto);
       Plotly.relayout('mapa', { xaxis: { range: exacto.x }, yaxis: { range: exacto.y } });
     }
+    pintarAsas();
   });
 
   // p2_db es [fila=y][columna=x] (igual que en Python): axial fija y y varía x; lateral fija x.
@@ -234,8 +240,8 @@ function filaFuente(src, i) {
   const campos = [
     { k: 'y_mm', v: (src.y * 1e3).toFixed(2), paso: '0.1' },
     { k: 'width_mm', v: (src.width * 1e3).toFixed(2), paso: '0.1' },
-    { k: 'amp', v: String(src.amp), paso: '0.05' },
-    { k: 'phase', v: String(Number(src.phase.toFixed(3))), paso: '0.1' },
+    { k: 'amp', v: src.amp.toFixed(2), paso: '0.05' },
+    { k: 'phase', v: src.phase.toFixed(1), paso: '0.1' },
   ];
   for (const c of campos) {
     const td = document.createElement('td');
@@ -290,6 +296,7 @@ function cambiarModo(modo) {
   $('ctrlArray').hidden = modo !== 'array';
   $('ctrlManual').hidden = modo !== 'manual';
   if (modo === 'manual' && !S.fuentes) generarDesdeArreglo();
+  pintarFuentes();
   pedir();
 }
 
@@ -319,5 +326,211 @@ $('btnAdd').addEventListener('click', () => {
   pintarFuentes(); pedir();
 });
 
-sincronizarEtiquetas();
-enviar();
+
+/* ---------------------------------------------------------------- asas arrastrables
+ * Las fuentes viven sobre el baffle (x = 0), así que arrastrarlas es 1-D: sólo cambia su `y`.
+ * El overlay es propio (no Plotly), y las asas se *reposicionan* en cada render en vez de
+ * recrearse: si se recrearan, el pointer capture del arrastre se perdería a mitad del jalón.
+ */
+function pxDeY(l, y) {
+  const a = l.yaxis;
+  return BORDE + a._offset + (a.range[1] - y) / (a.range[1] - a.range[0]) * a._length;
+}
+function pxDeX(l, x) {
+  const a = l.xaxis;
+  return BORDE + a._offset + (x - a.range[0]) / (a.range[1] - a.range[0]) * a._length;
+}
+function yDePx(l, py) {
+  const a = l.yaxis;
+  const f = (py - BORDE - a._offset) / a._length;          // 0 = arriba
+  return a.range[1] + (a.range[0] - a.range[1]) * f;
+}
+
+function pintarAsas() {
+  const capa = $('arrastre');
+  const l = $('mapa')._fullLayout;
+  if (!l || !l.xaxis || !l.yaxis) return;
+  const fuentes = S.modo === 'manual' && S.fuentes ? S.fuentes : null;
+  const n = fuentes ? fuentes.length : 0;
+
+  while (asas.length > n) capa.removeChild(asas.pop());
+  for (let i = 0; i < n; i += 1) {
+    let el = asas[i];
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'asa';
+      el.dataset.i = String(i);
+      el.addEventListener('pointerdown', iniciarArrastre);
+      capa.appendChild(el);
+      asas[i] = el;
+    }
+    const x = pxDeX(l, 0);
+    const y = pxDeY(l, fuentes[i].y * 1e3);
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    el.title = `fuente ${i + 1}: y = ${(fuentes[i].y * 1e3).toFixed(2)} mm`;
+  }
+}
+
+function iniciarArrastre(ev) {
+  if (S.modo !== 'manual' || !S.fuentes) {
+    $('estado').textContent = 'pasá a la pestaña "fuentes" para arrastrarlas';
+    return;
+  }
+  ev.preventDefault();
+  const i = parseInt(ev.currentTarget.dataset.i, 10);
+  arrastre = { i, y0: S.fuentes[i].y };
+  ev.currentTarget.classList.add('activa');
+  // La captura es opcional: con pointers sintéticos (o navegadores viejos) tira y no hay que
+  // romper el jalón por eso. Los listeners van en window para que el asa siga al puntero aunque
+  // se salga del cuadrado.
+  try { ev.currentTarget.setPointerCapture(ev.pointerId); } catch (e) { /* sin captura */ }
+  window.addEventListener('pointermove', moverArrastre);
+  window.addEventListener('pointerup', finArrastre);
+  window.addEventListener('pointercancel', finArrastre);
+}
+
+function moverArrastre(ev) {
+  if (!arrastre) return;
+  const l = $('mapa')._fullLayout;
+  if (!l || !l.yaxis) return;
+  const caja = $('mapa').getBoundingClientRect();
+  const py = ev.clientY - caja.top;
+  let ymm = yDePx(l, py);
+  const radio = (l.yaxis.range[1] - l.yaxis.range[0]) / 2;
+  ymm = Math.max(-radio, Math.min(radio, ymm));          // no se sale del encuadre
+  S.fuentes[arrastre.i].y = ymm / 1e3;
+  const el = asas[arrastre.i];
+  if (el) {
+    el.style.top = `${pxDeY(l, ymm)}px`;
+    el.title = `fuente ${arrastre.i + 1}: y = ${ymm.toFixed(2)} mm`;
+  }
+  pedir();                                               // recomputa con malla reducida
+}
+
+function finArrastre() {
+  if (!arrastre) return;
+  const el = asas[arrastre.i];
+  if (el) el.classList.remove('activa');
+  window.removeEventListener('pointermove', moverArrastre);
+  window.removeEventListener('pointerup', finArrastre);
+  window.removeEventListener('pointercancel', finArrastre);
+  arrastre = null;
+  pintarFuentes();
+  enviar();                                              // vuelve a la malla elegida
+}
+
+/* ---------------------------------------------------------------- agregar con doble clic */
+$('mapa').addEventListener('dblclick', (ev) => {
+  const l = $('mapa')._fullLayout;
+  if (!l || !l.yaxis) return;
+  if (S.modo !== 'manual') cambiarModo('manual');
+  const caja = $('mapa').getBoundingClientRect();
+  const ymm = yDePx(l, ev.clientY - caja.top);
+  const ancho = S.fuentes && S.fuentes.length ? S.fuentes[S.fuentes.length - 1].width : (S.d / S.n) / 1e3;
+  S.fuentes.push({ y: ymm / 1e3, width: ancho, amp: 1, phase: 0 });
+  pintarFuentes();
+  pedir();
+});
+
+/* ---------------------------------------------------------------- guardar / cargar */
+function instantanea() {
+  return {
+    formato: 'ultrasound-sim/config',
+    version: 1,
+    material: S.material,
+    frequency_khz: S.freq,
+    modo: S.modo,
+    n_elements: S.n,
+    aperture_mm: S.d,
+    focus_x_mm: S.fx,
+    focus_y_mm: S.fy,
+    grid: S.grid,
+    sources: S.modo === 'manual' && S.fuentes ? S.fuentes : null,
+  };
+}
+
+function aplicar(cfg) {
+  if (!cfg || cfg.formato !== 'ultrasound-sim/config') {
+    throw new Error('no es un archivo de configuración del simulador');
+  }
+  S.material = cfg.material || S.material;
+  S.freq = Number(cfg.frequency_khz) || S.freq;
+  S.n = Number(cfg.n_elements) || S.n;
+  S.d = Number(cfg.aperture_mm) || S.d;
+  S.fx = Number(cfg.focus_x_mm) || S.fx;
+  S.fy = Number(cfg.focus_y_mm) || 0;
+  S.grid = Number(cfg.grid) || S.grid;
+  S.fuentes = Array.isArray(cfg.sources) && cfg.sources.length
+    ? cfg.sources.map((s) => ({ y: Number(s.y), width: Number(s.width),
+                                amp: Number(s.amp ?? 1), phase: Number(s.phase ?? 0) }))
+    : null;
+  $('mat').value = S.material;
+  $('freq').value = S.freq;
+  $('nEl').value = S.n;
+  $('ap').value = S.d;
+  $('fx').value = S.fx;
+  $('fy').value = S.fy;
+  $('res').value = String(S.grid);
+  sincronizarEtiquetas();
+  if (cfg.modo === 'manual') {
+    // una config manual sin fuentes explícitas arranca del arreglo: es lo que espera el que
+    // guardó la vista en la pestaña "fuentes" sin haber tocado nada
+    if (!S.fuentes) generarDesdeArreglo();
+    cambiarModo('manual');
+  } else {
+    cambiarModo('array');
+  }
+}
+
+$('btnGuardar').addEventListener('click', () => {
+  const texto = JSON.stringify(instantanea(), null, 2);
+  const url = URL.createObjectURL(new Blob([texto], { type: 'application/json' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `sim_${S.freq}kHz_${S.n}el.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  $('estado').textContent = 'configuración descargada';
+});
+
+$('btnCargar').addEventListener('click', () => $('archivo').click());
+$('archivo').addEventListener('change', (ev) => {
+  const f = ev.target.files && ev.target.files[0];
+  if (!f) return;
+  const lector = new FileReader();
+  lector.onload = () => {
+    try {
+      aplicar(JSON.parse(lector.result));
+      $('estado').textContent = `configuración cargada: ${f.name}`;
+    } catch (e) {
+      $('estado').className = 'pie error';
+      $('estado').textContent = e.message;
+    }
+  };
+  lector.readAsText(f);
+  ev.target.value = '';                                  // permite recargar el mismo archivo
+});
+
+/* se recuerda la última configuración: recargar la página no debería perder el trabajo */
+const CLAVE_LOCAL = 'ultrasound-sim/config';
+function recordar() {
+  try {
+    localStorage.setItem(CLAVE_LOCAL, JSON.stringify(instantanea()));
+  } catch (e) { /* modo privado o cuota llena: no es un error del simulador */ }
+}
+function olvidar() {
+  try { return JSON.parse(localStorage.getItem(CLAVE_LOCAL) || 'null'); } catch (e) { return null; }
+}
+
+window.addEventListener('resize', () => { clearTimeout(window.__tAsas); window.__tAsas = setTimeout(pintarAsas, 150); });
+
+/* ---------------------------------------------------------------- arranque */
+const previa = olvidar();
+if (previa) {
+  try { aplicar(previa); } catch (e) { /* configuración vieja o corrupta: se ignora */ }
+} else {
+  sincronizarEtiquetas();
+  enviar();
+}
+setInterval(recordar, 3000);

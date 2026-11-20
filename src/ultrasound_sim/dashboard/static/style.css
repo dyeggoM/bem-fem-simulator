@@ -47,7 +47,10 @@ select, input[type=number] {
 .btn.mini { width:auto; flex:1; margin-top:0; }
 .fila { display:flex; gap:6px; margin-top:8px; }
 
-table.fuentes { width:100%; border-collapse:collapse; font-size:12px; }
+table.fuentes { width:100%; border-collapse:collapse; font-size:12px; table-layout:fixed; }
+table.fuentes col.c-y { width:26%; } table.fuentes col.c-ancho { width:24%; }
+table.fuentes col.c-amp { width:17%; } table.fuentes col.c-fase { width:25%; }
+table.fuentes col.c-del { width:8%; }
 table.fuentes th {
   text-align:left; color:var(--dim); font-weight:600; font-size:10.5px;
   text-transform:uppercase; letter-spacing:.4px; padding:2px 3px;
@@ -77,8 +80,16 @@ table.fuentes button:hover { color:var(--no); }
 
 /* ---------- vista ---------- */
 .vista { flex:1; min-width:0; display:flex; flex-direction:column; padding:12px; gap:12px; }
-.mapa { flex:1 1 auto; min-height:160px; background:var(--panel); border:1px solid var(--linea);
-        border-radius:9px; }
+.mapa-wrap { position:relative; flex:1 1 auto; min-height:160px; display:flex; }
+.mapa-wrap > .mapa { flex:1 1 auto; }
+.mapa { background:var(--panel); border:1px solid var(--linea); border-radius:9px; }
+/* capa de asas arrastrables por encima del canvas de Plotly; no captura clics salvo en las asas */
+.arrastre { position:absolute; inset:0; pointer-events:none; }
+.arrastre .asa { position:absolute; width:12px; height:12px; margin:-6px 0 0 -6px; border-radius:3px;
+  background:var(--acento); border:1px solid #0d1117; pointer-events:auto; cursor:ns-resize;
+  box-shadow:0 0 0 1px rgba(88,166,255,.45); touch-action:none; }
+.arrastre .asa:hover, .arrastre .asa.activa { background:#8cc8ff; transform:scale(1.3); }
+.arrastre .asa::after { content:''; position:absolute; inset:-6px; }
 .cortes { display:flex; gap:12px; height:210px; flex:0 0 210px; }
 .corte { flex:1; min-width:0; background:var(--panel); border:1px solid var(--linea);
          border-radius:9px; }
@@ -88,7 +99,7 @@ table.fuentes button:hover { color:var(--no); }
   .panel { width:auto; flex:none; border-right:0; border-bottom:1px solid var(--linea); }
   .vista { height:auto; }
   /* sin esto el mapa hereda flex:1 dentro de un contenedor de alto automático y colapsa a 0 px */
-  .mapa { flex:none; height:62vh; min-height:240px; }
+  .mapa-wrap { flex:none; height:62vh; min-height:240px; }
   .cortes { flex-direction:column; height:auto; flex:none; }
   .corte { height:190px; flex:none; }
 }

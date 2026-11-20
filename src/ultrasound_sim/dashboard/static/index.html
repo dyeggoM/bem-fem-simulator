@@ -58,6 +58,7 @@
       <p class="hint">Cada fila es una apertura sobre el baffle. Posición y ancho en mm,
       fase en radianes (0 = todas en fase).</p>
       <table class="fuentes">
+        <colgroup><col class="c-y"><col class="c-ancho"><col class="c-amp"><col class="c-fase"><col class="c-del"></colgroup>
         <thead><tr><th>y</th><th>ancho</th><th>amp</th><th>fase</th><th></th></tr></thead>
         <tbody id="srcBody"></tbody>
       </table>
@@ -65,6 +66,14 @@
         <button class="btn mini" id="btnAdd">+ fuente</button>
         <button class="btn mini" id="btnArray">← desde arreglo</button>
       </div>
+      <p class="hint">Arrastrá las asas azules sobre el mapa para mover una fuente;
+      doble clic sobre el mapa agrega una en esa altura.</p>
+    </section>
+
+    <section class="fila">
+      <button class="btn mini" id="btnGuardar">guardar</button>
+      <button class="btn mini" id="btnCargar">cargar</button>
+      <input type="file" id="archivo" accept=".json,application/json" hidden>
     </section>
 
     <section>
@@ -90,7 +99,10 @@
   </aside>
 
   <main class="vista">
-    <div id="mapa" class="mapa"></div>
+    <div class="mapa-wrap">
+      <div id="mapa" class="mapa"></div>
+      <div id="arrastre" class="arrastre"></div>
+    </div>
     <div class="cortes">
       <div id="axial" class="corte"></div>
       <div id="lateral" class="corte"></div>
