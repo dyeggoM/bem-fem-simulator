@@ -276,6 +276,25 @@ class Handler(BaseHTTPRequestHandler):
                                   "c_s 8.22 %, ρ 1.03 %, Z_r 0.28 %",
                 }],
             })
+        elif partes.path == "/api/transductores":
+            from .. import transducers
+            from .scene import MATERIALES
+            consulta = {k: v[0] for k, v in parse_qs(partes.query).items()}
+            nombre = consulta.get("material", "agua")
+            if nombre not in MATERIALES:
+                self._error(f"material desconocido: {nombre!r}")
+                return
+            material = MATERIALES[nombre]
+            try:
+                catalogo = transducers.load_catalog()
+            except transducers.CatalogError as exc:
+                self._error(f"no se pudo leer el catálogo: {exc}")
+                return
+            self._json({
+                "ok": True,
+                "transductores": transducers.catalog_summary(catalogo, material),
+                "ruta": str(transducers.default_catalog_path()),
+            })
         elif partes.path == "/api/field":
             consulta = {k: v[0] for k, v in parse_qs(partes.query).items()}
             for clave in ("nx", "ny", "n_elements"):
@@ -305,7 +324,7 @@ class Handler(BaseHTTPRequestHandler):
                         "/api/jobs/sensibilidad", "/api/jobs/q_coclea",
                         "/api/jobs/barrido_escena", "/api/jobs/esfera",
                         "/api/jobs/esfera_barrido", "/api/jobs/barrido_apertura",
-                        "/api/jobs/cadena",
+                        "/api/jobs/cadena", "/api/arreglo/cargar", "/api/arreglo/exportar",
                         "/api/volume3d/cost", "/api/volume3d/solve"):
             self._error("no encontrado", HTTPStatus.NOT_FOUND)
             return
@@ -354,6 +373,34 @@ class Handler(BaseHTTPRequestHandler):
                     _esfera_barrido_job, cuerpo,
                 )
                 respuesta = {"ok": True, "job": trabajo.a_dict()}
+            elif ruta in ("/api/arreglo/cargar", "/api/arreglo/exportar"):
+                from .. import arreglos
+                try:
+                    if ruta.endswith("cargar"):
+                        fuentes = arreglos.cargar_arreglo(
+                            str(cuerpo.get("texto", "")), cuerpo.get("formato")
+                        )
+                        respuesta = {
+                            "ok": True,
+                            "fuentes": [
+                                {"y_mm": f["y"] * 1e3, "ancho_mm": f["width"] * 1e3,
+                                 "amp": f["amp"], "fase_rad": f["phase"]}
+                                for f in fuentes
+                            ],
+                            "n": len(fuentes),
+                            "apertura_mm": (max(f["y"] for f in fuentes)
+                                            - min(f["y"] for f in fuentes)
+                                            + 0.5 * (fuentes[0]["width"] + fuentes[-1]["width"])) * 1e3,
+                        }
+                    else:
+                        crudas = cuerpo.get("fuentes") or []
+                        fuentes = [{"y": float(f["y_mm"]) * 1e-3, "width": float(f["ancho_mm"]) * 1e-3,
+                                    "amp": float(f["amp"]), "phase": float(f["fase_rad"])}
+                                   for f in crudas]
+                        respuesta = {"ok": True, "texto": arreglos.exportar_arreglo(fuentes),
+                                     "n": len(fuentes)}
+                except (arreglos.ErrorArreglo, KeyError, TypeError, ValueError) as exc:
+                    respuesta = {"ok": False, "error": str(exc)}
             elif ruta == "/api/jobs/cadena":
                 capas = cuerpo.get("capas") or []
                 resumen = " + ".join(

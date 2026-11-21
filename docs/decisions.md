@@ -2425,3 +2425,36 @@ corrida 10 mm t = 0.9690 (la onda pasa casi sin obstáculo por el eje).
 **Lo que esto cierra**: el control de posicionamiento de la estructura que pedía el objetivo, para
 estructuras de capas. Mover una **geometría STL** con la misma interacción es el paso que sigue y depende
 de tener el acople de STL multicapa (nodos no coincidentes), que es donde está el trabajo de fondo.
+
+## D59 — El arreglo de fuentes y el transductor entran desde archivo (U10)
+
+**Qué se agregó.** En el panel de la vista de campo:
+
+* **Transductor del catálogo** (`data/transducers.toml`, que existía desde hace tiempo y la UI no usaba):
+  al elegirlo aplica frecuencia, cantidad de elementos, apertura y foco, y **dice con qué está
+  simulando**: `100 kHz · 32 elementos · apertura 60 mm · paso 0.125 λ · f/0.67 · sin lóbulo de rejilla`.
+  El paso en λ se recalcula con el **medio elegido**, no con el agua: el mismo transductor da 0.125 λ en
+  agua y **0.054 λ en hueso**, y ese factor es justo el que decide si hay lóbulo de rejilla (D53).
+* **Cargar arreglo (CSV/JSON)** y **exportar**. El CSV lleva cabecera `y_mm,ancho_mm,amp,fase_rad`; las
+  unidades están en el nombre de la columna a propósito.
+
+**Lo que hace el servidor antes de aceptar un archivo** (`ultrasound_sim/arreglos.py`):
+
+1. Convierte de mm a metros **diciéndolo**, en vez de asumir metros (32 filas en metros serían 32 km).
+2. Rechaza elementos que se solapan: `|Δy| ≥ (ancho_i + ancho_j)/2`, nombrando **cuáles**.
+3. Rechaza `ancho ≤ 0` y `amp ≤ 0` (una amplitud negativa es una fase de π disfrazada).
+4. Si el archivo no pasa, **no se toca lo que está en pantalla**: el aviso sale en rojo con el motivo.
+
+**Medido en el navegador**: cargar un CSV de 5 elementos aplica `−7.50 | 3.75 | 1.00 | 0.0` en la primera
+fila y el contador pasa a «5 fuentes · apertura 18.8 mm». Cargar un archivo con dos elementos a 1 mm con
+anchos de 4 mm da `los elementos 1 y 2 se solapan: están a 1.000 mm y necesitan al menos 4.000 mm` y
+deja las 5 fuentes anteriores intactas. Exportar devuelve «exportadas 5 fuentes a CSV» y el archivo que
+se exporta se vuelve a cargar sin pérdida (ida y vuelta en el test).
+
+**Decisión sobre el nombre de las columnas**: el exportador escribe `y_mm,ancho_mm,amp,fase_rad` y el
+cargador acepta además `y, width, amp, phase` en inglés, porque no tiene sentido obligar a renombrar un
+archivo para volver a cargarlo.
+
+**Lo que falta de U10**: no hay todavía un botón para **editar el catálogo** desde la UI (se edita el TOML
+a mano, respetando que `source` no puede estar vacío), y el formato no lleva la geometría del transductor
+curvo: el modelo sigue siendo un arreglo lineal, que es su corte 2D.
