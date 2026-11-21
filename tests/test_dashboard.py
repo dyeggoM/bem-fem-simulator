@@ -291,6 +291,81 @@ def test_api_coclea_rechaza_parametros_fuera_de_rango(servidor):
         assert exc.value.code == 400
 
 
+# ------------------------------------------------------------------ escena FEM (U1)
+
+
+def _post(url: str, cuerpo: dict) -> dict:
+    datos = json.dumps(cuerpo).encode("utf-8")
+    req = urllib.request.Request(url, data=datos, headers={"content-type": "application/json"})
+    with urllib.request.urlopen(req, timeout=120) as r:
+        return json.loads(r.read())
+
+
+ESCENA_HTTP = {
+    "frecuencia_hz": 100.0e3,
+    "ppw": 12,
+    "alto_m": 20.0e-3,
+    "capas": [
+        {"material": "agua", "espesor_m": 20.0e-3},
+        {"material": "hueso", "espesor_m": 10.0e-3},
+        {"material": "agua", "espesor_m": 20.0e-3},
+    ],
+}
+
+
+def test_api_scene_cost_no_resuelve(servidor):
+    r = _post(servidor + "/api/scene/cost", ESCENA_HTTP)
+    assert r["ok"] is True
+    assert r["grilla"]["n_elementos"] > 0
+    assert r["estimado_solve_s"] > 0
+    assert "campo" not in r, "estimar no puede resolver"
+
+
+def test_api_scene_solve_devuelve_el_campo_y_las_metricas(servidor):
+    r = _post(servidor + "/api/scene/solve", ESCENA_HTTP)
+    assert r["ok"] is True
+    m = r["metricas"]
+    assert m["error_R_abs"] < 0.02
+    assert m["error_T_abs"] < 0.02
+    assert m["energia"] == pytest.approx(1.0, abs=0.02)
+    n_y = len(r["grilla"]["y_mm"])
+    n_x = len(r["grilla"]["x_mm"])
+    assert len(r["campo"]["db"]) == n_y
+    assert len(r["campo"]["db"][0]) == n_x
+
+
+def test_api_scene_solve_rechaza_incidencia_oblicua(servidor):
+    req = urllib.request.Request(
+        servidor + "/api/scene/solve",
+        data=json.dumps(dict(ESCENA_HTTP, angulo_deg=30.0)).encode("utf-8"),
+        headers={"content-type": "application/json"},
+    )
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        urllib.request.urlopen(req, timeout=60)
+    assert exc.value.code == 400
+    assert b"incidencia normal" in exc.value.read()
+
+
+def test_api_materials_expone_la_escena_y_sus_topes(servidor):
+    _estado, cuerpo = _get(servidor + "/api/materials")
+    datos = json.loads(cuerpo)
+    ids = {m["id"] for m in datos["scene_materials"]}
+    assert {"agua", "tejido", "hueso", "perilinfa", "endolinfa"} <= ids
+    assert datos["scene_limits"]["max_elementos"] > 0
+    assert "abc1" in datos["scene_limits"]["abc"]
+
+
+def test_la_pagina_expone_la_vista_de_escena():
+    html = (ESTATICOS / "index.html").read_text(encoding="utf-8")
+    for pieza in ('data-vista="escena"', 'id="vistaEscena"', 'id="capas"', 'id="btnEscena"',
+                  'id="mapaEscena"', 'id="escR"', 'id="escErrR"', 'escena.js'):
+        assert pieza in html, f"falta {pieza} en index.html"
+    js = (ESTATICOS / "escena.js").read_text(encoding="utf-8")
+    for pieza in ("function escResolver", "function escPintarCapas", "function escDibujar",
+                  "CRITERIO_AMPLITUD", "/api/scene/solve", "/api/scene/cost"):
+        assert pieza in js, f"falta {pieza} en escena.js"
+
+
 def test_la_pagina_expone_arrastre_y_configuracion():
     """Contrato de la UI: el overlay de arrastre y los botones de guardar/cargar tienen que estar.
 

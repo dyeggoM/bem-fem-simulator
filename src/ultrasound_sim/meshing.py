@@ -118,6 +118,38 @@ def rect_tri_mesh(
     return TriMesh(nodes=nodes, triangles=_ensure_ccw(nodes, tris))
 
 
+def grid_tri_mesh(xs, ys) -> TriMesh:
+    """Malla triangular de un reticulado ``xs × ys`` (coordenadas arbitrarias, no uniformes).
+
+    Sirve cuando las celdas no son todas iguales —por ejemplo un apilado de capas con distinto paso
+    por material—. La malla es **conforme por construcción**: los nodos de una capa son los mismos
+    del reticulado, así que la interfaz entre capas no necesita pegado posterior.
+    """
+    xs = np.asarray(xs, dtype=float).reshape(-1)
+    ys = np.asarray(ys, dtype=float).reshape(-1)
+    if xs.size < 2 or ys.size < 2:
+        raise ValueError("hacen falta al menos 2 coordenadas en cada eje")
+    if np.any(np.diff(xs) <= 0) or np.any(np.diff(ys) <= 0):
+        raise ValueError("las coordenadas tienen que ser estrictamente crecientes")
+
+    nx, ny = xs.size - 1, ys.size - 1
+    grid_x, grid_y = np.meshgrid(xs, ys, indexing="xy")
+    nodes = np.column_stack([grid_x.ravel(), grid_y.ravel()])
+
+    def nid(i: int, j: int) -> int:  # i: columna en x, j: fila en y
+        return j * (nx + 1) + i
+
+    triangles: list[tuple[int, int, int]] = []
+    for j in range(ny):
+        for i in range(nx):
+            a, b = nid(i, j), nid(i + 1, j)
+            c, d = nid(i + 1, j + 1), nid(i, j + 1)
+            triangles.append((a, b, c))
+            triangles.append((a, c, d))
+    tris = np.asarray(triangles, dtype=int)
+    return TriMesh(nodes=nodes, triangles=_ensure_ccw(nodes, tris))
+
+
 def polar_annulus_mesh(
     inner_radius: float, outer_radius: float, n_radial: int, n_theta: int
 ) -> TriMesh:

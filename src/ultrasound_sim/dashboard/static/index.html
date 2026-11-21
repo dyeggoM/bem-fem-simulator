@@ -16,6 +16,13 @@
       <p class="sub">modelo 2D · apertura sobre baffle rígido</p>
     </div>
 
+    <nav class="vistas">
+      <button class="vista-btn activo" data-vista="campo">campo</button>
+      <button class="vista-btn" data-vista="escena">escena FEM</button>
+    </nav>
+
+    <div id="vistaCampo">
+
     <section>
       <label>Material</label>
       <select id="mat">
@@ -145,6 +152,71 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
       <div class="chip"><span>cálculo</span><b id="mTime">—</b></div>
     </section>
 
+    </div><!-- /vistaCampo -->
+
+    <div id="vistaEscena" hidden>
+      <section>
+        <label>Capas <span class="mini">(eje de propagación: x)</span></label>
+        <div class="tabla-capas-head">
+          <span>material</span><span>espesor</span><span></span>
+        </div>
+        <div id="capas"></div>
+        <div class="fila-botones">
+          <button class="btn mini" id="btnCapaAdd">+ capa</button>
+          <span class="hint" id="capaAviso"></span>
+        </div>
+      </section>
+
+      <section>
+        <label>Frecuencia <b id="escFreqVal">100 kHz</b></label>
+        <input type="range" id="escFreq" min="20" max="1000" step="5" value="100">
+        <label>Elementos por longitud de onda <b id="escPpwVal">12</b></label>
+        <input type="range" id="escPpw" min="6" max="40" step="1" value="12">
+        <label>Alto del dominio <b id="escAltoVal">20 mm</b></label>
+        <input type="range" id="escAlto" min="5" max="60" step="1" value="20">
+        <label>Rango de color
+          <select id="escRango">
+            <option value="40" selected>40 dB</option>
+            <option value="20">20 dB</option>
+            <option value="10">10 dB</option>
+            <option value="lineal">lineal</option>
+          </select>
+        </label>
+        <p class="hint" id="escRangoHint">En incidencia normal con contraste chico el campo es casi
+        uniforme: bajá el rango para ver la onda estacionaria.</p>
+      </section>
+
+      <section>
+        <div class="chips">
+          <div class="chip"><span>nodos</span><b id="escNodos">—</b></div>
+          <div class="chip"><span>elementos</span><b id="escElems">—</b></div>
+          <div class="chip"><span>paso y</span><b id="escPaso">—</b></div>
+          <div class="chip"><span>estimado</span><b id="escEstimado">—</b></div>
+        </div>
+        <div class="fila-botones">
+          <button class="btn mini" id="btnEstimar">estimar</button>
+          <button class="btn" id="btnEscena">resolver FEM</button>
+        </div>
+      </section>
+
+      <section>
+        <label>Resultado</label>
+        <div class="chips">
+          <div class="chip"><span>R</span><b id="escR">—</b></div>
+          <div class="chip"><span>R analítico</span><b id="escRan">—</b></div>
+          <div class="chip"><span>error R</span><b id="escErrR">—</b></div>
+          <div class="chip"><span>T</span><b id="escT">—</b></div>
+          <div class="chip"><span>T analítico</span><b id="escTan">—</b></div>
+          <div class="chip"><span>error T</span><b id="escErrT">—</b></div>
+          <div class="chip"><span>energía</span><b id="escEnergia">—</b></div>
+          <div class="chip"><span>solve</span><b id="escTiempo">—</b></div>
+        </div>
+        <p class="hint" id="escSello"></p>
+      </section>
+
+      <p class="pie" id="escEstado">sin resolver</p>
+    </div><!-- /vistaEscena -->
+
     <p class="aviso" id="aviso" hidden></p>
     <p class="pie" id="estado">listo</p>
   </aside>
@@ -160,7 +232,18 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
     </div>
   </main>
 
+  <main class="vista" id="vistaEscenaMain" hidden>
+    <div class="mapa-wrap">
+      <div id="mapaEscena" class="mapa"></div>
+    </div>
+    <div class="cortes">
+      <div id="axialEscena" class="corte"></div>
+      <div id="lateralEscena" class="corte"></div>
+    </div>
+  </main>
+
 </div>
 <script src="/static/app.js"></script>
+<script src="/static/escena.js"></script>
 </body>
 </html>

@@ -963,3 +963,38 @@ solo conjunto de validaciones.
 **Costo asumido.** La UI no va a poder mostrar nada que la librería no sepa calcular, y eso incluye
 huecos conocidos: dispersión penetrable 3D (D32), elasticidad 3D y geometría de CT. Van a aparecer
 en la UI como *no disponible*, no como un resultado aproximado.
+
+## D34 — U1: la escena 2D, y dos cosas que sólo se ven en el navegador
+
+**Qué se entregó.** Una pestaña "escena FEM" donde se arma un apilado de capas (material + espesor,
+del registro de 5 materiales con los dos fluidos cocleares), se estima el costo de malla **antes** de
+resolver, y se corre `helmholtz2d.solve` de verdad. Devuelve el campo en dB, los cortes axial y
+lateral, y R/T con su referencia analítica y el error. `grid_tri_mesh(xs, ys)` arma el reticulado con
+las interfaces exactamente en los nodos: la malla es conforme por construcción, así que no hay que
+pegar regiones ni adivinar de qué material es cada elemento.
+
+**Criterio de aceptación cumplido** (el de la Fase 1, 2 % en amplitud). Agua/hueso/agua a ppw 12:
+R 0.9018 contra 0.9037 (abs 0.0019), T 0.4323 contra 0.4281 (abs 0.0041), energía 1.0000, 11 ms.
+Agua/tejido/agua: R abs 0.0060, T abs 0.0009.
+
+**Hallazgo 1 — el criterio tiene que ser absoluto, no relativo.** Con agua/tejido R vale 0.012, y el
+error *relativo* de R sale 218 % mientras el error *absoluto* es 0.006: casi todo es piso de
+discretización (P1 a ppw 12 ya da ~0.6 % de error de amplitud). Juzgar por relativo habría rechazado
+una escena que cumple. Por eso la UI muestra `error_R_abs` / `error_T_abs` y el sello se arma con
+esos, no con los porcentajes.
+
+**Hallazgo 2 — `[hidden]` no oculta si el CSS pone `display:flex`.** Las dos vistas (`main.vista`)
+compartían el ancho y el mapa de la escena se quedaba en 0 px aunque Plotly ya tenía los datos
+(17×45). Se veía en el navegador como un panel vacío sin ningún error en consola. Arreglado con
+`[hidden] { display:none !important; }`. Es el mismo tipo de bug que D27 ya había encontrado con
+`scaleanchor`: el render no falla, simplemente no se ve.
+
+**Lo que parece un bug y es física.** Con agua/tejido en incidencia normal el mapa sale casi
+uniforme: R = 1.2 %, así que la onda estacionaria varía 2.4 % y en una escala de 40 dB no se ve. Por
+eso el caso por defecto es agua/hueso/agua (R = 0.90) y hay selector de rango (40/20/10 dB o lineal).
+Con el rango en 10 dB aparecen las franjas.
+
+**Límites declarados en la propia UI**: sólo incidencia normal (arriba y abajo las paredes son
+rígidas; una onda oblicua se reflejaría ahí, y el pedido con `angulo_deg != 0` se rechaza con esa
+razón en vez de devolver un campo que parece válido), sólo fluido acústico, y tope de 60 000
+elementos con mensaje que dice qué bajar.

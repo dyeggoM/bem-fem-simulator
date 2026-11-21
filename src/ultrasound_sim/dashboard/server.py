@@ -27,6 +27,7 @@ import numpy as np
 from .. import cochlea, materials as mats
 from . import bem_field
 from . import field as campo
+from . import scene
 
 ESTATICOS = Path(__file__).resolve().parent / "static"
 MATERIALES = {
@@ -203,7 +204,20 @@ class Handler(BaseHTTPRequestHandler):
                 "materials": [
                     {"id": k, "c_m_s": m.c, "rho": m.rho, "alpha_1mhz_np_m": getattr(m, "alpha_1mhz", 0.0)}
                     for k, m in MATERIALES.items()
-                ]
+                ],
+                # el registro de la escena suma perilinfa y endolinfa (los fluidos cocleares)
+                "scene_materials": [
+                    {"id": k, "c_m_s": m.c, "rho": m.rho,
+                     "alpha_1mhz_np_m": getattr(m, "alpha_1mhz", 0.0),
+                     "impedancia": m.rho * m.c}
+                    for k, m in scene.MATERIALES.items()
+                ],
+                "scene_limits": {
+                    "max_elementos": scene.MAX_ELEMENTOS,
+                    "max_nodos": scene.MAX_NODOS,
+                    "abc": list(scene.ABC_DISPONIBLES),
+                    "formulaciones": list(scene.FORMULACIONES),
+                }
             })
         elif partes.path == "/api/cochlea":
             consulta: dict[str, object] = {k: v[0] for k, v in parse_qs(partes.query).items()}
@@ -225,7 +239,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         ruta = urlparse(self.path).path
-        if ruta not in ("/api/field", "/api/cochlea"):
+        if ruta not in ("/api/field", "/api/cochlea", "/api/scene/solve", "/api/scene/cost"):
             self._error("no encontrado", HTTPStatus.NOT_FOUND)
             return
         largo = int(self.headers.get("Content-Length") or 0)
@@ -239,7 +253,15 @@ class Handler(BaseHTTPRequestHandler):
             return
         cuerpo = payload if isinstance(payload, dict) else {}
         try:
-            self._json(calcular_coclea(cuerpo) if ruta == "/api/cochlea" else calcular(cuerpo))
+            if ruta == "/api/cochlea":
+                respuesta = calcular_coclea(cuerpo)
+            elif ruta == "/api/scene/cost":
+                respuesta = scene.estimar_costo(cuerpo)
+            elif ruta == "/api/scene/solve":
+                respuesta = scene.resolver_escena(cuerpo)
+            else:
+                respuesta = calcular(cuerpo)
+            self._json(respuesta)
         except (ValueError, KeyError) as exc:
             self._error(str(exc))
         except Exception as exc:  # el dashboard no debe morir por un pedido raro

@@ -230,7 +230,12 @@ agrega a la librería con su criterio, después se enchufa.
 
 ### Las fases
 
-- **U1 — Escena 2D + FEM acústico.** Editor de regiones rectangulares (material por región),
+- **U1 — Escena 2D + FEM acústico. ENTREGADA.** `dashboard/scene.py` (validación, malla, solve,
+  métricas) + `meshing.grid_tri_mesh` (reticulado conforma por construcción) + pestaña "escena FEM"
+  en el dashboard. Medido: agua/hueso/agua a ppw 12 — *R 0.9018 vs 0.9037* (abs 0.0019),
+  *T 0.4323 vs 0.4281* (abs 0.0041), energía *1.0000*, solve *11 ms* con 1 152 elementos;
+  agua/tejido/agua — R abs 0.0060, T abs 0.0009. 18 tests en `test_scene.py` + 5 de HTTP.
+  Editor de regiones rectangulares (material por región),
   vista previa de malla con el conteo y el costo estimado, selector de formulación
   (total/dispersado), ABC-1/BGT-2, frecuencia, y mapa de |p| + cortes.
   *Aceptación*: desde la UI, la capa agua/tejido/agua reproduce R y T de la Fase 1 dentro de **2 %**
