@@ -84,6 +84,29 @@ window.campoAplicarFuentes = function campoAplicarFuentes(fuentes) {
   pedir();
 };
 
+/* Las fuentes **que se están simulando ahora**, sea en modo manual o en modo arreglo. En modo arreglo
+ * `S.fuentes` está vacío a propósito (se regenera al resolver), así que leerlo directo daba cero fuentes
+ * y la cadena caía en onda plana sin avisar. Esta función calcula el arreglo sin tocar el estado. */
+window.campoFuentesActuales = function campoFuentesActuales() {
+  if (S.fuentes && S.fuentes.length) {
+    return S.fuentes.map((f) => ({
+      y_mm: f.y * 1e3, ancho_mm: f.width * 1e3, amp: f.amp, fase_rad: f.phase,
+    }));
+  }
+  const paso = S.d / S.n;
+  const c = { agua: 1500, tejido: 1540, hueso: 3500 }[S.material] || 1500;
+  const k = 2 * Math.PI * (S.freq * 1e3) / c;
+  const salida = [];
+  for (let j = 0; j < S.n; j += 1) {
+    const y = -S.d / 2 + paso * (j + 0.5);
+    salida.push({
+      y_mm: y, ancho_mm: paso, amp: 1,
+      fase_rad: -k * Math.hypot(S.fx, S.fy - y) / 1e3,
+    });
+  }
+  return salida;
+};
+
 window.campoLeerFuentes = function campoLeerFuentes() {
   return (S.fuentes || []).map((f) => ({
     y_mm: f.y * 1e3, ancho_mm: f.width * 1e3, amp: f.amp, fase_rad: f.phase,

@@ -181,6 +181,17 @@ def test_la_vista_de_cadena_tiene_panel_main_y_script():
     assert "vista-cadena" in (ESTATICOS / "style.css").read_text(encoding="utf-8")
 
 
+def test_se_puede_cargar_un_stl_y_ver_su_seccion():
+    """U9: la geometría propia entra como la sección del STL (el modelo es 2D)."""
+    html = (ESTATICOS / "index.html").read_text(encoding="utf-8")
+    js = (ESTATICOS / "cadena.js").read_text(encoding="utf-8")
+    assert 'id="stlArchivo"' in html and 'accept=".stl' in html
+    assert 'id="stlMaterial"' in html and 'id="stlPlano"' in html
+    assert 'id="stlEjemplo"' in html, "hace falta un ejemplo para probar sin tener un archivo"
+    assert '/api/jobs/stl' in js
+    assert 'type: \'path\'' in js, "el contorno de la sección tiene que dibujarse"
+
+
 def test_se_puede_cargar_el_arreglo_y_el_transductor_desde_el_panel():
     """U10: cargar un arreglo planeado y el catálogo de transductores dejan de ser 32 filas a mano."""
     html = (ESTATICOS / "index.html").read_text(encoding="utf-8")

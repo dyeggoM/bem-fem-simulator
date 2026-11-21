@@ -23,6 +23,7 @@
     // estructura: `alto` 0 = capas infinitas (interfaz plana). Con alto > 0 es una pieza finita que se
     // arrastra sobre el mapa; ahí la onda rodea la pieza y difracta en los bordes.
     estructura: { alto: 0, x: 12, y: 0 },
+    excitacion: 'plana',      // 'plana' | 'fuentes' (el arreglo de la vista BEM · fuentes)
     resultado: null,
     resolviendo: false,
   };
@@ -107,6 +108,11 @@
       ppw: CAD.ppw,
       nx: 160,
       ny: 100,
+      // con "fuentes" se manda el arreglo de la vista de campo tal cual está en pantalla
+      // `campoFuentesActuales` devuelve el arreglo del modo activo (manual o arreglo): leer sólo
+      // `S.fuentes` daba cero en modo arreglo y la corrida caía en onda plana sin avisar
+      fuentes: CAD.excitacion === 'fuentes' && typeof window.campoFuentesActuales === 'function'
+        ? window.campoFuentesActuales() : null,
       estructura_alto_mm: CAD.estructura.alto,
       estructura_x_mm: CAD.estructura.x,
       estructura_y_mm: CAD.estructura.y,
@@ -144,6 +150,77 @@
     }
   }
 
+  async function resolverSTL(archivo) {
+    const estadoSTL = $('stlEstado');
+    estadoSTL.style.color = '';
+    estadoSTL.textContent = `leyendo ${archivo.name}…`;
+    const buffer = await archivo.arrayBuffer();
+    let bin = '';
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.length; i += 1) bin += String.fromCharCode(bytes[i]);
+    const datos_b64 = btoa(bin);
+
+    const cuerpo = {
+      datos_b64,
+      nombre: archivo.name,
+      material: $('stlMaterial').value,
+      frecuencia_hz: CAD.freq * 1e3,
+      ppw: CAD.ppw,
+      plano: { eje: 'z', valor_mm: parseFloat($('stlPlano').value) },
+      nx: 160, ny: 110,
+    };
+    estadoSTL.textContent = `resolviendo la sección de ${archivo.name}…`;
+    try {
+      const alta = await fetch('/api/jobs/stl', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo),
+      }).then((r) => r.json());
+      if (!alta.ok) throw new Error(alta.error || 'no se pudo encolar');
+      let job = null;
+      for (let i = 0; i < 240; i += 1) {
+        await new Promise((r) => setTimeout(r, 600));
+        job = await fetch(`/api/jobs/${alta.job.id}`).then((r) => r.json());
+        if (['listo', 'listo_con_aviso', 'error', 'cancelado'].includes(job.estado)) break;
+      }
+      if (!job || job.estado === 'error') throw new Error((job && job.error) || 'la corrida falló');
+      pintarSTL(job.resultado);
+      estadoSTL.textContent = `${archivo.name} · sección ${job.resultado.stl.seccion.ancho_mm}×`
+        + `${job.resultado.stl.seccion.alto_mm} mm · ${job.resultado.metricas.nodos} nodos · `
+        + `${job.resultado.tiempos.solve_s} s de solve`;
+    } catch (err) {
+      estadoSTL.style.color = '#f85149';
+      estadoSTL.textContent = `${archivo.name}: ${err.message || err}`;
+    }
+  }
+
+  function pintarSTL(r) {
+    const m = r.metricas;
+    const cont = $('cadenaMetricas');
+    cont.hidden = false;
+    cont.innerHTML = `
+      <div class="chip"><span>transmitido detrás</span><b>${m.transmitido === null ? '—' : m.transmitido.toFixed(4)}</b></div>
+      <div class="chip"><span>material</span><b>${r.material.etiqueta}</b></div>
+      <div class="chip"><span>área de la sección</span><b>${r.stl.seccion.area_mm2} mm²</b></div>
+      <div class="chip"><span>malla</span><b>${m.tamano_malla_mm} mm</b></div>
+      <div class="chip"><span>dominio</span><b>${m.dominio_mm[0]}×${m.dominio_mm[1]} mm</b></div>`;
+
+    const g = r.grilla;
+    const shapes = (g.contorno || []).map((c) => ({
+      type: 'path', path: c.map((p, i) => `${i ? 'L' : 'M'}${p[0]},${p[1]}`).join(' ') + ' Z',
+      line: { color: '#58a6ff', width: 2 }, fillcolor: 'rgba(88,166,255,.12)', layer: 'above',
+    }));
+    Plotly.react('mapaCadena', [{
+      type: 'heatmap', x: g.x_mm, y: g.y_mm, z: g.db, zmin: -30, zmax: 0,
+      colorscale: 'Viridis', colorbar: { title: 'dB', thickness: 12 },
+      hovertemplate: 'x %{x:.1f} mm<br>y %{y:.1f} mm<br>%{z:.1f} dB<extra></extra>',
+    }], {
+      margin: { l: 50, r: 10, t: 30, b: 40 }, height: 340,
+      title: { text: `|p| (dB) · sección de ${r.stl.nombre}`, font: { size: 12 } },
+      xaxis: { title: 'x [mm]', range: [Math.min(...g.x_mm), Math.max(...g.x_mm)] },
+      yaxis: { title: 'y [mm]', range: [Math.min(...g.y_mm), Math.max(...g.y_mm)] },
+      shapes,
+    }, { displayModeBar: false, responsive: true });
+  }
+
   /* ---------------------------------------------------------------- pintar */
   function pintar(r) {
     const m = r.metricas;
@@ -152,12 +229,24 @@
     const tMed = m.t_medido === null ? '—' : m.t_medido.toFixed(4);
     const tTeo = m.t_teorico === null ? 'sin referencia' : m.t_teorico.toFixed(4);
     const err = m.error_pct === null ? '—' : m.error_pct.toFixed(2) + ' %';
-    cont.innerHTML = `
-      <div class="chip"><span>transmitido medido</span><b>${tMed}</b></div>
-      <div class="chip"><span>exacto (capas fluidas)</span><b>${tTeo}</b></div>
-      <div class="chip"><span>error</span><b>${err}</b></div>
-      <div class="chip"><span>espesor total</span><b>${m.espesor_total_mm} mm</b></div>
-      <div class="chip"><span>λ en agua</span><b>${m.lambda_agua_mm} mm</b></div>`;
+    const pico = m.pico_detras === null || m.pico_detras === undefined
+      ? '—' : m.pico_detras.toExponential(2);
+    const chips = m.hay_fuentes
+      ? `<div class="chip"><span>excitación</span><b>${m.n_fuentes} fuentes</b></div>
+         <div class="chip"><span>pico detrás</span><b>${pico}</b></div>
+         <div class="chip"><span>espesor total</span><b>${m.espesor_total_mm} mm</b></div>
+         <div class="chip"><span>λ en agua</span><b>${m.lambda_agua_mm} mm</b></div>
+         <div class="chip"><span>malla</span><b>${m.ppw_efectivo} elem./λ</b></div>`
+      : `<div class="chip"><span>transmitido medido</span><b>${tMed}</b></div>
+         <div class="chip"><span>exacto (capas fluidas)</span><b>${tTeo}</b></div>
+         <div class="chip"><span>error</span><b>${err}</b></div>
+         <div class="chip"><span>espesor total</span><b>${m.espesor_total_mm} mm</b></div>
+         <div class="chip"><span>λ en agua</span><b>${m.lambda_agua_mm} mm</b></div>`;
+    cont.innerHTML = chips;
+    // el aviso de malla recortada no puede pasar inadvertido: cambia cuánto resuelve el mapa
+    if (m.aviso_malla) {
+      estado(`${m.aviso_malla}.`, false);
+    }
 
     const g = r.grilla;
     const e = r.estructura || { x_mm: 0, y_mm: 0, ancho_mm: 0, alto_mm: null, finita: false };
@@ -346,6 +435,58 @@
       $('cadPpwVal').textContent = CAD.ppw;
     });
     $('cadenaResolver').addEventListener('click', resolver);
+
+    $('cadExcitacion').addEventListener('change', (e) => {
+      CAD.excitacion = e.target.value;
+      const conFuentes = CAD.excitacion === 'fuentes';
+      $('cadExcitacionInfo').textContent = conFuentes
+        ? 'Se usan las fuentes de la vista BEM · fuentes (posición, ancho, amplitud y fase de cada '
+          + 'elemento). El campo enfoca y ya no hay coeficiente exacto contra el cual comparar.'
+        : 'Con onda plana la cadena se compara contra el coeficiente exacto de capas.';
+      // con fuentes, la referencia analítica no aplica: se avisa antes de correr, no después
+      if (conFuentes) {
+        const n = (window.campoFuentesActuales ? window.campoFuentesActuales().length : 0);
+        estado(n ? `${n} fuentes del arreglo listas. Resolvé para ver el campo.`
+                 : 'la vista BEM · fuentes no tiene fuentes cargadas.');
+      }
+    });
+
+    // ---- STL: se simula su sección (el modelo es 2D) -----------------------
+    (async () => {
+      try {
+        const op = await fetch('/api/stl/opciones').then((r) => r.json());
+        const sel = $('stlMaterial');
+        sel.innerHTML = '';
+        for (const s of op.solidos) {
+          const o = document.createElement('option');
+          o.value = s.id;
+          o.textContent = s.etiqueta + (s.verificado ? '' : ' (VERIFY)');
+          if (s.id === 'hueso_cortical') o.selected = true;
+          sel.appendChild(o);
+        }
+      } catch (e) {
+        console.warn('no se pudieron cargar los materiales de STL:', e && e.message);
+      }
+    })();
+    $('stlPlano').addEventListener('input', (e) => {
+      $('stlPlanoVal').textContent = parseFloat(e.target.value).toFixed(1);
+    });
+    $('stlCargarBtn').addEventListener('click', () => $('stlArchivo').click());
+    $('stlEjemplo').addEventListener('click', async () => {
+      try {
+        const blob = await fetch('/api/stl/ejemplo').then((r) => r.blob());
+        resolverSTL(new File([blob], 'cilindro_ejemplo.stl', { type: 'model/stl' }));
+      } catch (e) {
+        const st = $('stlEstado');
+        st.style.color = '#f85149';
+        st.textContent = 'no se pudo traer el ejemplo: ' + (e.message || e);
+      }
+    });
+    $('stlArchivo').addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0];
+      e.target.value = '';
+      if (f) resolverSTL(f);
+    });
 
     // ---- estructura: alto, x, y y arrastre en el mapa ----------------------
     function sincronizarControlesEstructura() {

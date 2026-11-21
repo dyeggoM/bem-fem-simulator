@@ -101,6 +101,8 @@ def solve_multicapa(
     onda=None,
     abc_order: int = 1,
     abc_center=None,
+    neumann_edges=None,
+    dp_dn=None,
 ) -> ResultadoMulticapa:
     """Resuelve el acople de N regiones con onda plana incidente (o sin fuente si ``onda is None``).
 
@@ -110,6 +112,11 @@ def solve_multicapa(
     fluidos, solidos : diccionarios ``{nombre: material}``. Un nombre no puede estar en los dos.
     onda : objeto con ``.value(points)`` y ``.normal_derivative(points, normals)``
         (``fem.helmholtz2d.PlaneWave``). Entra como dato de borde en la ABC, sobre el campo total.
+    neumann_edges, dp_dn : para excitar con **fuentes** en vez de una onda plana. ``dp_dn`` es
+        ``∂p/∂n`` por arista de ``neumann_edges`` (la normal saliente del dominio), y entra en el lado
+        derecho como ``∫ (1/ρ)·(∂p/∂n)·q ds`` con la regla del punto medio. Una fuente que empuja hacia
+        adentro del dominio con velocidad ``v`` sobre un baffle de normal saliente ``−x̂`` tiene
+        ``∂p/∂n = +i·ω·ρ·v``.
     """
     x = np.asarray(nodes, dtype=float)
     t = np.asarray(triangles, dtype=int)
@@ -239,6 +246,26 @@ def solve_multicapa(
                                        abc_center=abc_center)
                 has = dof_p >= 0
                 np.add.at(b, dof_p[has], rhs[has])
+
+    # ---- fuentes: dato de Neumann prescrito (baffle con un arreglo) ----------
+    if neumann_edges is not None:
+        ne = np.asarray(neumann_edges, dtype=int).reshape(-1, 2)
+        if dp_dn is None:
+            raise ValueError("neumann_edges requiere dp_dn (∂p/∂n por arista)")
+        dato = np.asarray(dp_dn, dtype=complex).reshape(-1)
+        if dato.size != ne.shape[0]:
+            raise ValueError(
+                f"dp_dn tiene {dato.size} valores y hay {ne.shape[0]} aristas de Neumann"
+            )
+        rd = dof_p[ne]
+        if np.any(rd < 0):
+            raise RuntimeError("una arista de Neumann no toca ningún nodo con gdl de presión")
+        # ∫ (1/ρ)·(∂p/∂n)·q ds con regla del punto medio: cada nodo recibe (1/ρ)·g·L/2. El 1/ρ ya viene
+        # incluido en dp_dn (quien llama pasa el dato físico dividido por ρ)
+        largo_n = np.linalg.norm(x[ne[:, 1]] - x[ne[:, 0]], axis=1)
+        contrib = dato * largo_n / 2.0
+        np.add.at(b, rd[:, 0], contrib)
+        np.add.at(b, rd[:, 1], contrib)
 
     sol = spla.spsolve(a.tocsc(), b)
 

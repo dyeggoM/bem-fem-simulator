@@ -45,15 +45,35 @@ class MallaVolumen:
     def n_nodes(self) -> int:
         return int(self.nodes.shape[0])
 
+    @property
+    def es_2d(self) -> bool:
+        return self.tets.shape[1] == 3
+
     def resumen(self) -> dict:
         conteo = {n: int(np.count_nonzero(self.regiones == i)) for i, n in enumerate(self.nombres)}
-        return {
+        base = {
             "n_nodos": self.n_nodes,
-            "n_tets": int(self.tets.shape[0]),
+            "n_elementos": int(self.tets.shape[0]),
             "regiones": conteo,
-            "volumen_mm3": round(_volumen(self.nodes, self.tets) * 1e9, 2),
+            "dim": 2 if self.es_2d else 3,
             "origen": self.origen,
         }
+        if self.es_2d:
+            base["area_mm2"] = round(_area(self.nodes, self.tets) * 1e6, 3)
+        else:
+            # `n_tets` se mantiene para no romper a quien ya lo leía
+            base["n_tets"] = int(self.tets.shape[0])
+            base["volumen_mm3"] = round(_volumen(self.nodes, self.tets) * 1e9, 2)
+        return base
+
+
+def _area(nodes: np.ndarray, tris: np.ndarray) -> float:
+    p = nodes[tris]
+    # triángulos en 2D: el producto cruz en el plano es el determinante 2x2
+    a = p[:, 1] - p[:, 0]
+    b = p[:, 2] - p[:, 0]
+    det = a[:, 0] * b[:, 1] - a[:, 1] * b[:, 0]
+    return float(np.abs(det).sum() / 2.0)
 
 
 def _volumen(nodes: np.ndarray, tets: np.ndarray) -> float:
@@ -205,6 +225,100 @@ def mallar_capas(capas: list[tuple[str, float]], *, ancho: float, alto: float,
     tele = time.perf_counter() - t0
     return MallaVolumen(nodes=nodes, tets=tets, regiones=regiones, nombres=nombres,
                         origen=f"gmsh capas · {tele:.1f} s")
+
+
+def mallar_seccion(contornos: list[np.ndarray], *, ancho: float, alto: float,
+                   tamano: float, desde: float = 0.0) -> MallaVolumen:
+    """Malla 2D de una **sección de STL** dentro de un dominio rectangular de fluido.
+
+    En 2D sí se puede tener la interfaz compartida: el contorno de la sección es **la misma curva** que
+    el borde del agujero del fluido (`occ.cut`), así que la malla sale conforme por construcción. Es la
+    diferencia con `mallar_stl`, donde dos superficies en 3D no comparten cara y el mallador se cae.
+
+    El dominio se centra en el origen del contorno; ``desde`` corre el rectángulo en x.
+    """
+    import gmsh
+
+    if not contornos:
+        raise ValueError("hacen falta contornos (ver stl.seccion_por_plano)")
+    if tamano <= 0:
+        raise ValueError("tamano tiene que ser > 0")
+
+    t0 = time.perf_counter()
+    gmsh.initialize(interruptible=False)
+    try:
+        gmsh.option.setNumber("General.Terminal", 0)
+        gmsh.model.add("seccion")
+        occ = gmsh.model.occ
+
+        superficies_solido = []
+        for contorno in contornos:
+            c = np.asarray(contorno, dtype=float)
+            if len(c) < 3:
+                raise ValueError("un contorno de la sección tiene menos de 3 puntos")
+            # `desde` es dónde va el CENTRO de la sección dentro del dominio
+            c = c - c.mean(axis=0) + np.array([float(desde), 0.0])
+            puntos = [occ.addPoint(float(x), float(y), 0.0) for x, y in c]
+            lineas = [occ.addLine(puntos[i], puntos[(i + 1) % len(puntos)]) for i in range(len(puntos))]
+            loop = occ.addCurveLoop(lineas)
+            superficies_solido.append(occ.addPlaneSurface([loop]))
+        occ.synchronize()
+
+        # addRectangle(x, y, z, dx, dy): el z va en 0 (malla 2D) y la caja se centra en `desde`, que es
+        # donde está el centro de la sección; si la caja arrancara en 0 la sección podría quedar a
+        # caballo del borde y el recorte sale degenerado
+        caja = occ.addRectangle(float(desde) - ancho / 2, -alto / 2, 0.0, ancho, alto)
+        occ.synchronize()
+        # el fluido es la caja menos las secciones: la frontera del agujero es la MISMA curva que el
+        # borde del sólido, así que la malla queda conforme
+        fluido, _ = occ.cut([(2, caja)], [(2, s) for s in superficies_solido],
+                            removeObject=True, removeTool=False)
+        occ.synchronize()
+        if not fluido:
+            raise ValueError(
+                "la sección quedó fuera del dominio: el rectángulo tiene que contenerla entera"
+            )
+
+        gmsh.option.setNumber("Mesh.MeshSizeMax", float(tamano))
+        gmsh.option.setNumber("Mesh.MeshSizeMin", float(tamano))
+        gmsh.option.setNumber("Mesh.Algorithm", 6)
+        gmsh.model.mesh.generate(2)
+
+        tag_nodos, coords, _ = gmsh.model.mesh.getNodes()
+        orden = np.argsort(tag_nodos)
+        nodos3 = np.asarray(coords, dtype=float).reshape(-1, 3)[orden]
+        mapa = {int(t): i for i, t in enumerate(np.asarray(tag_nodos)[orden])}
+
+        triangulos = []
+        regiones = []
+        # una superficie por región: la del sólido y la del fluido
+        for etiqueta, tags in (
+            (0, [(2, s) for s in superficies_solido]),
+            (1, [dim_tag for dim_tag in fluido]),
+        ):
+            for dim, tag in tags:
+                tipos, _t, conn = gmsh.model.mesh.getElements(dim, tag=tag)
+                for tipo, c in zip(tipos, conn):
+                    if tipo != 2:           # 2 = triángulo
+                        continue
+                    bloques = np.asarray(c, dtype=int).reshape(-1, 3)
+                    triangulos.append(np.vectorize(mapa.get)(bloques))
+                    regiones.append(np.full(bloques.shape[0], etiqueta))
+        if not triangulos:
+            raise ValueError("gmsh no generó triángulos")
+    finally:
+        gmsh.finalize()
+
+    nodos = nodos3[:, :2]
+    tris = np.concatenate(triangulos, axis=0)
+    reg = np.concatenate(regiones, axis=0)
+    # gmsh no garantiza el sentido de giro: el sólido puede salir horario y `elastic2d` lo rechaza
+    from .meshing import _ensure_ccw
+
+    tris = _ensure_ccw(nodos, tris)
+    tele = time.perf_counter() - t0
+    return MallaVolumen(nodes=nodos, tets=tris, regiones=reg, nombres=["seccion", "fluido"],
+                        origen=f"gmsh sección · {tele:.1f} s")
 
 
 def mallar_stl(rutas: dict[str, str | Path], tamano: float, *,

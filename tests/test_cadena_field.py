@@ -115,6 +115,52 @@ def test_las_capas_infinitas_siguen_siendo_el_default():
     assert r["metricas"]["error_pct"] is not None
 
 
+def _fuentes_foco(n=16, apertura_mm=24.0, foco_mm=30.0, f=500e3):
+    k = 2 * np.pi * f / 1500.0
+    salida = []
+    for i in range(n):
+        y_mm = -apertura_mm / 2 + apertura_mm * (i + 0.5) / n
+        salida.append({"y_mm": y_mm, "ancho_mm": apertura_mm / n, "amp": 1.0,
+                       "fase_rad": -k * float(np.hypot(foco_mm, y_mm)) * 1e-3})
+    return salida
+
+
+def test_se_puede_excitar_cada_la_cadena_con_un_arreglo_de_fuentes():
+    """La cadena no tiene que estar limitada a una onda plana: con un arreglo, el campo enfoca y
+    atraviesa las capas. Y ahí NO hay coeficiente exacto contra el cual comparar, así que no se inventa."""
+    r = cadena_field.resolver_cadena({**_datos([("piel", 2.0), ("perilinfa", 5.0)]),
+                                      "fuentes": _fuentes_foco(), "alto_mm": 40.0})
+    m = r["metricas"]
+    print(f"\n  excitación {m['excitacion']} · {m['n_fuentes']} fuentes · "
+          f"pico detrás {m['pico_detras']:.3e} · t_medido {m['t_medido']}")
+    assert m["excitacion"] == "fuentes"
+    assert m["n_fuentes"] == 16 and m["hay_fuentes"] is True
+    assert m["t_medido"] is None, "con fuentes el 'transmitido' no es un coeficiente"
+    assert m["pico_detras"] is not None and m["pico_detras"] > 0
+    assert "arreglo de fuentes" in m["referencia"]
+    assert np.all(np.isfinite(np.array(r["grilla"]["db"])))
+
+
+def test_una_fuente_fuera_del_dominio_lo_dice():
+    base = _datos([("piel", 2.0)], alto_mm=20.0)
+    with pytest.raises(ValueError, match="ninguna fuente cae"):
+        cadena_field.resolver_cadena({
+            **base,
+            "fuentes": [{"y_mm": 500.0, "ancho_mm": 2.0, "amp": 1.0, "fase_rad": 0.0}],
+        })
+
+
+def test_a_alta_frecuencia_se_ajusta_la_malla_en_vez_de_fallar():
+    """A 600 kHz con el dominio por defecto la malla pasaba el tope y la corrida se caía con un
+    ValueError. Ahora se baja el ppw para entrar y se avisa, en vez de bloquear."""
+    r = cadena_field.resolver_cadena({**_datos([("piel", 2.0), ("perilinfa", 5.0)]),
+                                      "frecuencia_hz": 600e3, "ppw": 14})
+    m = r["metricas"]
+    print(f"\n  600 kHz: {m['nodos']} nodos · ppw {m['ppw_efectivo']} · aviso {m['aviso_malla']}")
+    assert m["nodos"] <= cadena_field.MAX_NODOS
+    assert m["ppw_efectivo"] <= 14
+
+
 def test_el_mapa_cubre_agua_capas_y_agua():
     """La grilla tiene que incluir el agua de entrada y de salida, no sólo las capas."""
     r = cadena_field.resolver_cadena(_datos([("piel", 2.0), ("perilinfa", 5.0)]))

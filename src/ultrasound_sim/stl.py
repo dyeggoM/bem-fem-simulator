@@ -26,7 +26,17 @@ from pathlib import Path
 
 import numpy as np
 
-__all__ = ["MallaSTL", "leer_stl", "verificar_stl", "escerrada", "volumen_con_signo", "cubo_stl"]
+__all__ = [
+    "MallaSTL", "leer_stl", "leer_stl_bytes", "verificar_stl", "escerrada", "volumen_con_signo",
+    "cubo_stl", "seccion_por_plano", "area_contorno",
+]
+
+
+class _Nombre:
+    """Sólo para que los mensajes de error digan el nombre del archivo."""
+
+    def __init__(self, nombre: str):
+        self.name = nombre
 
 
 @dataclass
@@ -99,9 +109,14 @@ def _leer_ascii(texto: str) -> tuple[np.ndarray, np.ndarray]:
 
 
 def leer_stl(ruta: str | Path) -> MallaSTL:
-    """Lee un STL binario o ASCII. Las coordenadas se toman como **metros**."""
+    """Lee un STL binario o ASCII desde un archivo. Las coordenadas se toman como **metros**."""
     ruta = Path(ruta)
-    datos = ruta.read_bytes()
+    return leer_stl_bytes(ruta.read_bytes(), ruta.name)
+
+
+def leer_stl_bytes(datos: bytes, nombre: str = "STL") -> MallaSTL:
+    """Igual que `leer_stl` pero desde memoria (lo que llega por HTTP)."""
+    ruta = _Nombre(nombre)
     if len(datos) < 84:
         raise ValueError(f"{ruta.name}: el archivo es demasiado chico para ser un STL ({len(datos)} bytes)")
     # el tamaño decide: un binario mide exactamente 84 + 50*n, y un ASCII casi nunca coincide
@@ -179,6 +194,95 @@ def verificar_stl(malla: MallaSTL, nombre: str = "STL") -> dict:
             f"con masa negativa y el acople saldría con el signo cambiado."
         )
     return {"cerrada": True, "volumen_m3": vol, **detalle}
+
+
+def seccion_por_plano(malla: MallaSTL, eje: str = "z", valor: float = 0.0,
+                      tol: float = 1e-12) -> list[np.ndarray]:
+    """Corta la superficie con un plano y devuelve los **contornos cerrados** ``(k, 2)`` en el plano.
+
+    El simulador es 2D: un STL describe una superficie en 3D, así que lo que entra al modelo es **la
+    sección** —el mismo criterio que ya está documentado para las aperturas, que se modelan como su corte
+    lineal—. Esto corta y devuelve polígonos cerrados, listos para mallar.
+
+    Cada triángulo que cruza el plano aporta un segmento; los segmentos se encadenan por extremos. Se
+    devuelve una lista porque una sección puede tener varias piezas (o agujeros).
+    """
+    idx = {"x": 0, "y": 1, "z": 2}
+    if eje not in idx:
+        raise ValueError(f"eje {eje!r} no es 'x', 'y' ni 'z'")
+    j = idx[eje]
+    otros = [k for k in (0, 1, 2) if k != j]
+
+    t = np.asarray(malla.triangulos, dtype=float)
+    d = t[:, :, j] - valor
+
+    segmentos: list[tuple[np.ndarray, np.ndarray]] = []
+    for tri, dd in zip(t, d):
+        # sin cruce estricto: los tres del mismo lado (o tocando el plano sin cruzarlo)
+        if np.all(dd > 0) or np.all(dd < 0):
+            continue
+        cortes = []
+        for a, b in ((0, 1), (1, 2), (2, 0)):
+            if (dd[a] > 0) != (dd[b] > 0):
+                s = dd[a] / (dd[a] - dd[b])
+                cortes.append(tri[a] + s * (tri[b] - tri[a]))
+            elif abs(dd[a]) <= tol:
+                cortes.append(tri[a])
+        if len(cortes) < 2:
+            continue
+        p0 = np.array([cortes[0][k] for k in otros])
+        p1 = np.array([cortes[1][k] for k in otros])
+        if np.linalg.norm(p1 - p0) > tol:
+            segmentos.append((p0, p1))
+
+    if not segmentos:
+        raise ValueError(
+            f"el plano {eje} = {valor} no corta la malla: la superficie queda entera de un lado"
+        )
+
+    # encadenar segmentos por extremos redondeados
+    clave = lambda p: (round(p[0], 10), round(p[1], 10))
+    pendientes: dict[tuple, list[tuple]] = {}
+    for p0, p1 in segmentos:
+        pendientes.setdefault(clave(p0), []).append((p0, p1))
+
+    contornos: list[np.ndarray] = []
+    usados: set[tuple] = set()
+    for p0, p1 in segmentos:
+        k0 = clave(p0)
+        if (k0, clave(p1)) in usados:
+            continue
+        cadena = [p0]
+        actual = p1
+        usados.add((k0, clave(p1)))
+        while True:
+            k = clave(actual)
+            cadena.append(actual)
+            if k == clave(cadena[0]) and len(cadena) > 2:
+                break
+            siguiente = None
+            for par in pendientes.get(k, []):
+                marca = (k, clave(par[1]))
+                if marca not in usados:
+                    siguiente = par
+                    usados.add(marca)
+                    break
+            if siguiente is None:
+                break
+            actual = siguiente[1]
+        if len(cadena) > 3:
+            contornos.append(np.array(cadena[:-1] if np.allclose(cadena[0], cadena[-1]) else cadena))
+
+    if not contornos:
+        raise ValueError("no se pudo cerrar ningún contorno: la superficie no es cerrada")
+    return contornos
+
+
+def area_contorno(contorno: np.ndarray) -> float:
+    """Área con signo por la fórmula del polígono (positiva si el contorno va en sentido antihorario)."""
+    c = np.asarray(contorno, dtype=float)
+    x, y = c[:, 0], c[:, 1]
+    return float(0.5 * np.sum(x * np.roll(y, -1) - np.roll(x, -1) * y))
 
 
 def cubo_stl(lado: float = 1.0, centro=(0.0, 0.0, 0.0)) -> MallaSTL:

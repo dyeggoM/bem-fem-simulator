@@ -2458,3 +2458,97 @@ archivo para volver a cargarlo.
 **Lo que falta de U10**: no hay todavía un botón para **editar el catálogo** desde la UI (se edita el TOML
 a mano, respetando que `source` no puede estar vacío), y el formato no lleva la geometría del transductor
 curvo: el modelo sigue siendo un arreglo lineal, que es su corte 2D.
+
+## D60 — El STL entra cortado: la sección es lo que se simula, y así la interfaz sí se comparte
+
+**El bloqueo de D55, resuelto por otro lado.** En 3D, dos STL que se tocan no se pueden mallar juntos
+(caras coincidentes, kernel geo vs occ). Pero el simulador **es 2D**: lo que corresponde no es mallar el
+volumen, es mallar **la sección** —el mismo criterio con el que las aperturas se modelan como su corte
+lineal—. Y en 2D el contorno de la sección es **la misma curva** que el borde del agujero del fluido
+(`occ.cut`), así que la malla sale **conforme por construcción**: 12 643 nodos, **0 duplicados**.
+
+**Qué se agregó**: `stl.seccion_por_plano` (corta la superficie y encadena los segmentos en contornos
+cerrados), `stl.area_contorno`, `meshing_volume.mallar_seccion` (sección + fluido con agujero),
+`dashboard/stl_field.py` y en la vista de cadena un bloque para **cargar un STL**, elegir material y plano
+de corte, con un **ejemplo (cilindro)** servido por el servidor para probar sin archivo propio.
+
+**Lo medido, que es lo que decide si sirve**:
+
+| caso | transmitido detrás | qué significa |
+|---|---|---|
+| disco con las propiedades del agua | **1.0099** | no perturba la onda: el acople no inventa nada |
+| hueso cortical | 0.7512 | sombra moderada |
+| acero | 0.6085 | más sombra |
+
+Y el caso transparente **converge**: 1.040 (malla de 0.8 mm) → **1.016** (0.5 mm). El orden
+acero < hueso < transparente es el que dicta la impedancia, así que no es un número que salga de cualquier
+lado. Geometría: la sección del cilindro de 5 mm da **78.414 mm²** contra 78.540 exactos (0.16 % de la
+poligonalización) y la malla cubre los 1200 mm² del dominio.
+
+**Cuatro errores propios en el camino.**
+
+1. **La ABC en las cuatro caras, otra vez.** Es el mismo error de D56: en las paredes laterales la onda
+   plana tiene `∂p/∂n = 0` y la ABC impone `i·k·p`, y refleja. Con las cuatro caras el caso transparente
+   daba **1.15**; con ABC sólo en entrada y salida, **1.016**. Ya está dos veces el mismo tropiezo: la ABC
+   de impedancia sólo vale donde la onda **sale**.
+2. **La caja arrancaba en x = 0 con la sección en x = 0**: la sección quedaba a caballo del borde, el
+   `occ.cut` salía degenerado y el campo daba **exactamente 0** en todo el dominio. Ahora la caja se centra
+   en `desde`, que es el centro de la sección.
+3. **Los triángulos salían en sentido horario** y `elastic2d` los rechaza; se aplica `_ensure_ccw`.
+4. **El plano de corte que no corta** tiene que decirlo («la superficie queda entera de un lado»), no
+   devolver una lista vacía.
+
+**Y una trampa de medición que vale la pena anotar**: medir «en el eje» con `|y| < 1e-12` tomaba **4 nodos**
+en una malla no estructurada, y con eso los números salían con un 45 % que no era del solver. Hay que
+medir en una **banda**.
+
+**Estado del objetivo**: los cinco ejes están implementados y medidos — BEM y FEM con arreglos y
+materiales, acople de espacios (D56), control de posición de fuentes y de estructura (D58), STL (D60) y
+arreglos desde archivo (D59). Lo que queda es de fondo: el **FEM del mismo problema de fuentes** (D54)
+sigue sin cerrar, y el acople de **STL en 3D** no existe (esto es la sección).
+
+## D61 — La cadena acepta un arreglo de fuentes, y el tope de malla se adapta en vez de bloquear
+
+**Dos huecos que el usuario encontró usando la UI.**
+
+### 1. La cadena no tenía fuentes
+
+Hasta acá la cadena se excitaba **sólo** con una onda plana, así que no había ningún lugar donde configurar
+un transductor: la pregunta «¿cómo se configuran las fuentes en la cadena?» no tenía respuesta porque no
+existían. Ahora el panel tiene **Excitación: onda plana | las fuentes del arreglo**.
+
+Con fuentes, cada apertura es un dato de **Neumann** sobre el baffle en `x = 0` (`∂p/∂n = +i·ω·ρ·v`, la
+normal saliente es `−x̂`) y la ABC pasa a las tres caras restantes, porque una fuente localizada radia en
+todas direcciones —a diferencia de la onda plana, donde las laterales son rígidas (D56)—. El arreglo que
+se manda es el **de la vista BEM · fuentes tal como está en pantalla**: en modo arreglo `S.fuentes` está
+vacío a propósito, así que al principio llegaban **cero** fuentes y la corrida caía en onda plana sin
+avisar; se corrigió con `campoFuentesActuales()`, que calcula el arreglo del modo activo sin tocar el
+estado.
+
+Medido en el navegador con 32 elementos a 500 kHz: el mapa muestra el foco del arreglo en el agua, la
+**sombra del hueso cortical** (banda de ~−40 dB) y campo transmitido en la perilinfa. Coherencia entre
+las tres capas y el corte axial, que tiene 292 puntos.
+
+**Y con fuentes no hay coeficiente exacto**: la matriz de transferencia es para una onda plana. La vista
+reporta `t_medido = None` y `pico_detras` en su lugar, con la referencia diciendo «se excita con un arreglo
+de fuentes, no con una onda plana». Inventar un «transmitido» ahí sería comparar dos problemas distintos.
+
+### 2. Arriba de 600 kHz la corrida se caía
+
+`ValueError: la malla saldría de ~82668 nodos y el tope interactivo es 60000`. El tope era una pared: el
+usuario pidió una frecuencia y un dominio, no un número de elementos por longitud de onda, y la respuesta
+útil no es «bajá el ppw» sino bajarlo y decirlo.
+
+Ahora el tope es **150 000 nodos** (el solve corre en la cola; ~93 000 medidos son ~10 s) y si aún no
+entra, se **baja el ppw automáticamente** y se devuelve `aviso_malla` con el valor original y el efectivo,
+que la UI escribe en la línea de estado. Sólo falla si ni con 4 elementos por λ entra, y ahí el mensaje
+dice qué bajar.
+
+Medido: **620 kHz → 58 311 nodos, 3.22 s**, sin error. 800 kHz → 102 087 nodos, también entra.
+
+### 3. El corte axial salía vacío (bug de medición, otra vez)
+
+Al medir «en el eje» con una banda de **media celda**, cuando el eje cae justo entre dos filas de nodos
+(`|y|min = h/2` exacto) la selección quedaba vacía y el corte salía con **0 puntos**. Es el tercer
+tropezón con lo mismo (D60 lo dejó anotado para `|y| < 1e-12`): la banda tiene que ser de **al menos una
+celda**.
