@@ -169,10 +169,13 @@ function esfPintar(r) {
 
   const resid = m.residuo_rigido === null ? '—' : m.residuo_rigido.toExponential(1);
   esf$('esfMetricas').textContent =
-    `${m.material} · ka ${m.ka.toFixed(2)} · radio ${m.radio_mm.toFixed(2)} mm · `
-    + `${m.nodos.toLocaleString('es')} nodos (${m.elementos_solidos} tets sólidos) · `
-    + `${m.segundos.toFixed(1)} s · razón de amplitudes ${m.razon_amplitudes.toFixed(3)} · `
-    + `fuerza neta no cancelada ${resid} N`;
+    `${m.material} · contraste ${m.contraste_impedancia.toFixed(2)}× · ka ${m.ka.toFixed(2)} · `
+    + `radio ${m.radio_mm.toFixed(2)} mm · ${m.nodos.toLocaleString('es')} nodos `
+    + `(${m.elementos_solidos} tets sólidos) · ${m.segundos.toFixed(1)} s · `
+    + `razón de amplitudes ${m.razon_amplitudes.toFixed(3)} · error absoluto `
+    + `${m.error_absoluto.toExponential(2)} Pa (incidente = 1 Pa) · `
+    + `fuerza neta no cancelada ${resid} N`
+    + (m.restriccion_automatica ? ' · restricción de rígidos DESACTIVADA automáticamente' : '');
 
   const sello = r.sello;
   esf$('esfSello').textContent = sello.texto;
@@ -180,12 +183,17 @@ function esfPintar(r) {
   // Los materiales de bajo contraste tienen un error de MODELO conocido (D47), no de malla: el
   // cuerpo se mueve parcialmente con el fluido y la condición de traslación media nula deja de ser
   // exacta. Se dice acá en vez de subir el umbral del criterio hasta que entre.
-  const bajoContraste = ['hueso', 'tejido (casi fluido)'].includes(m.material);
-  if (bajoContraste && sello.estado === 'fuera') {
+  if (m.contraste_impedancia < 2.5) {
     esf$('esfSello').textContent +=
-      ' OJO: con contraste bajo (impedancia ' + (m.material === 'hueso' ? '4.6' : '1.05')
-      + '× el agua) el error es de MODELO, no de malla: el cuerpo se mueve parcialmente con el '
-      + 'fluido y la condición de traslación media nula deja de ser exacta (D47). Refinar no lo baja.';
+      ` Contraste ${m.contraste_impedancia.toFixed(2)}× el agua: acá el cuerpo se mueve en parte CON`
+      + ' el fluido, la condición de traslación media nula deja de valer y se desactiva sola. El'
+      + ' error RELATIVO no es un indicador útil porque el campo dispersado es muy débil: mirá el'
+      + ' error absoluto, que es contra la incidente de 1 Pa.';
+  } else if (m.material === 'hueso' && sello.estado === 'fuera') {
+    esf$('esfSello').textContent +=
+      ' OJO: el hueso (contraste 4.6×) tiene un error de MODELO, no de malla: con contraste'
+      + ' moderado el cuerpo se mueve parcialmente con el fluido y la restricción deja de ser'
+      + ' exacta (D47). Refinar no lo baja.';
   }
   if (m.modo === 'rapida' && sello.estado === 'fuera') {
     esf$('esfSello').textContent +=

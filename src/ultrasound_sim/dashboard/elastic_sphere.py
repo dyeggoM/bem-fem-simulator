@@ -53,6 +53,16 @@ MATERIALES = {
 
 _LIMITES = {"frecuencia_hz": (20e3, 400e3), "ka": (0.3, 3.0), "puntos_angulo": (12, 361)}
 
+#: Debajo de este contraste de impedancia (`ρ·c_p` del sólido sobre `ρ·c` del agua) la restricción de
+#: traslación media nula deja de valer. Medido: 4.55 (hueso) da 13 %, 1.08 (tejido) da **5264 %** con
+#: la restricción y 23 % sin ella. El corte en 2.5 sale de esos dos puntos, no de una fórmula.
+CONTRASTE_MINIMO = 2.5
+
+#: Debajo de este `|p_s|` máximo (relativo a la incidente, que vale 1) el error *relativo* deja de ser
+#: un indicador útil: el denominador se achica pero el error absoluto no. Ahí el sello pasa a
+#: `sin_referencia` y se informa el error absoluto, en vez de reportar "23 %" de algo que vale 1/50.
+AMPLITUD_MINIMA = 0.05
+
 
 def _frecuencia(datos: dict) -> float:
     f = float(datos.get("frecuencia_hz", 100e3))
@@ -128,6 +138,7 @@ def resolver(datos: dict, trabajo=None) -> dict[str, Any]:
     nombre_material = str(datos.get("material", "acero"))
     prop = _material(datos)
     fijar = bool(datos.get("fijar_rigidos", True))
+    automatico = False
 
     agua = WATER
     k0 = abs(complex(agua.wavenumber(f)))
@@ -136,6 +147,16 @@ def resolver(datos: dict, trabajo=None) -> dict[str, Any]:
         name=nombre_material, rho=prop["rho"], c_p=prop["c_p"], c_s=prop["c_s"],
         provenance=f"benchmark de la UI (U7): {nombre_material}",
     )
+
+    # La restricción de traslación media nula supone que la onda plana no ejerce fuerza neta sobre
+    # el cuerpo, y eso vale para un cuerpo que dispersa de verdad. Con contraste bajo el cuerpo se
+    # mueve parcialmente CON el fluido y la suposición se rompe: medido, con impedancia 1.08× el agua
+    # el campo sale **53×** el exacto (5264 % de error) con la restricción, y 1.13× sin ella (23 %).
+    # Se desactiva sola y se informa, en vez de dejar que el usuario pida un número que no existe.
+    contraste = (prop["rho"] * prop["c_p"]) / (agua.rho * float(agua.c))
+    if fijar and contraste < CONTRASTE_MINIMO:
+        fijar = False
+        automatico = True
 
     paso(0.05, f"malla: esfera de {radio*1e3:.2f} mm, dominio {modo['b_rel']:g}·a")
     mall = sphere_shell_tet_mesh(radio, modo["b_rel"] * radio, radio / modo["h_rel"])
@@ -159,18 +180,26 @@ def resolver(datos: dict, trabajo=None) -> dict[str, Any]:
     util = np.abs(exacto) > 1e-3 * np.abs(exacto).max()
     error = float(np.abs(fem[util] - exacto[util]).max() / np.abs(exacto[util]).max())
     razon = float(np.abs(fem).max() / np.abs(exacto).max())
+    # error absoluto, con la incidente (1 Pa) como escala: es el que sigue teniendo sentido cuando el
+    # campo dispersado es muy débil
+    error_abs = float(np.abs(fem[util] - exacto[util]).max())
 
     paso(0.9, "campo en el plano de propagación")
     mapa = _mapa_plano(mall, res["p_s"], modo["b_rel"] * radio, radio)
 
     # `sello_conjunto` y no `sello`: la UI espera la forma con la lista de criterios, igual que el
-    # resto de las vistas (una sola forma para todos los sellos, D39)
-    sello = validacion.sello_conjunto({"volumen_esfera_elastica": error})
+    # resto de las vistas (una sola forma para todos los sellos, D39).
+    # Si el campo dispersado es tan débil que el error relativo no dice nada, se pasa None: el
+    # registro lo convierte en `sin_referencia`, que es el estado honesto (no un aprobado por omisión).
+    medido = error if np.abs(exacto).max() >= AMPLITUD_MINIMA else None
+    sello = validacion.sello_conjunto({"volumen_esfera_elastica": medido})
 
     return {
         "ok": True,
         "metrica": {
-            "error_relativo": error, "razon_amplitudes": razon, "ka": float(coef["ka"]),
+            "error_relativo": error, "error_absoluto": error_abs, "razon_amplitudes": razon,
+            "ka": float(coef["ka"]), "contraste_impedancia": contraste,
+            "restriccion_automatica": automatico,
             "radio_mm": radio * 1e3, "frecuencia_hz": f, "material": nombre_material,
             "n_puntos": int(util.sum()), "nodos": mall.n_nodes,
             "elementos_solidos": int(len(mall.tets_solid)),

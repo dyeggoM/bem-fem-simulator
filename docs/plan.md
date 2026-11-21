@@ -373,6 +373,11 @@ agrega a la librería con su criterio, después se enchufa.
   nula deja de ser exacta. Apagar la restricción lo empeora a 54.6 %, o sea que sigue siendo
   imprescindible. El sello lo marca `fuera` con el número y la fuente: **no se subió el umbral para
   que la tabla se viera verde**.
+  *Con tejido casi fluido (contraste 1.08) la restricción se rompe del todo*: el campo salía **53×**
+  el exacto. Ahí la restricción **se desactiva sola** (umbral de contraste 2.5, medido) y el sello
+  pasa a **`sin_referencia`**, porque con un campo dispersado del orden del 2 % de la incidente el
+  error *relativo* no indica nada: se muestra el **error absoluto** contra la incidente
+  (7.2e-3 Pa sobre 1 Pa).
   *Lo que lo arreglaría*: formular el sólido también en campo dispersado (`u_s = u − u_i`), con el
   operador completo aplicado a la incidente (misma disciplina que D41). No está hecho.
 - **U6 — Trazabilidad. ENTREGADA.** `dashboard/validacion.py` con un registro de *10 criterios*, cada

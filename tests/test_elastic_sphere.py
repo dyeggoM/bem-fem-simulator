@@ -109,3 +109,47 @@ def test_el_residuo_de_fuerza_se_reporta(corrida_rapida):
     residuo = corrida_rapida["metrica"]["residuo_rigido"]
     print(f"\n  |residuo rígido| = {residuo:.2e} N")
     assert residuo is not None and residuo < 1e-4
+
+# --------------------------------------------------------------------------- contraste bajo
+
+
+def test_el_contraste_bajo_desactiva_la_restriccion_solo():
+    """Con contraste bajo la suposición de la restricción (fuerza neta nula) deja de valer.
+
+    Medido: con impedancia 1.08× el agua, el campo sale **53×** el exacto con la restricción puesta y
+    1.27× sin ella. Dejarla activa porque "es lo recomendado" sería entregar un número que no existe.
+    """
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        r = elastic_sphere.resolver(
+            {"modo": "rapida", "ka": 1.0, "material": "tejido (casi fluido)", "puntos_angulo": 31,
+             "fijar_rigidos": True}
+        )
+    m = r["metrica"]
+    print(f"\n  contraste {m['contraste_impedancia']:.2f} · desactivada sola "
+          f"{m['restriccion_automatica']} · razón de amplitudes {m['razon_amplitudes']:.2f}")
+    assert m["contraste_impedancia"] < elastic_sphere.CONTRASTE_MINIMO
+    assert m["restriccion_automatica"] is True
+    assert m["fijar_rigidos"] is False
+    # sin la restricción el campo queda del orden del exacto, no 53×
+    assert m["razon_amplitudes"] < 3.0
+
+
+def test_un_campo_dispersado_debil_no_se_sella_por_su_error_relativo():
+    """Cuando `|p_s|` es una fracción chica de la incidente, el error *relativo* explota por el
+    denominador aunque el error absoluto sea bueno. Ahí el estado honesto es `sin_referencia`, con el
+    error absoluto a la vista — no un `fuera` sobre un 23 % de algo que vale 1/50."""
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        r = elastic_sphere.resolver(
+            {"modo": "rapida", "ka": 1.0, "material": "tejido (casi fluido)", "puntos_angulo": 31}
+        )
+    m = r["metrica"]
+    print(f"\n  error relativo {100*m['error_relativo']:.1f} % · absoluto {m['error_absoluto']:.2e} Pa "
+          f"· sello {r['sello']['estado']}")
+    assert r["sello"]["estado"] == "sin_referencia"
+    assert m["error_absoluto"] < 0.05          # menos del 5 % de la incidente (1 Pa)

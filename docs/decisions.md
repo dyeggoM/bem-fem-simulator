@@ -1708,3 +1708,37 @@ hasta que pasa deja de ser un criterio.
 - **Interpolación para el mapa.** Probar los 8 672 tetraedros por cada uno de los 6 561 puntos del
   mapa tardaba **15.1 s** (el solve son 1.8 s). Con un KD-tree y 32 vecinos baja a **1.08 s**, y se
   verificó que da exactamente lo mismo que la búsqueda exhaustiva.
+
+### D47 — apéndice: el tejido casi fluido y la restricción que no se puede imponer
+
+El barrido por material que se había lanzado dejó un número que no se podía publicar así: con
+**tejido casi fluido** (`c_s = 30 m/s`, contraste de impedancia **1.08×** el agua) el campo dispersado
+sale **53×** el exacto — **5264 %** de error. No es un problema de malla: es la restricción de
+traslación media nula, que **supone que la onda plana no ejerce fuerza neta**, y con contraste bajo el
+cuerpo se mueve parcialmente **con** el fluido y la suposición se rompe. Sin la restricción, el mismo
+caso da razón **1.13×** y error absoluto **7.2e-3 Pa** sobre una incidente de 1 Pa.
+
+**Lo que se hizo, en vez de subir el umbral:**
+
+1. **La restricción se desactiva sola** por debajo de un contraste de impedancia de **2.5**, y se
+   informa (`restriccion_automatica`). El corte sale de dos puntos medidos: 4.55 (hueso) da 15 % con
+   la restricción y 1.08 (tejido) da 5264 %; no de una fórmula.
+2. **El sello deja de usar el error relativo cuando el campo es débil.** Si `|p_s|` máximo no llega al
+   5 % de la incidente, el denominador se achica pero el error absoluto no, y "23 % de error" pasa a
+   ser un número sin sentido que además asusta. En ese régimen el sello va a **`sin_referencia`** y se
+   muestra el **error absoluto** contra la incidente.
+3. **La UI lo dice en la ficha**: contraste, si la restricción se desactivó sola y por qué, y el error
+   absoluto con su escala.
+
+**Tabla completa, `ka = 1`, dominio 4a, `h = a/4.5`, 21 398 nodos:**
+
+- acero (contraste 30.7): **4.29 %** — validado, es el caso del criterio
+- aluminio (11.4): **3.99 %**
+- tungsteno (66.9): **4.71 %**
+- hueso (4.6): **13.16 %** — error de modelo por contraste moderado
+- tejido casi fluido (1.08): con restricción **5264 %**; sin restricción, error absoluto *7.2e-3 Pa*
+
+**La lección, que es la misma de siempre en este proyecto:** el criterio no se ajusta para que la
+tabla quede verde. Un material que la formulación no sabe representar se marca, se explica y se
+desactiva lo que corresponde — y el arreglo de fondo sigue siendo el mismo: formular el sólido en
+campo dispersado, donde el caso transparente da exactamente cero **sin** necesidad de restringir nada.
