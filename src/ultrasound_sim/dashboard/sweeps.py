@@ -245,6 +245,109 @@ def barrido_frecuencia(trabajo, **datos: Any) -> dict[str, Any]:
 # resonancias de media onda, f_n = n·c_losa/(2t). Con hueso como fluido (c = 3500 m/s) y t = 10 mm
 # eso da 175, 350, 525 kHz… Si el barrido no los encuentra, hay un error de espesor, de c o de fase.
 
+def barrido_apertura(datos: dict, trabajo=None) -> dict[str, Any]:
+    """FWHM lateral contra el paso entre elementos: la pregunta de diseño del proyecto.
+
+    Con la apertura total fija (`d`), variar la cantidad de elementos `n` es variar el **pitch**
+    (`d/n`). Es la variable que D25/D26 identifican como la que manda: para empatar con una apertura
+    continua dentro del ~2 % hace falta `pitch ≤ λ/4`, y lo que pesa es la cantidad de elementos, no
+    el ancho de cada uno.
+
+    Se resuelve un campo por punto (no un barrido de frecuencia): cada punto es un mapa de verdad, así
+    que 10 puntos son ~10 s con la grilla de la vista.
+    """
+    # import local: `server` importa este módulo, así que a nivel de módulo sería un ciclo
+    from . import server
+
+    material = str(datos.get("material", "agua"))
+    f_khz = float(datos.get("frecuencia_khz", 250.0))
+    apertura_mm = float(datos.get("apertura_mm", 60.0))
+    foco_mm = float(datos.get("foco_mm", 90.0))
+    modelo = str(datos.get("modelo", "baffle"))
+    desde = int(datos.get("desde", 8))
+    hasta = int(datos.get("hasta", 64))
+    puntos = int(datos.get("puntos", 7))
+    if not 2 <= desde < hasta <= 512:
+        raise ValueError(f"pide 2 <= desde < hasta <= 512; llegó {desde}, {hasta}")
+    if not 2 <= puntos <= 15:
+        raise ValueError(f"puntos tiene que estar en [2, 15]: {puntos}")
+    if not 5.0 <= apertura_mm <= 200.0:
+        raise ValueError(f"apertura_mm fuera de [5, 200]: {apertura_mm}")
+
+    valores = sorted({int(round(v)) for v in np.linspace(desde, hasta, puntos)})
+
+    def un_punto(n: int) -> dict[str, Any]:
+        d_m = apertura_mm * 1e-3
+        # los nombres son los del endpoint (`n_elements`, `aperture_mm`, `focus_x_mm`): usar `n` y `d`
+        # no fallaba, simplemente se ignoraba y el barrido devolvía el MISMO campo en todos los
+        # puntos (FWHM 9.12 mm con 8 y con 64 elementos, sidelobe -9.24 dB idéntico). Un barrido que
+        # no barre es peor que no tenerlo, porque parece un resultado.
+        r = server.calcular({
+            "material": material, "modelo": modelo, "frequency_khz": f_khz,
+            "n_elements": n, "aperture_mm": apertura_mm,
+            "focus_x_mm": foco_mm, "focus_y_mm": 0.0,
+            "grid": {"x0": 0.005, "x1": 0.001 * (foco_mm * 2.2), "y0": -0.001 * apertura_mm * 0.9,
+                     "y1": 0.001 * apertura_mm * 0.9, "nx": 120, "ny": 120},
+        })
+        m = r["metrics"]
+        pitch = d_m / n
+        lam = 1500.0 / (f_khz * 1e3)      # λ en agua: el criterio se mide siempre contra el agua
+        return {
+            "n": n, "pitch_mm": pitch * 1e3, "pitch_over_lambda": pitch / lam,
+            "fwhm_lateral_mm": m.get("fwhm_lateral_mm"),
+            "fwhm_over_lambda": (m.get("fwhm_lateral_mm") / 1e3 / lam) if m.get("fwhm_lateral_mm") else None,
+            "sidelobe_db": m.get("sidelobe_db"), "grating_deg": m.get("grating_deg"),
+            "peak_x_mm": m.get("peak_x_mm"), "segundos": r["meta"]["seconds"],
+        }
+
+    filas = []
+    for i, n in enumerate(valores):
+        if trabajo is not None and trabajo.cancelado():
+            raise RuntimeError("cancelado por el usuario")
+        if trabajo is not None:
+            trabajo.avanzar(i / (len(valores) + 1), f"n = {n} elementos (pitch {apertura_mm/n:.2f} mm)")
+        filas.append(un_punto(n))
+
+    # referencia cuasi-continua: mismo ancho, muchos elementos. Es el "empata con continuo" de D25.
+    if trabajo is not None:
+        trabajo.avanzar(len(valores) / (len(valores) + 1), "apertura cuasi-continua de referencia")
+    ref = un_punto(400)
+
+    peor = None
+    if ref.get("fwhm_lateral_mm"):
+        for f in filas:
+            if f.get("fwhm_lateral_mm"):
+                f["desvio_vs_continuo"] = abs(f["fwhm_lateral_mm"] - ref["fwhm_lateral_mm"]) / ref["fwhm_lateral_mm"]
+                if peor is None or f["desvio_vs_continuo"] > peor["desvio_vs_continuo"]:
+                    peor = f
+
+    return {
+        "ok": True,
+        "barrido": {
+            "material": material, "frecuencia_khz": f_khz, "apertura_mm": apertura_mm,
+            "foco_mm": foco_mm, "modelo": modelo,
+            "n": [f["n"] for f in filas],
+            "pitch_mm": [f["pitch_mm"] for f in filas],
+            "pitch_over_lambda": [f["pitch_over_lambda"] for f in filas],
+            "fwhm_lateral_mm": [f["fwhm_lateral_mm"] for f in filas],
+            "desvio_vs_continuo": [f.get("desvio_vs_continuo") for f in filas],
+            "sidelobe_db": [f["sidelobe_db"] for f in filas],
+            "grating_deg": [f["grating_deg"] for f in filas],
+        },
+        "filas": filas,
+        "referencia_continua": ref,
+        "resumen": {
+            "n_puntos": len(filas),
+            "peor_desvio": None if peor is None else float(peor["desvio_vs_continuo"]),
+            "peor_n": None if peor is None else int(peor["n"]),
+            "pitch_con_2pct": next((f["pitch_over_lambda"] for f in filas
+                                    if f.get("desvio_vs_continuo") is not None
+                                    and f["desvio_vs_continuo"] <= 0.02), None),
+            "segundos_totales": float(sum(f["segundos"] for f in filas) + ref["segundos"]),
+        },
+    }
+
+
 def _frecuencias(desde: float, hasta: float, puntos: int) -> np.ndarray:
     if not (20.0e3 <= desde < hasta <= 1.0e6):
         raise ValueError(f"banda inválida: {desde:g}–{hasta:g} Hz")

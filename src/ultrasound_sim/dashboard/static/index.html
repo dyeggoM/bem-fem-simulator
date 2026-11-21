@@ -385,6 +385,30 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
 
     <div id="vistaBarridos" hidden>
       <section>
+        <label>Barrido de apertura (FWHM contra pitch)
+          <span class="tip" title="Con el ancho de apertura fijo, variar la cantidad de elementos es variar el paso entre elementos. Es la variable que manda (D25/D26): para empatar con una apertura continua dentro del ~2 % hace falta pitch ≤ λ/4. Cada punto es un campo de verdad (~1 s).">
+?</span>
+        </label>
+        <div class="fila-botones">
+          <label class="mini-campo">n desde <input type="number" id="barApDesde" value="8" min="2" max="512" step="1"></label>
+          <label class="mini-campo">n hasta <input type="number" id="barApHasta" value="64" min="3" max="512" step="1"></label>
+          <label class="mini-campo">puntos <input type="number" id="barApPuntos" value="7" min="2" max="15" step="1"></label>
+        </div>
+        <div class="fila-botones">
+          <label class="mini-campo">apertura mm <input type="number" id="barApApertura" value="60" min="5" max="200" step="5"></label>
+          <label class="mini-campo">foco mm <input type="number" id="barApFoco" value="90" min="10" max="400" step="10"></label>
+          <label class="mini-campo">kHz <input type="number" id="barApFreq" value="250" min="20" max="1000" step="10"></label>
+        </div>
+        <div class="fila-botones">
+          <button class="btn mini" id="btnBarApertura">barrer apertura</button>
+          <button class="btn mini" id="btnBarAperturaCancelar" disabled>cancelar</button>
+        </div>
+        <div class="progreso"><div class="progreso-barra" id="barApProgreso"></div></div>
+        <p class="pie" id="barApEstado">sin lanzar</p>
+        <p class="hint" id="barApResumen"></p>
+      </section>
+
+      <section>
         <label>Barridos en cola</label>
         <p class="hint">Las corridas largas van a una cola con progreso y cancelación: un barrido
         son decenas de solves y no puede dejar el navegador colgado.</p>
@@ -652,6 +676,7 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
     </div>
     <div class="cortes">
       <div id="barrasBarrido" class="corte ancho"></div>
+      <div id="graficoApertura" class="corte ancho"></div>
     </div>
   </main>
 

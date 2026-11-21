@@ -166,7 +166,141 @@ function barPintar(r, segundos) {
   });
 }
 
+/* ------------------------------------------------ barrido de apertura (FWHM contra pitch) */
+
+async function barApertura() {
+  // `.value` y no el elemento: `parseInt(<input>, 10)` devuelve NaN, el JSON lo manda como null y el
+  // servidor muere con "float() argument must be ... not 'NoneType'".
+  const valor = (id) => esfBarId(id).value;
+  const cuerpo = {
+    desde: parseInt(valor('barApDesde'), 10),
+    hasta: parseInt(valor('barApHasta'), 10),
+    puntos: parseInt(valor('barApPuntos'), 10),
+    apertura_mm: parseFloat(valor('barApApertura')),
+    foco_mm: parseFloat(valor('barApFoco')),
+    frecuencia_khz: parseFloat(valor('barApFreq')),
+    material: 'agua', modelo: 'baffle',
+  };
+  bar$('btnBarApertura').disabled = true;
+  bar$('btnBarAperturaCancelar').disabled = false;
+  bar$('barApProgreso').style.width = '0%';
+  bar$('barApEstado').textContent = 'encolando…';
+  bar$('barApResumen').textContent = '';
+  try {
+    const r = await barPostJson('/api/jobs/barrido_apertura', cuerpo);
+    BAR.apJob = r.job.id;
+    barAperturaSeguir();
+  } catch (e) {
+    bar$('barApEstado').textContent = `no se pudo lanzar: ${e.message}`;
+    bar$('btnBarApertura').disabled = false;
+    bar$('btnBarAperturaCancelar').disabled = true;
+  }
+}
+
+function esfBarId(id) { return document.getElementById(id); }
+
+async function barPostJson(ruta, cuerpo) {
+  const r = await fetch(ruta, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(cuerpo),
+  }).then((x) => x.json());
+  if (!r.ok) throw new Error(r.error || 'no se pudo encolar');
+  return r;
+}
+
+async function barAperturaCancelar() {
+  if (!BAR.apJob) return;
+  bar$('btnBarAperturaCancelar').disabled = true;
+  await fetch(`/api/jobs/${BAR.apJob}/cancel`, { method: 'POST' });
+}
+
+function barAperturaSeguir() {
+  clearInterval(BAR.apTimer);
+  BAR.apTimer = setInterval(async () => {
+    try {
+      const j = await barGet(`/api/jobs/${BAR.apJob}`);
+      bar$('barApProgreso').style.width = `${Math.round(100 * j.progreso)}%`;
+      bar$('barApEstado').textContent = `${j.estado} · ${Math.round(100 * j.progreso)} % · ${j.mensaje}`;
+      if (j.estado === 'listo') {
+        clearInterval(BAR.apTimer);
+        barPintarApertura(j.resultado);
+        bar$('btnBarApertura').disabled = false;
+        bar$('btnBarAperturaCancelar').disabled = true;
+      } else if (j.estado === 'error' || j.estado === 'cancelado') {
+        clearInterval(BAR.apTimer);
+        bar$('barApEstado').textContent = j.estado === 'error' ? `error: ${j.error}` : 'cancelado';
+        bar$('btnBarApertura').disabled = false;
+        bar$('btnBarAperturaCancelar').disabled = true;
+      }
+    } catch (e) {
+      clearInterval(BAR.apTimer);
+      bar$('barApEstado').textContent = `se cortó el seguimiento: ${e.message}`;
+      bar$('btnBarApertura').disabled = false;
+      bar$('btnBarAperturaCancelar').disabled = true;
+    }
+  }, 600);
+}
+
+function barPintarApertura(r) {
+  const b = r.barrido;
+  const ref = r.referencia_continua;
+  const cuatro = b.pitch_over_lambda.map((x) => x * 4);
+  Plotly.react('graficoApertura', [
+    {
+      type: 'scatter', mode: 'lines+markers', name: 'FWHM lateral (mm)',
+      x: b.pitch_over_lambda, y: b.fwhm_lateral_mm,
+      line: { color: '#58a6ff', width: 1.8 }, marker: { size: 7 },
+      hovertemplate: 'pitch %{x:.3f} λ<br>FWHM %{y:.2f} mm<extra></extra>',
+    },
+    {
+      type: 'scatter', mode: 'lines', name: 'apertura continua (referencia)',
+      x: b.pitch_over_lambda, y: b.pitch_over_lambda.map(() => ref.fwhm_lateral_mm),
+      line: { color: '#3fb950', width: 1.2, dash: 'dash' }, hoverinfo: 'skip',
+    },
+  ], {
+    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { color: '#8b95a1', size: 9 }, margin: { l: 52, r: 12, t: 28, b: 40 },
+    title: {
+      text: `${b.apertura_mm} mm de apertura · foco ${b.foco_mm} mm · ${b.frecuencia_khz} kHz`
+        + ' (verde punteado: apertura continua)',
+      font: { size: 10, color: '#8b95a1' },
+    },
+    xaxis: { title: { text: 'pitch / λ' } },
+    yaxis: { title: { text: 'FWHM lateral (mm)' } },
+    legend: { orientation: 'h', y: 1.2, font: { size: 9 } },
+    shapes: [{
+      type: 'line', xref: 'paper', x0: 0, x1: 1, y0: 0, y1: 0, opacity: 0,
+    }],
+  });
+
+  const s = r.resumen;
+  bar$('barApEstado').textContent = 'listo';
+  bar$('barApResumen').textContent =
+    `referencia continua: FWHM ${ref.fwhm_lateral_mm.toFixed(2)} mm · `
+    + (s.pitch_con_2pct === null
+      ? 'ningún pitch de este rango empata dentro del 2 % (usá más elementos)'
+      : `el pitch más grueso dentro del 2 % es ${s.pitch_con_2pct.toFixed(3)} λ `
+        + `(${(s.pitch_con_2pct / 0.25).toFixed(2)}× λ/4, que es el criterio de D25)`)
+    + ` · peor desvío ${(100 * s.peor_desvio).toFixed(1)} % con n = ${s.peor_n}`
+    + ` · ${s.segundos_totales.toFixed(0)} s`;
+  window.vistaGuardar('barrido_apertura', r);
+}
+
 function barIniciar() {
+  // listeners del barrido de apertura (idempotente: `barIniciar` se llama en cada cambio de vista)
+  const ba = bar$('btnBarApertura');
+  if (ba && !ba.dataset.listo) {
+    ba.dataset.listo = '1';
+    ba.addEventListener('click', barApertura);
+    bar$('btnBarAperturaCancelar').addEventListener('click', barAperturaCancelar);
+    const previoAp = window.vistaCargar('barrido_apertura');
+    if (previoAp) {
+      try {
+        barPintarApertura(previoAp.resultado);
+        bar$('barApEstado').textContent =
+          'restaurado de ' + new Date(previoAp.fecha).toLocaleString('es');
+      } catch (e) { console.warn('no se pudo restaurar el barrido de apertura:', e && e.message); }
+    }
+  }
   const previo = window.vistaCargar('barridos');
   if (previo && !BAR.resultado && previo.resultado && previo.resultado.resultado) {
     try {

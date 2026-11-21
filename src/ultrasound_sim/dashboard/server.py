@@ -295,7 +295,7 @@ class Handler(BaseHTTPRequestHandler):
                         "/api/cochlea/field", "/api/cochlea/field/cost",
                         "/api/jobs/sensibilidad", "/api/jobs/q_coclea",
                         "/api/jobs/barrido_escena", "/api/jobs/esfera",
-                        "/api/jobs/esfera_barrido",
+                        "/api/jobs/esfera_barrido", "/api/jobs/barrido_apertura",
                         "/api/volume3d/cost", "/api/volume3d/solve"):
             self._error("no encontrado", HTTPStatus.NOT_FOUND)
             return
@@ -328,6 +328,14 @@ class Handler(BaseHTTPRequestHandler):
                 respuesta = volume3d.estimar_volumen(cuerpo)
             elif ruta == "/api/volume3d/solve":
                 respuesta = volume3d.resolver_volumen(cuerpo)
+            elif ruta == "/api/jobs/barrido_apertura":
+                trabajo = jobs.COLA.enviar(
+                    "barrido_apertura",
+                    f"barrido de apertura ({cuerpo.get('desde', 8)}-{cuerpo.get('hasta', 64)} "
+                    f"elementos)",
+                    _barrido_apertura_job, cuerpo,
+                )
+                respuesta = {"ok": True, "job": trabajo.a_dict()}
             elif ruta == "/api/jobs/esfera_barrido":
                 trabajo = jobs.COLA.enviar(
                     "esfera_barrido",
@@ -392,6 +400,13 @@ def _esfera_job(trabajo, datos):
     """Adaptador para la cola: `jobs` llama `fn(trabajo, *args)` y `resolver` espera
     `(datos, trabajo)`. Sin esto el job recibe su propio objeto como si fuera el pedido."""
     return elastic_sphere.resolver(datos, trabajo)
+
+
+def _barrido_apertura_job(trabajo, datos):
+    """Adaptador de la cola: `jobs` llama `fn(trabajo, datos)` y el barrido espera `(datos, trabajo)`.
+    Sin esto el barrido recibe el objeto `Trabajo` como si fuera el pedido y muere con
+    `'Trabajo' object has no attribute 'get'`."""
+    return sweeps.barrido_apertura(datos, trabajo)
 
 
 def _esfera_barrido_job(trabajo, datos):
