@@ -377,3 +377,13 @@ body.tour-abierto .app { filter: none; }
   text-transform: uppercase; letter-spacing: .04em; background: rgba(210, 153, 34, .16);
   color: #d29922; vertical-align: middle;
 }
+
+
+/* La tabla de fuentes con 32 elementos mide ~900 px: más alta que la ventana. En vez de arrastrar
+   todo el panel para llegar a la fuente 30, la tabla scrollea sola y el encabezado queda fijo. */
+.tabla-scroll { max-height: 232px; overflow-y: auto; overflow-x: hidden; border: 1px solid var(--linea);
+  border-radius: 6px; }
+.tabla-scroll .fuentes { margin: 0; }
+.tabla-scroll thead th { position: sticky; top: 0; z-index: 1; background: #161b22; }
+.cuenta-fuentes { font-size: 10px; color: var(--dim); margin: 0 0 4px; }
+.cuenta-fuentes b { color: var(--texto); font-weight: 600; }

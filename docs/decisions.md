@@ -2232,6 +2232,34 @@ lo expone**: la pestaña se muestra **deshabilitada y con la etiqueta «en desar
 dice exactamente qué falta. Mostrarla como si funcionara sería el peor de los tres caminos (esconderla
 hace creer que no existe; mostrarla hace creer que funciona).
 
-**Siguiente paso concreto**: escribir el problema radiante **como tal** (sin `p_inc`), con un ensamblado
-propio en vez de reusar el del dispersor, y validarlo primero contra la Hankel de un monopolo —el mismo
-test que ya pasa el BEM— antes de intentar con las 32 fuentes.
+### Intento con el problema radiante — tampoco cierra
+
+Se reescribió el ensamblado como problema **radiante**, que era el sospechoso nº1: `assemble(...,
+p_inc=None)` da `A` y `b = 0` y deja el baffle como Neumann natural, y el dato de las fuentes entra sólo
+en el lado derecho con
+
+    b[nodo] += (1/ρ)·g·L/2 ,   g = ∂p/∂n = +i·ω·ρ·v
+
+de modo que `(1/ρ)·g = i·ω·v` y el dato no depende de ρ. Nada de `solve_scattered`.
+
+Medido con el arreglo de 16 fuentes (60 mm, foco 90 mm, 250 kHz, ppw 8, 32 148 nodos):
+el error máximo es **170.8 %**, el L2 **123.3 %** y la razón de amplitudes **0.986**. La amplitud ya
+está bien, la fase no. Pero el cociente complejo punto a punto **no es constante**: va de **0.11 a 9.61**
+en módulo con **61° de dispersión** de fase. Eso descarta la hipótesis de convención —una convención da
+un cociente constante— y deja el problema en el campo mismo.
+
+Quedan dos sospechosos, y los dos son de discretización, no de formulación:
+
+1. El **ABC de orden 1** en un contorno rectangular abierto por el baffle. No se aisló su error: habría
+   que medir el mismo problema con dominio creciente y ver si el error baja como 1/(kR).
+2. La **malla no resuelve el ancho de cada fuente** en el sentido correcto: con ppw 8 cada elemento de
+   3.75 mm son 5 aristas, pero el dato se aplica con regla del punto medio sobre aristas, así que la
+   velocidad queda muestreada en 5 saltos y eso inyecta armónicos espaciales cerca del baffle.
+
+El test que hay que hacer antes de tocar nada más es el del **monopolo en dominio circular con ABC de
+orden 2**, donde el contorno sí es cerrado y el ABC está validado en otros tests del repo. Si ahí el FEM
+reproduce `H₀(k·r)`, el ensamblado radiante está bien y el problema es el contorno abierto. Si no,
+el problema está en cómo se arma el dato.
+
+**Estado**: `fuentes_fem.py` tiene el ensamblado radiante (mejor que el anterior, que reusaba el
+dispersor) y la UI sigue sin exponerlo. D54 abre con esto, no con una promesa.
