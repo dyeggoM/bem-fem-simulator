@@ -175,3 +175,61 @@ def test_validacion_de_argumentos():
         faran.coeficientes(F, AGUA, ACERO, -1e-3)
     with pytest.raises(TypeError):
         faran.coeficientes(F, AGUA, AGUA, 1e-3)   # la esfera tiene que ser ElasticSolid
+
+# --------------------------------------------------------------------------- campo interior
+
+
+def test_el_campo_interior_cumple_la_condicion_de_continuidad():
+    """Validación del desplazamiento **dentro** del sólido contra la condición de borde.
+
+    `campo_interior` se valida contra lo que ya está validado: en `r = a` la componente radial tiene
+    que igualar a la del fluido, `(1/(ρ₀ω²))·∂p/∂r`. Si los potenciales interiores estuvieran mal
+    escalados —o con un orden de Bessel corrido— esto no cierra.
+
+    Hace falta porque en el eje `Pₙ(1) = 1` y `dPₙ/dθ = 0`: mirar sólo ahí **esconde todos los
+    órdenes `n ≥ 1`**, que es justo donde aparece la deformación frente a la traslación.
+    """
+    a = _radio(1.0)
+    coef = faran.coeficientes(F, AGUA, ACERO, a)
+    k0 = coef["k0"]
+    omega = 2 * np.pi * F
+    th = np.radians(np.array([20.0, 50.0, 90.0, 130.0, 160.0]))
+    dirs = np.stack([np.sin(th), np.zeros_like(th), np.cos(th)], axis=1)
+
+    def punto(rr):
+        return rr * a * dirs
+
+    u = faran.campo_interior(coef, punto(1.0))
+    u_r_solido = np.einsum("ij,ij->i", u, dirs)
+
+    dr = 1e-6 * a
+    p_abajo = faran.campo_dispersado(coef, punto(1 - 1e-6), a) + np.exp(1j * k0 * punto(1 - 1e-6)[:, 2])
+    p_arriba = faran.campo_dispersado(coef, punto(1 + 1e-6), a) + np.exp(1j * k0 * punto(1 + 1e-6)[:, 2])
+    u_r_fluido = (p_arriba - p_abajo) / (2 * dr) / (AGUA.rho * omega**2)
+
+    razon = np.abs(u_r_solido / u_r_fluido)
+    print(f"\n  razón u_r(sólido)/u_r(fluido) en r=a: {np.round(razon, 6)}")
+    assert np.allclose(razon, 1.0, atol=1e-4)
+
+
+def test_el_interior_tiene_deformacion_y_no_solo_traslacion():
+    """El campo interior de un sólido elástico no puede ser un movimiento de cuerpo rígido: si
+    quitando la parte rígida queda ~0, los potenciales P y S no están entrando."""
+    a = _radio(1.0)
+    coef = faran.coeficientes(F, AGUA, ACERO, a)
+    th = np.radians(np.array([30.0, 60.0, 90.0, 120.0, 150.0]))
+    pts = np.stack([(0.7 * a) * np.sin(th), np.zeros_like(th), (0.7 * a) * np.cos(th)], axis=1)
+    u = faran.campo_interior(coef, pts)
+
+    x = pts - pts.mean(axis=0)
+    R = np.zeros((3 * len(pts), 6))
+    for k in range(3):
+        R[k::3, k] = 1.0
+    R[1::3, 3], R[2::3, 3] = -x[:, 2], x[:, 1]
+    R[0::3, 4], R[2::3, 4] = x[:, 2], -x[:, 0]
+    R[0::3, 5], R[1::3, 5] = -x[:, 1], x[:, 0]
+    coef_r, *_ = np.linalg.lstsq(R, u.reshape(-1), rcond=None)
+    deformacion = np.abs(u - (R @ coef_r).reshape(-1, 3)).mean()
+    print(f"\n  |u| medio {np.abs(u).mean():.3e} · deformación {deformacion:.3e} "
+          f"({100*deformacion/np.abs(u).mean():.0f} % del total)")
+    assert deformacion > 0.2 * np.abs(u).mean()

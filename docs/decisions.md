@@ -1525,3 +1525,43 @@ contra `Φ`/`Ψ` de Faran punto por punto (no sólo en el eje, donde `Pₙ(1) = 
 `n ≥ 1`), y con eso decidir de qué lado está la diferencia. Recién después tiene sentido refinar:
 la convergencia medida (22.4 → 19.6 → 17.5 % al pasar de h = a/3 a a/5) es **O(h)**, y un error de
 primer orden no es el que deja una formulación correcta sobre una superficie facetada.
+
+### D46 — apéndice: el 22 % queda **localizado**, no resuelto
+
+Después de la primera mitad se hizo el diagnóstico que faltaba. Los tres resultados que importan:
+
+**1. El campo interior de Faran está bien.** Se agregó `faran.campo_interior` (desplazamiento dentro
+del sólido en puntos arbitrarios) y se validó contra lo que ya estaba validado: en ``r = a`` la
+componente radial del sólido tiene que igualar a la del fluido, ``(1/ρ₀ω²)·∂p/∂r``. Da
+**1.0000 en todos los ángulos** (±1e-4). Hacía falta medirlo fuera del eje: en el eje
+``Pₙ(1) = 1`` y ``dPₙ/dθ = 0``, así que mirar sólo ahí **esconde todos los órdenes ``n ≥ 1```,
+que es donde aparece la deformación.
+
+**2. La rigidez elástica y la fuerza de acoplamiento están bien.** Test estático con respuesta
+exacta: presión uniforme sobre la esfera, ``u_r = −p·r/(3K)``. Medido **0.9994** (desvío 1.5 %), y
+0.9998 sobre la superficie. Ese test prueba a la vez ``K``, la matriz constitutiva y el término de
+fuerza ``−∫p(n·v)``. (Detalle: el problema estático es singular en los seis modos rígidos, así que
+hay que proyectarlos antes de comparar; sin eso los números salen con desvíos de 200 % que parecen
+un bug de física y son una traslación arbitraria del solver.)
+
+**3. El error está en el balance DINÁMICO, y se ve separando traslación de deformación.** En el
+interior, para acero a ``ka = 1``:
+
+- Faran: traslación **4.79e-15** m, deformación **3.86e-15** m (55 % del total).
+- FEM: traslación **5.62e-14** m (12× la de Faran), deformación **6.63e-16** m (**0.17×**).
+
+O sea: el sólido del FEM **casi no deforma** y **traslada 12 veces de más**. Ni la rigidez ni la
+estática pueden producir eso — las dos están validadas. Lo que falla es cómo se equilibran las dos
+contribuciones dinámicas en la interfaz: la fuerza del incidente ``−∫p_i(n·v)`` y la reacción
+``∫p_s(n·v)``. En una esfera rígida esas dos se cancelan exactamente (no hay traslación en una onda
+plana); si la cancelación queda desbalanceada, el residuo es una **fuerza neta** que traslada al
+sólido sin deformarlo, que es exactamente el patrón medido.
+
+**Siguiente paso, concreto y acotado.** Medir la fuerza neta en la solución del FEM:
+``F = ∫_Γ (σ·n + p·n) dS`` sobre la interfaz. Si ``F ≠ 0``, el desbalance está en los dos términos
+del acoplamiento y se arregla ahí; si ``F ≈ 0``, el problema es la *distribución* de la tracción
+(el sólido recibe una presión casi uniforme en vez de la que corresponde), y el sospechoso pasa a ser
+la proyección de ``n`` sobre los grados de libertad del sólido en ``C``.
+
+Lo que **no** hay que hacer todavía: refinar. La convergencia medida es O(h) y el error no es de
+discretización; refinar una formulación con un desbalance dinámico sólo hace más caro el mismo error.

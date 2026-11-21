@@ -319,3 +319,61 @@ def campo_dispersado(
         hankel = spherical_jn(n, k0 * r) + _I * spherical_yn(n, k0 * r)
         salida += (2 * n + 1) * (_I ** n) * cn * hankel * _leg.legval(cos_t, coef_leg)
     return salida
+
+def campo_interior(
+    coef: dict[str, Any], points, direccion=(0.0, 0.0, 1.0)
+) -> np.ndarray:
+    """Desplazamiento **dentro** del sólido, en puntos arbitrarios [m]. Forma ``(N, 3)``.
+
+    Con ``u = ∇Φ + ∇×(∇×(Ψ r̂))`` y los potenciales del módulo:
+
+        u_r = Σ (2n+1)iⁿ·[Aₙ·k_α·jₙ′(k_α r)·Pₙ + Bₙ·n(n+1)·jₙ(k_β r)·Pₙ/r²]
+        u_θ = Σ (2n+1)iⁿ·[Aₙ·jₙ(k_α r) + Bₙ·k_β·jₙ′(k_β r)]·(dPₙ/dθ)/r
+
+    Sirve para validar un solver elástico **por dentro**, no sólo por el campo dispersado: en el eje
+    ``Pₙ(1) = 1`` y ``dPₙ/dθ = 0``, así que mirar sólo ahí esconde todos los órdenes ``n ≥ 1``.
+    """
+    A = np.asarray(coef["A"])
+    B = np.asarray(coef["B"])
+    ka, kb = coef["k_alpha"], coef["k_beta"]
+    d = np.asarray(direccion, dtype=float)
+    d = d / np.linalg.norm(d)
+    x = np.atleast_2d(np.asarray(points, dtype=float))
+    r = np.linalg.norm(x, axis=1)
+    if np.any(r <= 0):
+        raise ValueError("el origen no tiene dirección: no se puede evaluar θ ahí")
+    cos_t = np.clip(x @ d / r, -1.0, 1.0)
+    sin_t = np.sqrt(np.maximum(1.0 - cos_t**2, 0.0))
+
+    ur = np.zeros(x.shape[0], dtype=complex)
+    ut = np.zeros(x.shape[0], dtype=complex)
+    for n in range(A.size):
+        coef_leg = np.zeros(n + 1)
+        coef_leg[n] = 1.0
+        P = _leg.legval(cos_t, coef_leg)
+        dP = -sin_t * _leg.legval(cos_t, _leg.legder(coef_leg))   # dPₙ/dθ
+        fac = (2 * n + 1) * (_I ** n)
+        ja = spherical_jn(n, ka * r)
+        ja_p = spherical_jn(n, ka * r, derivative=True)
+        jb = spherical_jn(n, kb * r)
+        jb_p = spherical_jn(n, kb * r, derivative=True)
+        ur += fac * (A[n] * ka * ja_p * P + (B[n] * n * (n + 1) * jb * P / r**2 if n else 0.0))
+        ut += fac * ((A[n] * ja + B[n] * kb * jb_p) * dP / r)
+
+    e_r = x / r[:, None]
+    # e_θ = (cosθ·cosφ, cosθ·sinφ, −sinθ) con φ la longitud alrededor del eje `direccion`
+    eje = d
+    # se construye una base ortonormal con `eje`: si `eje` es ±z, la componente perpendicular es xy
+    aux = np.array([1.0, 0.0, 0.0])
+    if abs(eje @ aux) > 0.9:
+        aux = np.array([0.0, 1.0, 0.0])
+    e1 = np.cross(eje, aux)
+    e1 /= np.linalg.norm(e1)
+    e2 = np.cross(eje, e1)
+    perp = x - (x @ eje)[:, None] * eje
+    rho = np.linalg.norm(perp, axis=1)
+    seguro = np.where(rho > 1e-300, rho, 1.0)
+    e_th = (cos_t[:, None] * perp / seguro[:, None] - sin_t[:, None] * eje[None, :])
+    # en el eje ρ→0 y e_θ no está definido, pero allí dPₙ/dθ = 0 y u_θ no aporta
+    e_th[rho <= 1e-300] = 0.0
+    return ur[:, None] * e_r + ut[:, None] * e_th
