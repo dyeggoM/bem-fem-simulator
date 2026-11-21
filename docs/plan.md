@@ -380,6 +380,16 @@ agrega a la librería con su criterio, después se enchufa.
   (7.2e-3 Pa sobre 1 Pa).
   *Lo que lo arreglaría*: formular el sólido también en campo dispersado (`u_s = u − u_i`), con el
   operador completo aplicado a la incidente (misma disciplina que D41). No está hecho.
+  **Y no es una mejora opcional (D48)**: Sim-Datos confirmó que la premisa de la restricción es
+  **falsa** — una onda plana sí ejerce fuerza armónica de primer orden sobre el cuerpo, y Faran
+  **incluye** ese *rebound* traslacional (Feuillade y Clay 1999, JASA 106:553, §IV). La amplitud
+  suprimida escala como `3/(2g+1)` con `g = ρ_sólido/ρ_fluido` (Bruus 2012, ecs. 22 y 26): 0.18 en
+  acero, 0.61 en hueso, 0.97 en tejido — exactamente el orden del error medido. La restricción es una
+  **limitación de la implementación**, no del método, y el arreglo es la formulación dispersada.
+  También de D48: no hay umbral citable de contraste para "dispersor débil" (los de Born son
+  `|γ_ρ|, |γ_κ| ≪ 1` y `x·|γ| < 1`, sin porcentaje garantizado), y `c_s` de tejido blando **no tiene
+  fuente en la banda** (las de elastografía son de cientos de Hz): esos materiales quedan rotulados
+  como ballpark, no como dato.
 - **U6 — Trazabilidad. ENTREGADA.** `dashboard/validacion.py` con un registro de *10 criterios*, cada
   uno con su descripción, referencia, tolerancia, unidad y **fuente** (fase o ADR). Cada endpoint
   devuelve `sello` ya evaluado —`validado` / `fuera` / `sin_referencia`— y la UI sólo lo pinta. El

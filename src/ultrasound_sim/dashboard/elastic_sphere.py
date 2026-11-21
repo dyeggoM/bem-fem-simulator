@@ -53,14 +53,23 @@ MATERIALES = {
 
 _LIMITES = {"frecuencia_hz": (20e3, 400e3), "ka": (0.3, 3.0), "puntos_angulo": (12, 361)}
 
-#: Debajo de este contraste de impedancia (`ρ·c_p` del sólido sobre `ρ·c` del agua) la restricción de
-#: traslación media nula deja de valer. Medido: 4.55 (hueso) da 13 %, 1.08 (tejido) da **5264 %** con
-#: la restricción y 23 % sin ella. El corte en 2.5 sale de esos dos puntos, no de una fórmula.
+#: **Interruptor empírico**, no un criterio físico. Debajo de este contraste de impedancia (`ρ·c_p`
+#: del sólido sobre `ρ·c` del agua) la restricción de traslación media nula rompe el resultado: medido
+#: 4.55 (hueso) da 13 %, 1.08 (tejido) da **5264 %** con la restricción y 23 % sin ella. El 2.5 sale
+#: de esos dos puntos.
+#:
+#: Sim-Datos (D48) confirmó que **no existe** un umbral citable: la magnitud que gobierna el error es
+#: la respuesta dipolar `3/(2g+1)` con `g = ρ_s/ρ_0` (Bruus 2012, ecs. 22 y 26), no la impedancia. Se
+#: deja como interruptor de seguridad mientras se reemplaza la formulación.
 CONTRASTE_MINIMO = 2.5
 
 #: Debajo de este `|p_s|` máximo (relativo a la incidente, que vale 1) el error *relativo* deja de ser
 #: un indicador útil: el denominador se achica pero el error absoluto no. Ahí el sello pasa a
 #: `sin_referencia` y se informa el error absoluto, en vez de reportar "23 %" de algo que vale 1/50.
+#:
+#: Sim-Datos (D48) pide reportar **siempre las dos** métricas (`E_inc` y `E_sca`) y avisa que no hay
+#: umbral citable para descartar la relativa: cerca de un nulo del campo es muy sensible (Lavia et al.,
+#: TetraScatt, fig. 4). Por eso las dos van en la salida y este corte sólo decide **el sello**.
 AMPLITUD_MINIMA = 0.05
 
 
@@ -145,7 +154,12 @@ def resolver(datos: dict, trabajo=None) -> dict[str, Any]:
     radio = ka / k0
     solido = ElasticSolid(
         name=nombre_material, rho=prop["rho"], c_p=prop["c_p"], c_s=prop["c_s"],
-        provenance=f"benchmark de la UI (U7): {nombre_material}",
+        provenance=(
+            f"benchmark de la UI (U7): {nombre_material}"
+            + ("" if prop["c_s"] > 500 else
+               " — c_s SIN FUENTE CITABLE en la banda 100 kHz-1 MHz (D48): supuesto ballpark,"
+               " no dato")
+        ),
     )
 
     # La restricción de traslación media nula supone que la onda plana no ejerce fuerza neta sobre

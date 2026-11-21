@@ -506,14 +506,14 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
 
       <section>
         <label>Material del sólido
-          <span class="tip" title="Un sólido elástico sostiene ondas de corte: la respuesta depende de c_s, no sólo de la impedancia. Es lo que diferencia esta vista de la esfera penetrable de la pestaña 3D (que por dentro sigue siendo fluido).">?</span>
+          <span class="tip" title="Un sólido elástico sostiene ondas de corte: la respuesta depende de c_s, no sólo de la impedancia. Es lo que diferencia esta vista de la esfera penetrable de la pestaña 3D (que por dentro sigue siendo fluido). OJO con los materiales blandos: no hay c_s citable en 100 kHz-1 MHz para tejido ni grasa (las de elastografía son de cientos de Hz y las de Madsen 1983 son de 2-14 MHz), así que sus valores son ballpark, no datos. Y con c_s chico la malla tiene que resolver λ_s = c_s/f, que es mucho más corta que la del fluido.">?</span>
         </label>
         <select id="esfMaterial">
           <option value="acero" selected>acero (5900/3200 m/s)</option>
           <option value="hueso">hueso (3500/1900 m/s)</option>
           <option value="aluminio">aluminio (6320/3130 m/s)</option>
           <option value="tungsteno">tungsteno (5200/2800 m/s)</option>
-          <option value="tejido (casi fluido)">tejido, casi fluido (1540/30 m/s)</option>
+          <option value="tejido (casi fluido)">tejido, casi fluido (1540/30 m/s) — c_s ballpark</option>
         </select>
       </section>
 

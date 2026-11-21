@@ -1763,3 +1763,99 @@ Se agregó la métrica `elementos_por_lambda_corte` a la salida, y la UI avisa c
 acero **53.6**, hueso **31.8** (o sea que el 13 % del hueso **no** es falta de resolución de corte, es
 el modelo), tejido casi fluido **0.5**. Tres mecanismos distintos, tres diagnósticos distintos, y
 ninguno se arregla subiendo el `ppw` del fluido.
+
+## D48 — Consulta a Sim-Datos: la restricción de traslación media nula está mal planteada
+
+Consulta del 2026-11-20 sobre (1) `c_s` de tejido blando en banda, (2) el parámetro correcto para
+decidir "dispersor débil", (3) cómo reportar el error de un campo dispersado débil y (4) a partir de
+qué contraste vale la suposición de desplazamiento medio nulo. La respuesta obliga a corregir tres
+cosas de D47, y una de ellas es conceptual.
+
+### 1. La premisa física era falsa
+
+Se impuso `U_CM = 0` argumentando que "una onda plana no ejerce fuerza neta sobre un cuerpo real".
+**Sim-Datos: eso confunde la fuerza armónica de primer orden con la fuerza media de radiación de
+segundo orden.** Que la primera promedie cero en un ciclo no significa que su amplitud compleja sea
+cero ni que el cuerpo no oscile. Para un sólido libre el balance es
+
+    −ω²·M·U_CM = −∮ p_total·n dS
+
+e imponer `U_CM = 0` **elimina la respuesta traslacional** salvo que la fuerza resultante sea también
+cero.
+
+Referencia directamente pertinente: **Feuillade y Clay (1999), *Anderson (1950) revisited*, JASA
+106:553–564, §IV**, que demuestra que Faran y Anderson **contienen** el *rebound* traslacional y que
+expandir alrededor de un origen fijo no lo elimina.
+
+Criterio cuantitativo en el límite `k₀a ≪ 1` (esfera pequeña, fluido inviscido, respuesta dipolar),
+de las ecs. 22 y 26 de Bruus (2012):
+
+    v_partícula / v_incidente = 3 / (2g + 1),   con g = ρ_sólido / ρ_fluido
+
+Con esa fórmula se entiende la tabla de D47 sin inventar nada: cuando `g ≈ 1` la traslación **acompaña
+al fluido** y no debe anularse (tejido, g = 1.05 → 0.97); con acero (g = 7.8 → 0.18) la contribución
+suprimida es chica. La inmovilidad aparece como límite de **gran inercia**, no de gran impedancia.
+
+Consecuencia: **no existe un umbral en `Z_s/Z_0`**. El corte en 2.5 que se puso en D47 no es un
+criterio físico; queda como **interruptor empírico de dos puntos medidos**, rotulado como tal, y el
+arreglo es dejar de imponer la restricción resolviendo el sólido en campo dispersado (donde el
+*rebound* aparece por construcción).
+
+### 2. El parámetro de "dispersor débil" no es la impedancia
+
+Para una esfera elástica los parámetros independientes son `ρ_s/ρ_0`, `c_p,s/c_0` y `c_s/c_0`; dos
+materiales con el mismo producto `ρ·c_p` **no** dan la misma dispersión. El criterio publicado de Born
+para dispersores fluidos (Sharma y Saha 2004, ecs. 4a–4b) es
+
+    γ_ρ  = (ρ_s − ρ_0)/ρ_s ;  γ_κ = (κ_s − κ_0)/κ_0
+    |γ_ρ| ≪ 1 ;  |γ_κ| ≪ 1 ;  x·|γ_ρ| < 1 ;  x·|γ_κ| < 1      (x = k₀a)
+
+y **no** fija un porcentaje universal de contraste que garantice una precisión dada, ni se traslada
+sin más a una esfera sólida con resonancias de corte. Rayleigh (`k₀a ≪ 1`) y Born (perturbación débil
+del campo interno) son hipótesis distintas: un objeto chico puede tener contraste grande y dispersión
+resonante.
+
+### 3. Cómo reportar el error de un campo dispersado débil
+
+Se reportan **las dos métricas, siempre, sobre los mismos puntos**, y no se elige una:
+
+    E_inc = ‖p_s,num − p_s,ref‖∞ / |p_inc|        (precisión respecto de la excitación)
+    E_sca = ‖p_s,num − p_s,ref‖∞ / ‖p_s,ref‖∞     (precisión respecto de la señal a resolver)
+
+Es una recomendación de validación, **no una norma acústica**. No hay umbral citable para descartar
+`E_sca`; cuando la referencia se anula el error relativo queda indefinido y cerca de un nulo es muy
+sensible (Lavia et al., TetraScatt, fig. 4, atribuyen picos del error relativo a nulos de la
+respuesta). O sea: el estado `sin_referencia` que se puso en D47 por debajo del 5 % de amplitud es
+defendible, pero **no reemplaza** a `E_inc`: se muestran las dos.
+
+Sobre secciones eficaces: son observables estándar (`dσ/dΩ = |F|²`, `σ_sca = ∫|F|²dΩ`), pero pierden
+fase y detalle angular, y un patrón normalizado por su propio máximo puede ocultar un error
+multiplicativo enorme. Para validar Faran: **campo complejo + σ_sca + patrón angular con escala
+absoluta**, no `σ_sca` en lugar del campo.
+
+### 4. `c_s` de tejido blando: no hay dato citable en la banda
+
+- Las `c_s` de elastografía (1–5 m/s, μ ~ 1–20 kPa) son de **cientos de Hz**, no de la portadora
+  ultrasónica; Chen et al. (2009) trabajan con ondas de corte de cientos de Hz.
+- Hay mediciones ultrasónicas de tejido bovino (Madsen et al. 1983, JASA 74:1346, 2–14 MHz) pero
+  **fuera de la banda** y con fuerte dispersión.
+- En 100 kHz–1 MHz hay un dato biológico parcial: Feng, Li y Yun (2023, Nat. Commun. 14:4949), ondas
+  de Rayleigh en piel humana *in vivo* hasta 500 kHz; a 500 kHz implican `c_R ≈ 200 m/s`, pero es una
+  **onda superficial en piel estratificada**, no `c_s` volumétrica de músculo, grasa o hígado.
+- Para tejido viscoelástico hace falta `μ*(ω)`, no sólo `μ` real: `k_s² = ρω²/μ*(ω)`.
+
+**Conclusión para el simulador**: los materiales "tejido (casi fluido, c_s = 30)" y "grasa
+(c_s = 100)" que están en la UI **no tienen fuente citable** en la banda. Quedan como *supuesto
+explícito* rotulado en el tooltip, no como dato. Y no hay umbral universal de `c_s` para decidir
+cuándo un modelo fluido es suficiente: hay que mirar la contribución de corte y su amortiguamiento.
+
+### Lo que cambia en el repo
+
+1. `docs/decisions.md` (este ADR): se corrige la justificación de D47. El umbral de contraste 2.5 deja
+   de presentarse como criterio físico y pasa a interruptor empírico.
+2. Los materiales blandos se rotulan en la UI como **ballpark sin fuente en banda**.
+3. La métrica doble (`E_inc` y `E_sca`) ya está en la salida; el sello usa `E_sca` y el texto muestra
+   las dos.
+4. El paso de fondo —sólido en campo dispersado— deja de ser "una mejora" y pasa a ser **la
+   corrección de un error conceptual**: la formulación actual suprime un término dipolar que Faran
+   incluye.

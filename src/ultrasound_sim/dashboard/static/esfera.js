@@ -196,11 +196,15 @@ function esfPintar(r) {
       + ' el fluido, la condición de traslación media nula deja de valer y se desactiva sola. El'
       + ' error RELATIVO no es un indicador útil porque el campo dispersado es muy débil: mirá el'
       + ' error absoluto, que es contra la incidente de 1 Pa.';
-  } else if (m.material === 'hueso' && sello.estado === 'fuera') {
+  } else if (sello.estado === 'fuera' && m.fijar_rigidos) {
+    // D48: la restricción suprime una respuesta dipolar que Faran SÍ incluye (Feuillade y Clay 1999,
+    // "Anderson (1950) revisited", §IV). El error crece con 3/(2·g+1), g = ρ_sólido/ρ_fluido: chico
+    // en metales, grande en tejido. Es aproximación de la implementación, no del método.
     esf$('esfSello').textContent +=
-      ' OJO: el hueso (contraste 4.6×) tiene un error de MODELO, no de malla: con contraste'
-      + ' moderado el cuerpo se mueve parcialmente con el fluido y la restricción deja de ser'
-      + ' exacta (D47). Refinar no lo baja.';
+      ' OJO: la restricción de traslación media nula suprime una respuesta dipolar que Faran sí'
+      + ' incluye (Feuillade y Clay 1999, §IV): el error crece con 3/(2g+1), g = ρ_sólido/ρ_fluido,'
+      + ' así que se nota más cuanto más liviano es el material. Es una limitación de esta'
+      + ' implementación, no del método, y refinar la malla no la baja (D48).';
   }
   if (m.modo === 'rapida' && sello.estado === 'fuera') {
     esf$('esfSello').textContent +=
