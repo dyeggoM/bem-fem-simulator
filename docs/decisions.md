@@ -2580,3 +2580,24 @@ faltaba era ancho.
 los eventos `focus`/`blur` (el navegador los difiere), y `focus()` sobre un elemento que ya lo tiene
 tampoco. El resaltado parecía roto en la consola y funcionaba perfecto con un clic real. Cuando se prueba
 interacción hay que despachar el evento del mouse, no llamar a `focus()` por código.
+
+## D63 — La fase se edita en grados, y se envuelve a (−180°, 180°]
+
+**Pedido**: cambiar la fase de radianes a grados en la configuración de fuentes.
+
+**Qué se hizo**:
+
+* La tabla muestra y edita **grados**; el estado y el solver siguen en **radianes** (`v * π / 180` al
+  escribir). El encabezado dice `fase °` y el paso del campo es de 1°.
+* El CSV/JSON **exporta `fase_deg`** y al cargar acepta las dos unidades, con la unidad en el nombre de la
+  columna: `fase_deg` (grados) o `fase_rad`/`phase` (radianes, como antes). **Los archivos viejos siguen
+  significando lo mismo**: el alias pelado `phase` se interpreta en radianes a propósito, para no cambiar
+  el sentido de un archivo que ya existía. Si vienen las dos columnas, manda `fase_deg`, que es la que
+  declara la unidad.
+* La fase se **envuelve a (−π, π]**, en el backend al cargar y en el frontend al generar el arreglo. Sin
+  eso, la fase de foco `−k·r` daba **−5674.6°** en la tabla: es la misma fase módulo 360°, pero no se lee.
+  Medido: −5674.6° → **85.4°**. No cambia el campo, porque el solver usa `exp(i·fase)`.
+
+**Verificado en el navegador**: encabezado `fase °`, valores en **−152.8° … 179.9°**, y al editar −45° el
+estado interno queda en **−0.7854 rad**. En el backend, un archivo con −5674.6° entra como 1.4905 rad =
+85.40°.
