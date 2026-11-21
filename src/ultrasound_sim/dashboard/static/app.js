@@ -80,6 +80,7 @@ window.syncFrecuencia = function syncFrecuencia(khz, origen) {
   if (!Number.isFinite(valor) || valor <= 0) return;
   const mapa = [
     ['campo', 'freq', 'freqVal'],
+    ['cadena', 'cadFreq', 'cadFreqVal'],
     ['escena', 'escFreq', 'escFreqVal'],
     ['volumen', 'volFreq', 'volFreqVal'],
   ];
@@ -90,6 +91,7 @@ window.syncFrecuencia = function syncFrecuencia(khz, origen) {
     const etiqueta = document.getElementById(idEtiqueta);
     if (etiqueta) etiqueta.textContent = `${valor} kHz`;
     if (vista === 'campo') S.freq = valor;
+    if (vista === 'cadena' && typeof CAD !== 'undefined') CAD.freq = valor;
     if (vista === 'escena' && typeof ESC !== 'undefined') ESC.freq = valor;
     if (vista === 'volumen' && typeof VOL !== 'undefined') VOL.freq = valor;
   }

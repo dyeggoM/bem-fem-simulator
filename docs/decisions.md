@@ -2347,3 +2347,44 @@ discretización de un error de formulación disfrazado.
 región. Lo que sigue es conectarla al dashboard y contrastarla contra la transmisión craneal **medida**
 (31 ± 7 % parietal a 500 kHz, Riis 2022), que es más exigente que la fórmula de capas porque incluye
 geometría, curvatura y pérdidas.
+
+## D57 — La cadena de tejidos entra al dashboard, con cuatro errores propios en el camino
+
+**Qué se agregó.** Vista **«cadena piel→cóclea»**: lista de capas editable (medio + espesor), frecuencia,
+elementos por longitud de onda, y un botón que resuelve. Devuelve el mapa de `|p|` en dB con las
+**interfaces dibujadas y rotuladas**, el corte axial, un esquema de capas a escala (con el agua de entrada
+y salida, que también es parte del problema) y cinco números: transmitido medido, exacto, error, espesor
+total y λ en agua.
+
+Medido en la UI: piel 2 mm + perilinfa 5 mm a 500 kHz → **0.9456 medido contra 0.9239 exacto, 2.35 %**.
+Con hueso cortical la vista dice **«sin referencia»** y no muestra error, porque el hueso entra como
+sólido elástico con cizalla y la fórmula de capas fluidas no lo incluye. Los materiales salen de
+`docs/materiales-cadena.md` con su `fuente` y `verificado=false` a la vista (`ultrasound_sim/cadena.py`),
+y la advertencia de que son parámetros de modelado va en el panel.
+
+**Los cuatro errores, todos silenciosos, que vale la pena no repetir.**
+
+1. **Clave doble en la persistencia.** `vistaGuardar(vista, …)` ya antepone `'usim.vista.'` y envuelve
+   todo en `{fecha, resultado}`. Le pasé `'usim.vista.cadena'` y un objeto con su propio campo
+   `resultado`: guardaba en `usim.vista.usim.vista.cadena` y la restauración leía otro nivel, así que la
+   pestaña se abría **vacía y sin ningún error en consola**. Peor: como `init` es `async`, el fallo era un
+   rechazo de promesa que no aparecía en `window.onerror`. Ahora hay un `.catch` que escribe el motivo en
+   la línea de estado, y un test que fija que la clave se pasa pelada.
+
+2. **`LinearTriInterpolator` con un fasor descarta la parte imaginaria.** matplotlib avisa con un
+   `ComplexWarning` que se pierde entre los warnings de la suite; el mapa se estaba calculando como
+   `|Re(p)|`, que no es la amplitud. Ahora se interpola parte real y parte imaginaria por separado
+   (también en `fuentes_fem`, donde estaba el mismo defecto) y el test corre con
+   `ComplexWarning` como **error**, no como aviso.
+
+3. **El aviso del explorador de campo se colaba en la vista.** «El pico real está en 75.8 mm, no en
+   F = 90 mm» es del foco de una apertura y en una cadena de capas no significa nada. Se oculta por CSS
+   con `body.vista-cadena`, igual que se hizo con la escena, en vez de por `hidden` (que `app.js`
+   re-muestra cuando llega su respuesta).
+
+4. **`scaleanchor` sacaba las anotaciones del rango visible.** Con el div ancho, Plotly estiraba el eje x
+   a −40…80 y recortaba el y; las etiquetas de capa y las líneas de interfaz quedaban **fuera** del área
+   dibujada. Se veían «no aparecer» aunque estaban en el layout. Con rangos fijos en x e y se ven.
+
+**Lo que queda de U9**: mover la estructura desde el dashboard (hoy las capas se editan como lista, no se
+arrastran) y el STL multicapa, que necesita acople con nodos no coincidentes.

@@ -20,6 +20,7 @@
       <button class="vista-btn activo" data-vista="campo">BEM · fuentes</button>
       <button class="vista-btn en-desarrollo" data-vista="fem" disabled
         data-tip="El FEM del MISMO problema de fuentes está implementado (dashboard/fuentes_fem.py) pero todavía no reproduce el BEM: la razón de amplitudes va de 0.31 a 0.92 según el punto y las fases difieren 45-165°, así que no es un factor global. El BEM sí está validado contra la solución exacta de un monopolo (módulo 1.000, fase 0.0°). Se habilita cuando cierre contra la referencia — no antes.">FEM · fuentes <span class="etiqueta-dev">en desarrollo</span></button>
+      <button class="vista-btn" data-vista="cadena">cadena piel→cóclea</button>
       <button class="vista-btn" data-vista="escena">escena capas</button>
       <button class="vista-btn" data-vista="dispersor">dispersor</button>
       <button class="vista-btn" data-vista="volumen">3D</button>
@@ -193,6 +194,32 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
     </section>
 
     </div><!-- /vistaCampo -->
+
+    <div id="vistaCadena" hidden>
+      <p class="que-ves">La cadena de tejidos: <b>agua → piel → hueso → líquido</b>. Las capas se apilan sobre el eje de propagación y la onda las atraviesa de frente. Es el único lugar donde el modelo <b>acopla sólidos y fluidos</b> en la misma malla, y donde el resultado se contrasta contra el coeficiente de transmisión exacto.</p>
+      <section>
+        <label>Capas <span class="mini">(la onda viaja en +x)</span></label>
+        <div class="tabla-capas-head"><span>medio</span><span>espesor</span><span></span></div>
+        <div id="cadenaCapas"></div>
+        <div class="fila-botones">
+          <button class="btn mini" id="cadenaAdd">+ capa</button>
+          <button class="btn mini" id="cadenaEjemplo">piel + hueso + perilinfa</button>
+        </div>
+      </section>
+      <section>
+        <label>Frecuencia <b id="cadFreqVal">500 kHz</b></label>
+        <input type="range" id="cadFreq" min="100" max="1000" step="10" value="500">
+        <label>Elementos por longitud de onda <b id="cadPpwVal">14</b></label>
+        <input type="range" id="cadPpw" min="8" max="24" step="1" value="14">
+      </section>
+      <section>
+        <div class="fila-botones">
+          <button class="btn primario" id="cadenaResolver">resolver la cadena</button>
+        </div>
+        <p class="hint" id="cadenaEstado">sin resolver.</p>
+      </section>
+      <p class="aviso-ux" id="cadenaAviso"></p>
+    </div>
 
     <div id="vistaEscena" hidden>
       <p class="que-ves">A diferencia de «campo» (una apertura que enfoca), acá son <b>ondas planas atravesando capas</b>. No hay fuentes: se mide reflexión y transmisión contra la matriz de transferencia exacta.</p>
@@ -690,6 +717,18 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
       </section>
     </div>
 
+  <main class="vista" id="vistaCadenaMain" hidden>
+    <p class="aviso-ux" id="cadenaAviso"></p>
+    <div class="metricas" id="cadenaMetricas" hidden></div>
+    <div class="mapa-wrap">
+      <div id="mapaCadena" class="mapa"></div>
+    </div>
+    <div class="cortes">
+      <div id="axialCadena" class="corte"></div>
+      <div id="capasCadena" class="corte"></div>
+    </div>
+  </main>
+
   <main class="vista" id="vistaEscenaMain" hidden>
     <div class="mapa-wrap">
       <div id="mapaEscena" class="mapa"></div>
@@ -773,6 +812,7 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
 
 </div>
 <script src="/static/app.js"></script>
+<script src="/static/cadena.js"></script>
 <script src="/static/escena.js"></script>
 <script src="/static/dispersor.js"></script>
 <script src="/static/cochlea.js"></script>

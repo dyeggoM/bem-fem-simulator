@@ -253,6 +253,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": True, **elastic_sphere.costo(consulta_e)})
             except (ValueError, KeyError) as exc:
                 self._error(str(exc))
+        elif partes.path == "/api/cadena/opciones":
+            import json as _json
+            from . import cadena_field
+            self._json(cadena_field.opciones_cadena())
         elif partes.path == "/api/esfera/opciones":
             self._json({
                 "ok": True,
@@ -301,6 +305,7 @@ class Handler(BaseHTTPRequestHandler):
                         "/api/jobs/sensibilidad", "/api/jobs/q_coclea",
                         "/api/jobs/barrido_escena", "/api/jobs/esfera",
                         "/api/jobs/esfera_barrido", "/api/jobs/barrido_apertura",
+                        "/api/jobs/cadena",
                         "/api/volume3d/cost", "/api/volume3d/solve"):
             self._error("no encontrado", HTTPStatus.NOT_FOUND)
             return
@@ -347,6 +352,15 @@ class Handler(BaseHTTPRequestHandler):
                     f"barrido ka de la esfera ({cuerpo.get('desde', 0.5)}–{cuerpo.get('hasta', 2.0)}, "
                     f"{cuerpo.get('puntos', 7)} puntos)",
                     _esfera_barrido_job, cuerpo,
+                )
+                respuesta = {"ok": True, "job": trabajo.a_dict()}
+            elif ruta == "/api/jobs/cadena":
+                capas = cuerpo.get("capas") or []
+                resumen = " + ".join(
+                    f"{c.get('medio', '?')} {c.get('espesor_mm', '?')} mm" for c in capas[:4]
+                ) or "sin capas"
+                trabajo = jobs.COLA.enviar(
+                    "cadena", f"cadena de capas ({resumen})", _cadena_job, cuerpo,
                 )
                 respuesta = {"ok": True, "job": trabajo.a_dict()}
             elif ruta == "/api/jobs/esfera":
@@ -412,6 +426,12 @@ def _barrido_apertura_job(trabajo, datos):
     Sin esto el barrido recibe el objeto `Trabajo` como si fuera el pedido y muere con
     `'Trabajo' object has no attribute 'get'`."""
     return sweeps.barrido_apertura(datos, trabajo)
+
+
+def _cadena_job(job, datos):
+    """Adaptador de la cola para la cadena de capas."""
+    from . import cadena_field
+    return cadena_field.resolver_cadena(datos)
 
 
 def _esfera_barrido_job(trabajo, datos):
