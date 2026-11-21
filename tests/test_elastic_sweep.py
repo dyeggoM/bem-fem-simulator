@@ -60,6 +60,37 @@ def test_la_formulacion_se_rechaza_si_no_existe():
         elastic_sweep.barrido_ka({"formulacion": "magica", "puntos": 2})
 
 
+def test_comparar_devuelve_las_dos_series_y_donde_cruzan():
+    """D51: las dos formulaciones se cruzan, y el barrido lo dice con un número (`cruce_desde_ka`)
+    en vez de dejar que el usuario compare dos corridas a ojo."""
+    r = elastic_sweep.barrido_ka({
+        "desde": 0.8, "hasta": 1.6, "puntos": 2, "material": "acero", "modo": "rapida",
+        "comparar": True, "puntos_angulo": 41,
+    })
+    b = r["barrido"]
+    assert b["comparar"] is True
+    assert set(b["series"]) == {"total", "dispersada"}
+    for form in ("total", "dispersada"):
+        assert len(b["series"][form]["ka"]) == 2
+        assert len(b["series"][form]["error_relativo"]) == 2
+    # el cruce es None (no hay punto donde gane la dispersada) o un ka del rango, nunca un número
+    # fuera de la lista
+    cruce = b["cruce_desde_ka"]
+    print(f"\n  cruce desde ka: {cruce} · total {[round(100*v,1) for v in b['series']['total']['error_relativo']]}"
+          f" · dispersada {[round(100*v,1) for v in b['series']['dispersada']['error_relativo']]}")
+    assert cruce is None or cruce in b["series"]["total"]["ka"]
+
+
+def test_sin_comparar_no_se_paga_el_doble():
+    r = elastic_sweep.barrido_ka({
+        "desde": 0.8, "hasta": 1.6, "puntos": 2, "material": "acero", "modo": "rapida",
+        "puntos_angulo": 41,
+    })
+    assert r["barrido"]["comparar"] is False
+    assert r["barrido"]["series"] is None
+    assert r["barrido"]["cruce_desde_ka"] is None
+
+
 def test_el_barrido_se_cancela_entre_puntos():
     """La cancelación del dashboard es cooperativa: el worker consulta entre pasos. Si el barrido no
     la mirara, el botón de cancelar de la UI no haría nada en una corrida de 25 puntos."""

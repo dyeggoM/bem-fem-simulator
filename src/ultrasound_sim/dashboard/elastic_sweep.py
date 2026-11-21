@@ -58,33 +58,65 @@ def barrido_ka(datos: dict, trabajo=None) -> dict[str, Any]:
     material = str(datos.get("material", "acero"))
     modo = str(datos.get("modo", "rapida"))
 
-    filas: list[dict[str, Any]] = []
-    for i, ka in enumerate(valores):
-        # cancelación cooperativa entre puntos (desde dentro de un solve no se puede interrumpir)
-        if trabajo is not None and trabajo.cancelado():
-            raise RuntimeError("cancelado por el usuario")
-        paso(i / len(valores), f"ka = {ka:.2f} ({i + 1}/{len(valores)})")
-        r = elastic_sphere.resolver({
-            "ka": ka, "material": material, "modo": modo, "formulacion": formulacion,
-            "frecuencia_hz": datos.get("frecuencia_hz", 100e3),
-            "puntos_angulo": int(datos.get("puntos_angulo", 61)),
-            "con_mapa": False,
-        })
-        m = r["metrica"]
-        filas.append({
-            "ka": float(m["ka"]),
-            "error_relativo": float(m["error_relativo"]),
-            "error_l2_relativo": float(m["error_l2_relativo"]),
-            "razon_amplitudes": float(m["razon_amplitudes"]),
-            "elementos_por_lambda_corte": float(m["elementos_por_lambda_corte"]),
-            "sello": r["sello"]["estado"],
-            "nodos": int(m["nodos"]),
-            "segundos": float(m["segundos"]),
-        })
+    # Comparar las dos formulaciones en la misma corrida: es lo que muestra el cruce (D51) sin tener
+    # que lanzar dos barridos y acordarse de los números. Cuesta el doble, y la UI lo dice.
+    comparar = bool(datos.get("comparar", False))
+    formulaciones = ["total", "dispersada"] if comparar else [formulacion]
+
+    total_pasos = len(valores) * len(formulaciones)
+    hecho = 0
+    por_formulacion: dict[str, list[dict[str, Any]]] = {}
+    for form in formulaciones:
+        filas: list[dict[str, Any]] = []
+        for ka in valores:
+            # cancelación cooperativa entre puntos (desde dentro de un solve no se puede interrumpir)
+            if trabajo is not None and trabajo.cancelado():
+                raise RuntimeError("cancelado por el usuario")
+            paso(hecho / total_pasos, f"{form}: ka = {ka:.2f} ({hecho + 1}/{total_pasos})")
+            r = elastic_sphere.resolver({
+                "ka": ka, "material": material, "modo": modo, "formulacion": form,
+                "frecuencia_hz": datos.get("frecuencia_hz", 100e3),
+                "puntos_angulo": int(datos.get("puntos_angulo", 61)),
+                "con_mapa": False,
+            })
+            m = r["metrica"]
+            filas.append({
+                "ka": float(m["ka"]),
+                "error_relativo": float(m["error_relativo"]),
+                "error_l2_relativo": float(m["error_l2_relativo"]),
+                "razon_amplitudes": float(m["razon_amplitudes"]),
+                "elementos_por_lambda_corte": float(m["elementos_por_lambda_corte"]),
+                "sello": r["sello"]["estado"],
+                "nodos": int(m["nodos"]),
+                "segundos": float(m["segundos"]),
+            })
+            hecho += 1
+        por_formulacion[form] = filas
+
+    filas = por_formulacion[formulacion]
 
     paso(0.99, "listo")
     peor = max(filas, key=lambda f: f["error_relativo"])
     dentro = [f for f in filas if f["sello"] == "validado"]
+
+    # cuando se comparan las dos, se manda la serie de cada una y además el cruce: el primer `ka`
+    # donde deja de ganar la total. Ese punto es el resultado que interesa, no una curva más.
+    series = {
+        form: {
+            "ka": [f["ka"] for f in fs],
+            "error_relativo": [f["error_relativo"] for f in fs],
+            "error_l2_relativo": [f["error_l2_relativo"] for f in fs],
+            "sello": [f["sello"] for f in fs],
+        }
+        for form, fs in por_formulacion.items()
+    }
+    cruce = None
+    if comparar:
+        for i, ka in enumerate(valores):
+            if por_formulacion["dispersada"][i]["error_relativo"] < por_formulacion["total"][i]["error_relativo"]:
+                cruce = float(ka)
+                break
+
     return {
         "ok": True,
         "barrido": {
@@ -94,6 +126,8 @@ def barrido_ka(datos: dict, trabajo=None) -> dict[str, Any]:
             "error_l2_relativo": [f["error_l2_relativo"] for f in filas],
             "razon_amplitudes": [f["razon_amplitudes"] for f in filas],
             "sello": [f["sello"] for f in filas],
+            "comparar": comparar, "series": series if comparar else None,
+            "cruce_desde_ka": cruce,
         },
         "filas": filas,
         "resumen": {

@@ -134,6 +134,7 @@ async function esfBarrido() {
     material: esf$('esfMaterial').value,
     modo: ESF.modo,
     formulacion: esf$('esfFormulacion').value,
+    comparar: esf$('esfBarComparar').checked,
     frecuencia_hz: ESF.freq_khz * 1e3,
     puntos_angulo: 61,
   };
@@ -192,10 +193,67 @@ function esfBarridoSeguir() {
 function esfPintarBarrido(r) {
   const b = r.barrido;
   const tol = r.resumen.tolerancia;
+  const color = (s) => (s === 'validado' ? '#3fb950' : (s === 'fuera' ? '#f85149' : '#d29922'));
+
+  // Con `comparar` vienen las dos series: se pintan las cuatro curvas (máx. y L2 de cada
+  // formulación) y se marca el ka donde la dispersada empieza a ganar. Ese cruce es el resultado.
+  if (b.comparar && b.series) {
+    const trazas = [];
+    const colores = { total: '#58a6ff', dispersada: '#d29922' };
+    for (const form of ['total', 'dispersada']) {
+      const s = b.series[form];
+      trazas.push({
+        type: 'scatter', mode: 'lines+markers', name: `${form} · máx.`, x: s.ka,
+        y: s.error_relativo.map((v) => 100 * v),
+        line: { color: colores[form], width: 1.8 },
+        marker: { size: 6, color: s.sello.map(color) },
+        hovertemplate: `${form} ka %{x:.2f}<br>máx. %{y:.2f} %<extra></extra>`,
+      });
+      trazas.push({
+        type: 'scatter', mode: 'lines', name: `${form} · L2`, x: s.ka,
+        y: s.error_l2_relativo.map((v) => 100 * v),
+        line: { color: colores[form], width: 1.1, dash: 'dot' },
+        hovertemplate: `${form} ka %{x:.2f}<br>L2 %{y:.2f} %<extra></extra>`,
+      });
+    }
+    const shapes = [{
+      type: 'line', xref: 'paper', x0: 0, x1: 1, y0: 100 * tol, y1: 100 * tol,
+      line: { color: '#f85149', width: 1, dash: 'dash' },
+    }];
+    if (b.cruce_desde_ka !== null && b.cruce_desde_ka !== undefined) {
+      shapes.push({
+        type: 'line', xref: 'x', x0: b.cruce_desde_ka, x1: b.cruce_desde_ka, yref: 'paper', y0: 0, y1: 1,
+        line: { color: '#3fb950', width: 1, dash: 'dot' },
+      });
+    }
+    Plotly.react('barridoEsf', trazas, {
+      ...ESF_LAYOUT,
+      title: {
+        text: `barrido en ka comparando formulaciones · ${b.material} · ${b.modo}`
+          + (b.cruce_desde_ka !== null && b.cruce_desde_ka !== undefined
+            ? ` (verde: desde ka ${b.cruce_desde_ka.toFixed(2)} gana la dispersada)` : ''),
+        font: { size: 10, color: '#8b95a1' },
+      },
+      xaxis: { title: { text: 'ka = k₀·a' } },
+      yaxis: { title: { text: 'error contra Faran (%)' } },
+      legend: { orientation: 'h', y: 1.26, font: { size: 9 } },
+      shapes,
+    });
+    const s = r.resumen;
+    esf$('esfBarEstado').textContent = 'listo';
+    esf$('esfBarResumen').textContent =
+      `total: ${s.n_dentro} de ${b.n_puntos} puntos dentro del criterio`
+      + (b.cruce_desde_ka !== null && b.cruce_desde_ka !== undefined
+        ? ` · desde ka ${b.cruce_desde_ka.toFixed(2)} la dispersada tiene menos error`
+        : ' · la dispersada no le gana en ningún punto de este rango')
+      + ` · ${s.segundos_totales.toFixed(0)} s por formulación`;
+    window.vistaGuardar('esfera_barrido', r);
+    return;
+  }
+
   const puntos = b.ka.map((ka, i) => ({
     ka, err: 100 * b.error_relativo[i], l2: 100 * b.error_l2_relativo[i], sello: b.sello[i],
   }));
-  const color = (s) => (s === 'validado' ? '#3fb950' : (s === 'fuera' ? '#f85149' : '#d29922'));
   Plotly.react('barridoEsf', [
     {
       type: 'scatter', mode: 'lines+markers', name: 'error máx. (%)', x: b.ka,
