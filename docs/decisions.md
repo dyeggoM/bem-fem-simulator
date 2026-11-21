@@ -1270,3 +1270,56 @@ qué hace el número y qué se sabe de él — nunca como constante en el códig
 
 La regla que sale de acá: cuando `sim-datos` dice "no hay dato citable", el número **no** se rellena —
 se expone como entrada del usuario con la explicación de su efecto, y el resultado lo declara.
+
+## D41 — Dispersión penetrable 3D: la serie de Anderson, y el error de signo que traía D32
+
+**Qué se entregó.** `analytic/sphere.py`: la solución por ondas parciales de **Anderson (1950)** para
+una onda plana sobre una esfera fluida (la "Mie acústica"), con `boundary='fluid'|'rigid'`, campos
+exterior/interior, derivadas radiales y truncación automática. Y el FEM 3D penetrable funcionando:
+`assemble_scattered` acepta `background_k` + `background_rho` + `p_inc` e integra el término de
+contraste correcto.
+
+**Validación de la referencia primero.** Una serie mal implementada es peor que ninguna: el FEM
+"coincidiría" con un error. Cuatro chequeos, todos independientes:
+
+- **Esfera casada** (`ρ₁ = ρ₀`, `c₁ = c₀`): `Aₙ = 6.1e-24`. No hay dispersión.
+- **Continuidad en `r = a`** de `p` y de `(1/ρ)∂ᵣp` con los tres campos (incidente, dispersado,
+  interior), a ka = 0.5 / 1 / 3 / 5: saltos de **1e-14 % a 1e-12 %**.
+- **Límite rígido**: `ρ₁ → 1e9` da la condición `∂ᵣp = 0` al **0.0001 %**, y la derivada normal del
+  total rígido se anula al **4.8e-13**.
+- Coherencia con la truncación: `n_max ≈ ka + 4·(ka)^(1/3) + 2` da 23–28 términos para ka ≤ 5.
+
+**El bug que D32 no pudo cerrar.** En el coeficiente de reflexión de la esfera,
+
+    Aₙ = (G·Rₙ − Rₙ′) / (Hₙ′ − G·Hₙ),    G = (ρ₀/ρ₁)·(Jₙ′/Jₙ)
+
+el cociente de densidades va **así**: con `G = (ρ₀/ρ₁)(J′/J)`, el límite `ρ₁ → ∞` da `G → 0` y
+`Aₙ → −Rₙ′/Hₙ′`, que es la condición **rígida** (`∂ᵣp = 0`). Invertido (`ρ₁/ρ₀`) daba el límite
+**blando** (`p = 0`). Y como la presión queda continua *por construcción* (la `Bₙ` sale de esa
+ecuación), el error no aparecía en `p`: aparecía en el **salto de flujo, 73.7 %, constante en ka** —
+la firma de un factor sistemático, no de discretización. Fue el chequeo del límite rígido el que lo
+delató; mirando sólo el campo dispersado contra el FEM hubiera sido indistinguible de un error de
+malla.
+
+**El FEM contra la serie** (misma caja, esfera por centroides de elemento, ABC en las seis caras):
+
+- ka = 1, ppw 12: **3.34 %** (2 197 nodos, 228 elementos en la esfera), 0.19 s.
+- ka = 2, ppw 12: **2.73 %** (13 824 nodos, 1 446 elementos), 0.4 s.
+- Convergencia a ka = 1: **5.72 %** (ppw 8) → 3.32 % (12) → 1.93 % (16) → 1.65 % (20, 1.1 s).
+- Sin contraste (`k` y `ρ` iguales al fondo): `p_s = 0` **exacto** (1e-9).
+
+**Por qué funciona ahora y no antes.** La forma débil correcta del dispersado es
+
+    ∫(1/ρ)∇p_s·∇v − (k²/ρ)p_s v − ABC(p_s) = −C(p_i),
+    C(p_i) = ∫(1/ρ − 1/ρ₀)∇p_i·∇v − (k²/ρ − k₀²/ρ₀)p_i v
+
+El operador es el **local** (lo que ya armaba `assemble_scattered`) y el lado derecho lleva el
+contraste **completo**: los dos términos restan el fondo (`1/ρ₀`, `k₀²/ρ₀`), no sólo `k²`. El intento
+de D32 usaba `(∇p_i·∇v − k²p_i v)/ρ`, que no es `C(p_i)`; por eso con `ρ` variable la comparación se
+iba a 128 % y con `ρ` constante (donde los términos de fondo se cancelaban dentro del volumen) la R
+extraída salía 0.96 en vez de 0.33. Y se integra **sólo donde el medio difiere**: fuera del dispersor
+el integrando es cero en el continuo, pero discretizado sobre todo el dominio deja el flujo espurio
+de la frontera.
+
+**Siguiente paso con referencia ya disponible**: Faran (1951) para la esfera **elástica** sumergida
+(ondas P y S), que es el mismo tipo de serie con dos potenciales en el sólido.

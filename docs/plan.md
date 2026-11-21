@@ -41,9 +41,13 @@ Resumen de lo que está *cerrado con número medido*, no de lo que está escrito
 
 **Pendiente y por qué** (actualizado con la consulta a `sim-datos`, D40):
 
-- **Dispersión penetrable 3D — desbloqueada.** El benchmark que faltaba existe: esfera fluida de
-  **Anderson (1950)** por ondas parciales (válida para todo `ka`), y **Faran (1951)** para esfera
-  elástica sumergida. El operador del dispersado sigue necesitando el `k` del fondo (D32).
+- **Dispersión penetrable 3D — CERRADA (D41).** `analytic/sphere.py` implementa la serie de **Anderson
+  (1950)** validada por continuidad (salto de `p` y de flujo ≤ 1e-12 a ka = 0.5–5), por el límite
+  rígido (`ρ→∞` da `∂ᵣp = 0` al 0.0001 %) y por la esfera casada (`Aₙ = 6e-24`). El FEM 3D con el
+  término de contraste corregido la reproduce: **3.34 % (ka = 1)** y **2.73 % (ka = 2)** a ppw 12, con
+  convergencia **5.72 % → 1.93 %** al ir de ppw 8 a 16. El bug de D32 era el cociente de densidades
+  invertido en el contraste, más el fondo ausente en el término de rigidez.
+  Queda **Faran (1951)** para la esfera elástica, que es el paso siguiente y ya tiene su referencia.
 - **Tensor elástico de la cápsula ótica — no hay dato citable.** Peterson y Dechow (2003) dan
   propiedades direccionales de cortical externa del temporal, no de la cápsula. Se sigue con isótropo
   `VERIFY` y los parámetros expuestos en la UI.
