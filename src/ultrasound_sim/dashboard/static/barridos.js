@@ -179,7 +179,7 @@ async function barApertura() {
     apertura_mm: parseFloat(valor('barApApertura')),
     foco_mm: parseFloat(valor('barApFoco')),
     frecuencia_khz: parseFloat(valor('barApFreq')),
-    material: 'agua', modelo: 'baffle',
+    material: valor('barApMaterial'), modelo: 'baffle',
   };
   bar$('btnBarApertura').disabled = true;
   bar$('btnBarAperturaCancelar').disabled = false;

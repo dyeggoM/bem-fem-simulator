@@ -400,6 +400,15 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
           <label class="mini-campo">kHz <input type="number" id="barApFreq" value="250" min="20" max="1000" step="10"></label>
         </div>
         <div class="fila-botones">
+          <label class="mini-campo">medio
+            <select id="barApMaterial">
+              <option value="agua" selected>agua (1500 m/s)</option>
+              <option value="tejido">tejido (1540 m/s)</option>
+              <option value="hueso">hueso (3500 m/s)</option>
+            </select>
+          </label>
+        </div>
+        <div class="fila-botones">
           <button class="btn mini" id="btnBarApertura">barrer apertura</button>
           <button class="btn mini" id="btnBarAperturaCancelar" disabled>cancelar</button>
         </div>

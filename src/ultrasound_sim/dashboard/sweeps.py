@@ -291,7 +291,9 @@ def barrido_apertura(datos: dict, trabajo=None) -> dict[str, Any]:
         })
         m = r["metrics"]
         pitch = d_m / n
-        lam = 1500.0 / (f_khz * 1e3)      # λ en agua: el criterio se mide siempre contra el agua
+        # λ del MATERIAL elegido, no del agua: en hueso (c = 3500) la λ es más de dos veces más corta
+        # y el pitch que cumple λ/4 baja con ella. Fijarla en 1500 sería medir el criterio de otro medio.
+        lam = float(r["meta"]["lambda_mm"]) * 1e-3
         return {
             "n": n, "pitch_mm": pitch * 1e3, "pitch_over_lambda": pitch / lam,
             "fwhm_lateral_mm": m.get("fwhm_lateral_mm"),

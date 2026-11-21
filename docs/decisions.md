@@ -2169,3 +2169,21 @@ arriba ni abajo).
 **Por qué va en el repo.** El criterio de pitch estaba en `docs/` y en un script; ahora se puede
 reproducir desde la UI y el resultado trae su número al lado. Es la diferencia entre "D25 dice λ/4" y
 "con estos parámetros, 0.28 λ da 1.7 %".
+
+#### D53 — apéndice: el pitch que cumple el 2 % se mide en el medio elegido
+
+El barrido usaba `λ = 1500/f` fija (agua) para normalizar el pitch. Eso mide el criterio de otro
+medio: en hueso `λ` es 2.33× más corta y el pitch que cumple `λ/4` baja con ella. Ahora se toma
+`λ` del material resuelto (el `lambda_mm` que devuelve el propio campo), y el barrido deja elegir
+medio.
+
+Medido, 60 mm y 250 kHz, 4 puntos:
+
+| medio | `pitch/λ` para n = 8, 22, 36, 64 | pitch más grueso dentro del 2 % |
+|---|---|---|
+| agua | 1.25, 0.37, 0.22, 0.16 | **0.370 λ** |
+| hueso | 0.536, 0.159, 0.095, 0.067 | **0.159 λ** |
+
+El número en `λ` baja en hueso porque `λ` baja: en milímetros el pitch que cumple es el mismo
+(60 mm / n), lo que cambia es contra qué se compara. Es la comprobación de que normalizar por `λ` del
+medio es lo correcto y no un detalle de presentación.
