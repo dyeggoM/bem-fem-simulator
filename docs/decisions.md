@@ -2043,3 +2043,44 @@ baja, es la formulación. Esa distinción decide el trabajo siguiente y todavía
 **Mientras tanto**, la UI muestra las dos formulaciones con su número medido y la advertencia de que
 la correcta da peor: no se esconde el resultado incómodo ni se presenta el 4.29 % como si fuera una
 validación limpia.
+
+## D51 — La ventana de validez de la esfera elástica es estrecha, y el barrido en `ka` lo muestra
+
+**Qué se agregó.** `dashboard/elastic_sweep.py` y su vista: resuelve la esfera en varios `ka` con una
+formulación y grafica el error contra Faran con la tolerancia del criterio como línea horizontal. Un
+número suelto dice cuánto se equivoca; el barrido dice **en qué régimen vale**.
+
+**Barrido preciso** (acero, dominio 4a, `h = a/4.5`, 61 puntos angulares):
+
+| `ka` | total: error máx. | total: L2 | sello total | dispersada: máx. | dispersada: L2 |
+|---|---|---|---|---|---|
+| 0.75 | 6.84 % | 5.89 % | fuera | 19.50 % | 20.14 % |
+| 1.17 | **4.88 %** | 3.09 % | **validado** | 20.24 % | 17.88 % |
+| 1.58 | **4.78 %** | 3.12 % | **validado** | 14.54 % | 13.66 % |
+| 2.00 | 9.20 % | 5.45 % | fuera | **7.43 %** | 7.69 % |
+
+**Tres consecuencias, y la primera es la que hay que decir en voz alta.**
+
+1. **El criterio del 6 % no vale en todo el rango: vale en `ka` ≈ 1.1–1.6.** En `ka = 0.75` la total da
+   6.84 % y en `ka = 2` da 9.20 %, las dos **fuera**. O sea que decir "la esfera elástica está validada
+   al 4.29 %" sin decir en qué ventana es exactamente el tipo de afirmación que este proyecto no hace.
+   Se corrige la `fuente` del criterio para que nombre la ventana medida.
+
+2. **Las dos formulaciones se cruzan.** La total gana en la ventana y en `ka` bajo; a `ka = 2` la
+   dispersada es mejor (7.43 % contra 9.20 %). No hay una "mejor" en todo el rango: la formulación
+   total es un instrumento con dominio de validez, no una aproximación universal. Es coherente con
+   D48 —suprime un término cuyo peso cambia con `ka`— y con D49 —la dispersada es una resta de
+   términos grandes que pesa más donde el campo dispersado es chico—.
+
+3. **El modo rápido NO sirve para comparar formulaciones, y el barrido lo delató.** Con dominio 2.5a
+   (5 puntos, acero): total 17.7 / 10.8 / 7.9 / 10.0 / 17.1 % y dispersada 15.2 / 19.6 / 20.1 / 11.3 /
+   12.9 %, y ahí la dispersada parecía **mejor en `ka` bajo**. En el preciso ocurre al revés (6.84 %
+   contra 19.50 % en `ka = 0.75`). La explicación es que con dominio 2.5a el error del ABC domina y
+   las dos formulaciones miden ese error, no su diferencia. Es la lección de D43 otra vez, en otra
+   escala: **no se comparan dos modelos donde manda un tercer error**. Por eso la UI muestra el modo y
+   el aviso de dominio junto al barrido.
+
+**Lo que queda anotado como límite del criterio, no como bug.** El criterio `volumen_esfera_elastica`
+es un criterio de una ventana; la fuente ahora lo dice. Lo que falta para tener un criterio de todo el
+rango es entender el error de la total fuera de la ventana —y ahí la hipótesis sigue siendo el dipolo
+suprimido (D48), que pesa más justo donde la total falla: `ka` bajo y `ka` alto.

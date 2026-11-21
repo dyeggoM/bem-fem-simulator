@@ -51,6 +51,8 @@ window.esfIniciar = function () {
     esf$('btnEsfJson').addEventListener('click', () => esfDescargarJson());
     esf$('btnEsfCsv').addEventListener('click', () => esfDescargarCsv());
     esf$('btnEsfGuardar').addEventListener('click', esfGuardar);
+    esf$('btnEsfBarrido').addEventListener('click', esfBarrido);
+    esf$('btnEsfBarridoCancelar').addEventListener('click', esfBarridoCancelar);
     esfCargarHistorial();
     esfPintarHistorial();
     ESF.inicializado = true;
@@ -119,6 +121,119 @@ function esfDescargarCsv() {
   }
   esfDescargar(`${esfNombreBase()}.csv`, filas.join('\n'), 'text/csv');
   esf$('esfDescarga').textContent = `descargado ${esfNombreBase()}.csv (${a.theta_deg.length} puntos)`;
+}
+
+// ---------------------------------------------------------------------------------------------
+// barrido en ka: dónde vale cada formulación
+// ---------------------------------------------------------------------------------------------
+async function esfBarrido() {
+  const cuerpo = {
+    desde: parseFloat(esf$('esfBarDesde').value),
+    hasta: parseFloat(esf$('esfBarHasta').value),
+    puntos: parseInt(esf$('esfBarPuntos').value, 10),
+    material: esf$('esfMaterial').value,
+    modo: ESF.modo,
+    formulacion: esf$('esfFormulacion').value,
+    frecuencia_hz: ESF.freq_khz * 1e3,
+    puntos_angulo: 61,
+  };
+  esf$('btnEsfBarrido').disabled = true;
+  esf$('btnEsfBarridoCancelar').disabled = false;
+  esf$('esfBarResumen').textContent = '';
+  esf$('esfBarProgreso').style.width = '0%';
+  esf$('esfBarEstado').textContent = 'encolando…';
+  try {
+    const r = await fetch('/api/jobs/esfera_barrido', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(cuerpo),
+    }).then((x) => x.json());
+    if (!r.ok) throw new Error(r.error || 'no se pudo encolar');
+    ESF.barridoJob = r.job.id;
+    esfBarridoSeguir();
+  } catch (e) {
+    esf$('esfBarEstado').textContent = `no se pudo lanzar: ${e.message}`;
+    esf$('btnEsfBarrido').disabled = false;
+    esf$('btnEsfBarridoCancelar').disabled = true;
+  }
+}
+
+async function esfBarridoCancelar() {
+  if (!ESF.barridoJob) return;
+  esf$('btnEsfBarridoCancelar').disabled = true;
+  await fetch(`/api/jobs/${ESF.barridoJob}/cancel`, { method: 'POST' });
+}
+
+function esfBarridoSeguir() {
+  clearInterval(ESF.barridoTimer);
+  ESF.barridoTimer = setInterval(async () => {
+    try {
+      const j = await (await fetch(`/api/jobs/${ESF.barridoJob}`)).json();
+      esf$('esfBarProgreso').style.width = `${Math.round(100 * j.progreso)}%`;
+      esf$('esfBarEstado').textContent = `${j.estado} · ${Math.round(100 * j.progreso)} % · ${j.mensaje}`;
+      if (j.estado === 'listo') {
+        clearInterval(ESF.barridoTimer);
+        esfPintarBarrido(j.resultado);
+        esf$('btnEsfBarrido').disabled = false;
+        esf$('btnEsfBarridoCancelar').disabled = true;
+      } else if (j.estado === 'error' || j.estado === 'cancelado') {
+        clearInterval(ESF.barridoTimer);
+        esf$('esfBarEstado').textContent = j.estado === 'error' ? `error: ${j.error}` : 'cancelado';
+        esf$('btnEsfBarrido').disabled = false;
+        esf$('btnEsfBarridoCancelar').disabled = true;
+      }
+    } catch (e) {
+      clearInterval(ESF.barridoTimer);
+      esf$('esfBarEstado').textContent = `se cortó el seguimiento: ${e.message}`;
+      esf$('btnEsfBarrido').disabled = false;
+      esf$('btnEsfBarridoCancelar').disabled = true;
+    }
+  }, 800);
+}
+
+function esfPintarBarrido(r) {
+  const b = r.barrido;
+  const tol = r.resumen.tolerancia;
+  const puntos = b.ka.map((ka, i) => ({
+    ka, err: 100 * b.error_relativo[i], l2: 100 * b.error_l2_relativo[i], sello: b.sello[i],
+  }));
+  const color = (s) => (s === 'validado' ? '#3fb950' : (s === 'fuera' ? '#f85149' : '#d29922'));
+  Plotly.react('barridoEsf', [
+    {
+      type: 'scatter', mode: 'lines+markers', name: 'error máx. (%)', x: b.ka,
+      y: b.error_relativo.map((v) => 100 * v),
+      line: { color: '#58a6ff', width: 1.6 },
+      marker: { size: 7, color: puntos.map((p) => color(p.sello)) },
+      hovertemplate: 'ka %{x:.2f}<br>error máx. %{y:.2f} %<extra></extra>',
+    },
+    {
+      type: 'scatter', mode: 'lines+markers', name: 'error L2 (%)', x: b.ka,
+      y: b.error_l2_relativo.map((v) => 100 * v),
+      line: { color: '#d29922', width: 1.3, dash: 'dot' }, marker: { size: 4 },
+      hovertemplate: 'ka %{x:.2f}<br>L2 %{y:.2f} %<extra></extra>',
+    },
+  ], {
+    ...ESF_LAYOUT,
+    title: {
+      text: `barrido en ka · ${b.material} · ${b.formulacion} · ${b.modo}`
+        + ` (verde = dentro del criterio, rojo = fuera)`,
+      font: { size: 10, color: '#8b95a1' },
+    },
+    xaxis: { title: { text: 'ka = k₀·a' } },
+    yaxis: { title: { text: 'error contra Faran (%)' } },
+    legend: { orientation: 'h', y: 1.18, font: { size: 9 } },
+    shapes: [{
+      type: 'line', xref: 'paper', x0: 0, x1: 1, y0: 100 * tol, y1: 100 * tol,
+      line: { color: '#f85149', width: 1, dash: 'dash' },
+    }],
+  });
+
+  const s = r.resumen;
+  esf$('esfBarEstado').textContent = 'listo';
+  esf$('esfBarResumen').textContent =
+    `${s.n_dentro} de ${b.n_puntos} puntos dentro del criterio (${(100 * s.tolerancia).toFixed(0)} %)`
+    + (s.n_dentro ? `: ka ${s.dentro_de.map((v) => v.toFixed(2)).join(', ')}` : '')
+    + ` · peor ${(100 * s.peor_error).toFixed(2)} % en ka ${s.peor_ka.toFixed(2)}`
+    + ` · mejor ${(100 * s.mejor_error).toFixed(2)} % · ${s.segundos_totales.toFixed(0)} s en total`;
+  window.vistaGuardar('esfera_barrido', r);
 }
 
 // ---------------------------------------------------------------------------------------------

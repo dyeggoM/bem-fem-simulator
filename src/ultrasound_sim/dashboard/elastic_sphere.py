@@ -242,8 +242,13 @@ def resolver(datos: dict, trabajo=None) -> dict[str, Any]:
     lambda_s = solido.c_s / f
     elementos_por_corte = lambda_s / elemento
 
-    paso(0.9, "campo en el plano de propagación")
-    mapa = _mapa_plano(mall, res["p_s"], modo["b_rel"] * radio, radio)
+    # El mapa 81×81 cuesta ~1 s y es lo único que no hace falta cuando se barre: en un barrido de 8
+    # puntos serían 8 s de mapa que nadie mira. `con_mapa=False` lo omite.
+    if datos.get("con_mapa", True):
+        paso(0.9, "campo en el plano de propagación")
+        mapa = _mapa_plano(mall, res["p_s"], modo["b_rel"] * radio, radio)
+    else:
+        mapa = None
 
     # `sello_conjunto` y no `sello`: la UI espera la forma con la lista de criterios, igual que el
     # resto de las vistas (una sola forma para todos los sellos, D39).

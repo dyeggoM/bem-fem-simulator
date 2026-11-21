@@ -28,7 +28,7 @@ from .. import cochlea, materials as mats
 from . import bem_field
 from . import field as campo
 from . import (
-    cochlea_field, elastic_sphere, jobs, scatterer, scene, sweeps, validacion, volume3d,
+    cochlea_field, elastic_sweep, elastic_sphere, jobs, scatterer, scene, sweeps, validacion, volume3d,
 )
 
 ESTATICOS = Path(__file__).resolve().parent / "static"
@@ -295,6 +295,7 @@ class Handler(BaseHTTPRequestHandler):
                         "/api/cochlea/field", "/api/cochlea/field/cost",
                         "/api/jobs/sensibilidad", "/api/jobs/q_coclea",
                         "/api/jobs/barrido_escena", "/api/jobs/esfera",
+                        "/api/jobs/esfera_barrido",
                         "/api/volume3d/cost", "/api/volume3d/solve"):
             self._error("no encontrado", HTTPStatus.NOT_FOUND)
             return
@@ -327,6 +328,14 @@ class Handler(BaseHTTPRequestHandler):
                 respuesta = volume3d.estimar_volumen(cuerpo)
             elif ruta == "/api/volume3d/solve":
                 respuesta = volume3d.resolver_volumen(cuerpo)
+            elif ruta == "/api/jobs/esfera_barrido":
+                trabajo = jobs.COLA.enviar(
+                    "esfera_barrido",
+                    f"barrido ka de la esfera ({cuerpo.get('desde', 0.5)}–{cuerpo.get('hasta', 2.0)}, "
+                    f"{cuerpo.get('puntos', 7)} puntos)",
+                    _esfera_barrido_job, cuerpo,
+                )
+                respuesta = {"ok": True, "job": trabajo.a_dict()}
             elif ruta == "/api/jobs/esfera":
                 trabajo = jobs.COLA.enviar(
                     "esfera", f"esfera elástica (ka {cuerpo.get('ka', 1.0)})",
@@ -383,6 +392,11 @@ def _esfera_job(trabajo, datos):
     """Adaptador para la cola: `jobs` llama `fn(trabajo, *args)` y `resolver` espera
     `(datos, trabajo)`. Sin esto el job recibe su propio objeto como si fuera el pedido."""
     return elastic_sphere.resolver(datos, trabajo)
+
+
+def _esfera_barrido_job(trabajo, datos):
+    """Adaptador de la cola para el barrido en `ka` (misma firma invertida que `_esfera_job`)."""
+    return elastic_sweep.barrido_ka(datos, trabajo)
 
 
 def calcular_coclea(payload: dict) -> dict:

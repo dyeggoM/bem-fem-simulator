@@ -388,6 +388,13 @@ agrega a la librería con su criterio, después se enchufa.
   **Consecuencia honesta**: el 4.29 % está en parte **cancelado** con el error de discretización, no
   ganado. El default sigue en la total (`fijar_rigidos=True`) porque es la sellada, y el criterio queda
   calificado a metales.
+  *Barrido en `ka` en la UI (U7b)*: la vista resuelve la esfera en varios `ka` y grafica el error de
+  cada formulación contra Faran, con la tolerancia del criterio como línea. Primer resultado con el
+  modo rápido (dominio 2.5a, 5 puntos): la **dispersada gana en `ka = 0.5`** (15.2 % contra 17.7 %) y
+  **pierde entre `ka = 1.0` y `1.5`** (19.6/20.1 % contra 10.8/7.9 %). O sea: la formulación correcta
+  mejora justo en el límite de Rayleigh, que es donde la traslación `3/(2g+1)` pesa, y empeora donde
+  el campo dispersado tiene estructura. Es la confirmación numérica de D50 en el rango, no sólo en el
+  punto.
   *Traslación contrastada (D50), y el resultado es limpio*: a `k₀a = 0.1` las dos formulaciones
   correctas dan `|u_cm|/|u_i|` al **1-2 %** de `3/(2g+1)` (acero 0.1772 vs 0.1807; hueso 0.6064 vs
   0.6122). El acoplamiento fluido-sólido y la masa añadida están bien ⇒ **el 19-44 % a `ka = 1` es

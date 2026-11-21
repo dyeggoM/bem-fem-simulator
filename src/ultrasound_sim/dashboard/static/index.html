@@ -573,6 +573,24 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
       <p class="hint" id="esfMetricas"></p>
 
       <section>
+        <label>Barrido en ka de la misma esfera
+          <span class="tip" title="Resuelve la esfera en varios ka y grafica el error de cada formulación contra Faran. Sirve para ver DÓNDE deja de valer: un número suelto dice cuánto se equivoca, el barrido dice en qué régimen. Con el modo rápido cada punto es ~2 s; con el preciso ~30 s.">?</span>
+        </label>
+        <div class="fila-botones">
+          <label class="mini-campo">desde <input type="number" id="esfBarDesde" value="0.5" min="0.3" max="3" step="0.1"></label>
+          <label class="mini-campo">hasta <input type="number" id="esfBarHasta" value="2.0" min="0.3" max="3" step="0.1"></label>
+          <label class="mini-campo">puntos <input type="number" id="esfBarPuntos" value="7" min="2" max="25" step="1"></label>
+        </div>
+        <div class="fila-botones">
+          <button class="btn mini" id="btnEsfBarrido">barrer ka</button>
+          <button class="btn mini" id="btnEsfBarridoCancelar" disabled>cancelar</button>
+        </div>
+        <div class="progreso"><div class="progreso-barra" id="esfBarProgreso"></div></div>
+        <p class="pie" id="esfBarEstado">sin lanzar</p>
+        <p class="hint" id="esfBarResumen"></p>
+      </section>
+
+      <section>
         <label>Resultados</label>
         <div class="fila-botones">
           <button class="btn mini" id="btnEsfJson">descargar JSON</button>
@@ -646,6 +664,7 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
     <div class="cortes">
       <div id="angEsf" class="corte ancho"></div>
       <div id="faseEsf" class="corte ancho"></div>
+      <div id="barridoEsf" class="corte ancho"></div>
     </div>
   </main>
 

@@ -149,7 +149,9 @@ CRITERIOS: dict[str, Criterio] = {
         # que hace que un número parezca otra cosa (D49, apéndice 3: el máximo es además frágil
         # porque un lóbulo corrido por el facetado lo infla sin que la amplitud esté mal).
         referencia=0.0, tolerancia=0.06, modo="abs", unidad="máx. relativo",
-        fuente="Faran (1951) / D46: el acoplado da 4.21 % a ka = 1 en dominio 4a con h = a/4.5",
+        fuente="Faran (1951) / D46: 4.21 % a ka = 1 (dominio 4a, h = a/4.5) / D51: la ventana medida"
+               " en que la formulación total cumple este criterio es ka ≈ 1.1-1.6; en ka = 0.75 da"
+               " 6.84 % y en ka = 2.00 da 9.20 %, las dos fuera",
     ),
     "barrido_d30": Criterio(
         id="barrido_d30",

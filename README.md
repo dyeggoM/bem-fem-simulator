@@ -82,6 +82,20 @@ En `x > 0` dan el mismo módulo con 180° de fase —una identidad, no una aprox
 supuesto de baffle no sesga el campo delantero; lo único que niega es la radiación trasera, que en el
 modelo libre es tan fuerte como la delantera (D28).
 
+### Lo que agregó U8 (para trabajar, no para mirar una vez)
+
+- **Registro de criterios**: la vista `criterios` muestra los 12 criterios del servidor con su
+  tolerancia y su fuente, y al lado el número medido en la sesión. Un criterio sin corrida dice
+  **sin medir**, que no es un aprobado.
+- **Exportar**: un botón transversal baja un PNG de cada gráfica visible y un JSON con sus trazas. En
+  la esfera además: JSON completo, CSV de `|p_s|(θ)` y un historial de corridas que se **superponen**
+  en la gráfica para comparar formulaciones o materiales.
+- **No se repite el solve**: cada vista cara guarda su último resultado (localStorage, 12 h) y lo
+  repinta al volver, diciendo de cuándo es.
+- **Barrido en `ka` de la esfera elástica**: grafica el error de cada formulación contra Faran con la
+  tolerancia del criterio como línea, para ver **dónde** vale cada una y no sólo cuánto se equivoca
+  en un punto.
+
 ## Limitaciones conocidas (medidas, no estimadas)
 
 - **El material manda sobre la malla.** Con el modelo completo (membrana basilar incluida) el
