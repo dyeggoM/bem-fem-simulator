@@ -336,6 +336,33 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
       </section>
 
       <p class="pie" id="cocFieldEstado">sin resolver</p>
+
+      <section>
+        <label>Q del pico <span class="mini">(barrido de frecuencia)</span></label>
+        <p class="hint">Q = f_pico/Δf con |p|² a la mitad del máximo (o sea |p| = máx/√2). Es una
+        <b>definición operativa</b>: no existe un Q citable de la resonancia de la cápsula ótica.</p>
+        <label for="cocQDesde">desde <b id="cocQDesdeVal">85 kHz</b></label>
+        <input type="range" id="cocQDesde" min="20" max="200" step="5" value="85">
+        <label for="cocQHasta">hasta <b id="cocQHastaVal">115 kHz</b></label>
+        <input type="range" id="cocQHasta" min="30" max="300" step="5" value="115">
+        <label for="cocQPuntos">puntos <b id="cocQPuntosVal">13</b></label>
+        <input type="range" id="cocQPuntos" min="5" max="41" step="2" value="13">
+        <label for="cocQRef">Q de referencia <span class="mini">(opcional)</span>
+          <span class="tip" title="No hay Q citable de la cavidad coclear humana: Q_ERB ≈ 12.7 a 1 kHz es selectividad de los filtros del órgano de Corti, no la resonancia de la cápsula. Si tenés un valor de tu propia fuente, escribilo acá y la UI mide cuánto se aleja el modelo. Vacío = no se compara.">?</span>
+        </label>
+        <input type="number" id="cocQRef" min="0" step="0.5" placeholder="sin referencia">
+        <div class="fila-botones">
+          <button class="btn mini" id="btnQ">medir Q</button>
+          <button class="btn mini" id="btnQCancelar" disabled>cancelar</button>
+        </div>
+        <div class="progreso"><div class="progreso-barra" id="cocQProgreso"></div></div>
+        <div class="chips">
+          <div class="chip"><span>Q medido</span><b id="cocQValor">—</b></div>
+          <div class="chip"><span>f del pico</span><b id="cocQPico">—</b></div>
+        </div>
+        <p class="hint" id="cocQSello"></p>
+        <p class="pie" id="cocQEstado">sin medir</p>
+      </section>
     </div><!-- /vistaCochlea -->
 
     <div id="vistaBarridos" hidden>

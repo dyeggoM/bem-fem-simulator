@@ -277,7 +277,7 @@ class Handler(BaseHTTPRequestHandler):
         if ruta not in ("/api/field", "/api/cochlea", "/api/scene/solve", "/api/scene/cost",
                         "/api/scatterer/solve", "/api/scatterer/cost",
                         "/api/cochlea/field", "/api/cochlea/field/cost",
-                        "/api/jobs/sensibilidad",
+                        "/api/jobs/sensibilidad", "/api/jobs/q_coclea",
                         "/api/volume3d/cost", "/api/volume3d/solve"):
             self._error("no encontrado", HTTPStatus.NOT_FOUND)
             return
@@ -310,6 +310,20 @@ class Handler(BaseHTTPRequestHandler):
                 respuesta = volume3d.estimar_volumen(cuerpo)
             elif ruta == "/api/volume3d/solve":
                 respuesta = volume3d.resolver_volumen(cuerpo)
+            elif ruta == "/api/jobs/q_coclea":
+                desde = float(cuerpo.get("desde_hz", 85e3))
+                hasta = float(cuerpo.get("hasta_hz", 115e3))
+                puntos = int(cuerpo.get("puntos", 13))
+                if not (20e3 <= desde < hasta <= 1e6):
+                    raise ValueError(f"banda inválida: {desde:g}–{hasta:g} Hz")
+                if not (5 <= puntos <= 41):
+                    raise ValueError(f"puntos fuera de rango [5, 41]: {puntos}")
+                trabajo = jobs.COLA.enviar(
+                    "q_coclea", f"Q {desde/1e3:.0f}–{hasta/1e3:.0f} kHz",
+                    sweeps.barrido_frecuencia,
+                    desde_hz=desde, hasta_hz=hasta, puntos=puntos,
+                )
+                respuesta = {"ok": True, "job": trabajo.a_dict()}
             elif ruta == "/api/jobs/sensibilidad":
                 trabajo = sweeps.enviar_barrido(jobs.COLA)
                 respuesta = {"ok": True, "job": trabajo.a_dict()}

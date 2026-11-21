@@ -90,11 +90,12 @@ def _hueso(c_p: float, c_s: float, rho: float) -> mats.ElasticSolid:
 
 
 def _t_interior(*, c_p: float, c_s: float, rho: float, espesor_m: float,
-                alpha: float, z_factor: float) -> float:
+                alpha: float, z_factor: float, frecuencia: float | None = None) -> float:
     """Un punto del barrido: malla + solve con la membrana del ballpark puesta."""
+    f = FRECUENCIA_HZ if frecuencia is None else float(frecuencia)
     hueso = _hueso(c_p, c_s, rho)
     seccion = cochlea.build_cross_section(
-        FRECUENCIA_HZ, RADIO_M, espesor_m,
+        f, RADIO_M, espesor_m,
         ppw=PPW, pad_wavelengths=PAD_WAVELENGTHS,
         min_elements_across_wall=MIN_ELEMENTS_ACROSS_WALL,
         bone=hueso,
@@ -106,9 +107,126 @@ def _t_interior(*, c_p: float, c_s: float, rho: float, espesor_m: float,
     )
     sol = cochlea.solve_cross_section(
         seccion, alpha=alpha,
-        membrane_impedance=cochlea.BASILAR_MEMBRANE_BALLPARK.impedance(FRECUENCIA_HZ),
+        membrane_impedance=cochlea.BASILAR_MEMBRANE_BALLPARK.impedance(f),
     )
     return float(sol.t_interior)
+
+
+# --------------------------------------------------------------------------- barrido de frecuencia y Q
+#
+# DEFINICIÓN DE Q — fijada por Sim-Datos en la consulta del 2026-11-20, y es **operativa**, no un dato
+# biológico: no existe un Q citable de la resonancia de la cápsula ótica humana en 0.1–1 kHz ni a
+# 100 kHz–1 MHz. Se define, para un modo aislado y débilmente amortiguado:
+#
+#     Q_3dB = f_peak / (f2 − f1),  con |H|²(f) = |H|²_max / 2,  o sea |H| = |H|_max / √2
+#
+# Son los mismos puntos se use 20·log10|H| o 10·log10|H|²; **no** es "media amplitud". Y en un campo
+# estacionario |p|² no representa por sí solo la intensidad neta, así que lo que se mide es el ancho de
+# banda del pico de `t_interior`, no una potencia absorbida.
+#
+# Lo que sí está documentado y NO es esto: Q_ERB = CF/ERB ≈ 12.7 ± 1 a 1 kHz (Shera, Guinan y Oxenham
+# 2002) es selectividad de los filtros cocleares, no la resonancia global de la cápsula, y Q_10dB se
+# usa para respuestas de membrana basilar dependientes del nivel. Nada de eso se traslada acá.
+
+BANDA_Q_POR_DEFECTO = (85.0e3, 115.0e3)   # Hz
+PUNTOS_Q_POR_DEFECTO = 13
+
+
+def _campana_decaimiento(valores: np.ndarray, frecuencias: np.ndarray) -> dict[str, Any]:
+    """Q por ancho de banda a −3 dB en potencia (|H| = máx/√2) sobre el pico más alto."""
+    valores = np.asarray(valores, dtype=float)
+    if valores.size < 5 or not np.all(np.isfinite(valores)):
+        return {"Q": None, "motivo": "curva incompleta para medir el ancho de banda"}
+
+    i_pico = int(np.argmax(valores))
+    pico = float(valores[i_pico])
+    nivel = pico / np.sqrt(2.0)
+
+    def _cruce(inicio: int, paso: int) -> float | None:
+        """Camina desde el pico hacia un extremo e interpola dónde corta el nivel de −3 dB.
+
+        Ojo con el rango: `range(i, -1)` con paso +1 es vacío (bug que tuve en la primera versión y
+        dejaba el Q siempre en `None`). Por eso se avanza a mano con el paso explícito.
+        """
+        i = inicio
+        while 0 <= i + paso < valores.size:
+            j = i + paso
+            a, b = valores[i], valores[j]
+            if (a - nivel) * (b - nivel) <= 0 and a != b:
+                peso = (nivel - a) / (b - a)
+                return float(frecuencias[i] + peso * (frecuencias[j] - frecuencias[i]))
+            i = j
+        return None
+
+    f_abajo = _cruce(i_pico, -1)
+    f_arriba = _cruce(i_pico, +1)
+    if f_abajo is None or f_arriba is None:
+        # Si la curva no baja 3 dB dentro de la banda, el ancho a media potencia es AL MENOS el de la
+        # banda: eso da una cota superior de Q, que es un resultado (la respuesta es ancha), no un
+        # fracaso. Es el caso del corte con membrana: no hay un pico estrecho que medir.
+        ancho_banda = float(frecuencias[-1] - frecuencias[0])
+        return {
+            "Q": None,
+            "Q_cota_superior": float(frecuencias[i_pico] / ancho_banda),
+            "f_pico_hz": float(frecuencias[i_pico]),
+            "motivo": ("la respuesta no cae 3 dB dentro de la banda: el ancho a media potencia es "
+                       "al menos el de la banda, así que Q no supera la cota superior"),
+        }
+
+    ancho = f_arriba - f_abajo
+    if ancho <= 0:
+        return {"Q": None, "motivo": "los cruces de −3 dB salieron invertidos"}
+    return {
+        "Q": float(frecuencias[i_pico] / ancho),
+        "f_pico_hz": float(frecuencias[i_pico]),
+        "f_abajo_hz": f_abajo,
+        "f_arriba_hz": f_arriba,
+        "ancho_hz": float(ancho),
+        "nivel_3db": float(nivel),
+        "resolucion_relativa": float(abs(frecuencias[1] - frecuencias[0]) / frecuencias[i_pico]),
+    }
+
+
+def barrido_frecuencia(trabajo, **datos: Any) -> dict[str, Any]:
+    """t_interior(f) en una banda y el Q que sale de su pico, con la definición de arriba."""
+    desde = float(datos.get("desde_hz", BANDA_Q_POR_DEFECTO[0]))
+    hasta = float(datos.get("hasta_hz", BANDA_Q_POR_DEFECTO[1]))
+    puntos = int(datos.get("puntos", PUNTOS_Q_POR_DEFECTO))
+    if not (20.0e3 <= desde < hasta <= 1.0e6):
+        raise ValueError(f"banda inválida: {desde:g}–{hasta:g} Hz")
+    if not (5 <= puntos <= 41):
+        raise ValueError(f"puntos fuera de rango [5, 41]: {puntos}")
+
+    frecuencias = np.linspace(desde, hasta, puntos)
+    valores: list[float] = []
+    for i, f in enumerate(frecuencias):
+        if trabajo.cancelado():
+            raise RuntimeError("cancelado por el usuario")
+        trabajo.avanzar((i + 1) / (puntos + 1), f"f = {f / 1e3:.1f} kHz")
+        valores.append(_t_interior(c_p=BASE_CP, c_s=BASE_CS, rho=BASE_RHO,
+                                   espesor_m=BASE_ESPESOR_M, alpha=0.0, z_factor=1.0,
+                                   frecuencia=float(f)))
+
+    arreglo = np.asarray(valores)
+    q = _campana_decaimiento(arreglo, frecuencias)
+    return {
+        "ok": True,
+        "banda_hz": [desde, hasta],
+        "puntos": puntos,
+        "frecuencias_hz": frecuencias.tolist(),
+        "t_interior": arreglo.tolist(),
+        "q": q,
+        "definicion": "Q = f_pico/(f2 − f1) con |p|² = |p|²_max/2 (o sea |p| = |p|_max/√2)",
+        "advertencia": (
+            "Definición OPERATIVA: no existe un Q citable de la resonancia de la cápsula ótica. "
+            "Q_ERB ≈ 12.7 a 1 kHz es selectividad de los filtros cocleares, no esta resonancia."
+        ),
+        "resolucion": (
+            f"con {puntos} puntos el paso relativo es "
+            f"{100 * abs(frecuencias[1] - frecuencias[0]) / frecuencias[int(np.argmax(arreglo))]:.2f} % "
+            f"del pico; un Q mayor que ~1/paso no se resuelve, hay que refinar la banda"
+        ),
+    }
 
 
 def total_de_puntos() -> int:

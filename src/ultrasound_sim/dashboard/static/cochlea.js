@@ -184,3 +184,129 @@ cocf$('cocFieldMemb').addEventListener('change', (e) => { COCF.membrana = e.targ
 cocf$('cocFieldVent').addEventListener('change', (e) => { COCF.ventana = e.target.checked; });
 cocf$('btnCocFieldEstimar').addEventListener('click', cocfEstimar);
 cocf$('btnCocField').addEventListener('click', cocfResolver);
+
+/* ---------------------------------------------------------------- Q del pico (barrido) */
+
+const COCQ = { desde: 85, hasta: 115, puntos: 13, ref: null, jobId: null, temporizador: null };
+
+async function cocqLanzar() {
+  if (COCQ.desde >= COCQ.hasta) {
+    cocf$('cocQEstado').textContent = 'la banda necesita desde < hasta';
+    return;
+  }
+  cocf$('btnQ').disabled = true;
+  cocf$('btnQCancelar').disabled = false;
+  cocf$('cocQProgreso').style.width = '0%';
+  cocf$('cocQEstado').textContent = 'encolando…';
+  try {
+    const r = await fetch('/api/jobs/q_coclea', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ desde_hz: COCQ.desde * 1e3, hasta_hz: COCQ.hasta * 1e3,
+                             puntos: COCQ.puntos }),
+    }).then((x) => x.json());
+    if (!r.ok) throw new Error(r.error || 'no se pudo encolar');
+    COCQ.jobId = r.job.id;
+    cocqSeguir();
+  } catch (e) {
+    cocf$('cocQEstado').textContent = `no se pudo lanzar: ${e.message}`;
+    cocf$('btnQ').disabled = false;
+    cocf$('btnQCancelar').disabled = true;
+  }
+}
+
+async function cocqCancelar() {
+  if (!COCQ.jobId) return;
+  cocf$('btnQCancelar').disabled = true;
+  await fetch(`/api/jobs/${COCQ.jobId}/cancel`, { method: 'POST' });
+  cocf$('cocQEstado').textContent = 'cancelación pedida…';
+}
+
+function cocqSeguir() {
+  clearInterval(COCQ.temporizador);
+  COCQ.temporizador = setInterval(async () => {
+    try {
+      const j = await (await fetch(`/api/jobs/${COCQ.jobId}`)).json();
+      cocf$('cocQProgreso').style.width = `${Math.round(100 * j.progreso)}%`;
+      cocf$('cocQEstado').textContent = `${j.estado} · ${Math.round(100 * j.progreso)} % · ${j.mensaje}`;
+      if (j.estado === 'listo') {
+        clearInterval(COCQ.temporizador);
+        cocqPintar(j.resultado);
+        cocf$('btnQ').disabled = false;
+        cocf$('btnQCancelar').disabled = true;
+      } else if (j.estado === 'error' || j.estado === 'cancelado') {
+        clearInterval(COCQ.temporizador);
+        cocf$('cocQEstado').textContent = j.estado === 'error' ? `error: ${j.error}` : 'cancelado';
+        cocf$('btnQ').disabled = false;
+        cocf$('btnQCancelar').disabled = true;
+      }
+    } catch (e) {
+      clearInterval(COCQ.temporizador);
+      cocf$('cocQEstado').textContent = `se cortó el seguimiento: ${e.message}`;
+      cocf$('btnQ').disabled = false;
+      cocf$('btnQCancelar').disabled = true;
+    }
+  }, 700);
+}
+
+function cocqPintar(r) {
+  const q = r.q;
+  const valor = q.Q !== null ? q.Q : (q.Q_cota_superior !== null ? q.Q_cota_superior : null);
+  cocf$('cocQValor').textContent = q.Q !== null
+    ? `Q = ${cocfFmt(q.Q, 2)}`
+    : (valor !== null ? `Q ≤ ${cocfFmt(valor, 2)}` : '—');
+  cocf$('cocQPico').textContent = `${cocfFmt(q.f_pico_hz / 1e3, 2)} kHz`;
+
+  // Si el usuario cargó un Q de referencia, se compara. Sin referencia NO se declara nada: no hay
+  // valor citable de la cavidad coclear (consulta a Sim-Datos), y el campo existe justamente para
+  // que entre el dato propio del usuario.
+  const partes = [];
+  if (q.Q !== null) {
+    partes.push(`Q medido ${cocfFmt(q.Q, 2)} con ${r.puntos} puntos entre ` +
+                `${cocfFmt(r.banda_hz[0] / 1e3, 0)} y ${cocfFmt(r.banda_hz[1] / 1e3, 0)} kHz.`);
+  } else {
+    partes.push(q.motivo || 'no se pudo medir Q.');
+    if (q.Q_cota_superior !== null && q.Q_cota_superior !== undefined) {
+      partes.push(`El ancho a media potencia es al menos el de la banda: Q no supera ` +
+                  `${cocfFmt(q.Q_cota_superior, 2)}.`);
+    }
+  }
+  if (COCQ.ref !== null && q.Q !== null) {
+    const desvio = Math.abs(q.Q - COCQ.ref) / COCQ.ref;
+    partes.push(`Contra tu referencia (Q = ${cocfFmt(COCQ.ref, 2)}): ` +
+                `desvío ${cocfFmt(100 * desvio, 1)} %.`);
+  } else if (COCQ.ref !== null && q.Q_cota_superior != null) {
+    // comparar una cota con un número exacto y reportar "desvío" sería inventar precisión
+    const alcanza = q.Q_cota_superior >= COCQ.ref;
+    partes.push(alcanza
+      ? `Tu referencia (Q = ${cocfFmt(COCQ.ref, 2)}) queda dentro de la cota medida ` +
+        `(Q ≤ ${cocfFmt(q.Q_cota_superior, 2)}): el modelo no la descarta.`
+      : `Tu referencia (Q = ${cocfFmt(COCQ.ref, 2)}) queda por encima de la cota ` +
+        `(Q ≤ ${cocfFmt(q.Q_cota_superior, 2)}): el modelo no llega a ese Q en esta banda.`);
+  } else if (COCQ.ref === null) {
+    partes.push('Sin Q de referencia cargado: no existe uno citable para esta cavidad, así que no ' +
+                'se compara con nada.');
+  }
+  partes.push(r.resolucion + '.');
+  partes.push(r.advertencia);
+  cocf$('cocQSello').textContent = partes.join(' ');
+}
+
+cocf$('cocQDesde').addEventListener('input', (e) => {
+  COCQ.desde = parseInt(e.target.value, 10);
+  cocf$('cocQDesdeVal').textContent = `${COCQ.desde} kHz`;
+});
+cocf$('cocQHasta').addEventListener('input', (e) => {
+  COCQ.hasta = parseInt(e.target.value, 10);
+  cocf$('cocQHastaVal').textContent = `${COCQ.hasta} kHz`;
+});
+cocf$('cocQPuntos').addEventListener('input', (e) => {
+  COCQ.puntos = parseInt(e.target.value, 10);
+  cocf$('cocQPuntosVal').textContent = String(COCQ.puntos);
+});
+cocf$('cocQRef').addEventListener('change', (e) => {
+  const v = parseFloat(e.target.value);
+  COCQ.ref = Number.isFinite(v) && v > 0 ? v : null;
+});
+cocf$('btnQ').addEventListener('click', cocqLanzar);
+cocf$('btnQCancelar').addEventListener('click', cocqCancelar);

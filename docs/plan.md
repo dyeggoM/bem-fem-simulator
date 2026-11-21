@@ -39,9 +39,23 @@ Resumen de lo que está *cerrado con número medido*, no de lo que está escrito
 - **UI (D27/D31)** — dashboard local con motor de campo, editor de fuentes con arrastre, panel de
   cóclea y métricas; 250 tests en verde (1 xfail documentado).
 
-**Pendiente y por qué**: dispersión penetrable 3D (el operador del dispersado tiene que ser el del
-fondo; ver D32), elasticidad 3D, geometría de CT, referencia externa Elmer/openCFS, y la UI de
-trabajo (abajo).
+**Pendiente y por qué** (actualizado con la consulta a `sim-datos`, D40):
+
+- **Dispersión penetrable 3D — desbloqueada.** El benchmark que faltaba existe: esfera fluida de
+  **Anderson (1950)** por ondas parciales (válida para todo `ka`), y **Faran (1951)** para esfera
+  elástica sumergida. El operador del dispersado sigue necesitando el `k` del fondo (D32).
+- **Tensor elástico de la cápsula ótica — no hay dato citable.** Peterson y Dechow (2003) dan
+  propiedades direccionales de cortical externa del temporal, no de la cápsula. Se sigue con isótropo
+  `VERIFY` y los parámetros expuestos en la UI.
+- **CT→velocidad — hay calibración.** Webb et al. (2018): `c = m·HU + b`, ejemplo `m = 0.75
+  m·s⁻¹·HU⁻¹`, `b = 1.32 km/s`, `R² = 0.46` (depende de energía y reconstrucción). Entra como valores
+  por defecto citados y editables en la fase de geometría de CT.
+- **α del hueso a 100 kHz — sigue siendo extrapolación del material.** Li et al. (2025) tienen
+  *pérdida de inserción* a 100–290 kHz, no α intrínseca: sirven para contrastar el modelo completo,
+  no para fijar el coeficiente.
+- **Q de la cavidad — no hay dato citable.** Se mide con la definición operativa de D40
+  (`Q = f_pico/Δf` con `|p|²` a la mitad) y la UI permite cargar un Q de referencia propio.
+- Referencia externa Elmer/openCFS, y el resto de la Fase 8 (ya completa en U1–U6).
 
 ## Física y decisiones de modelado (del plan de Diego)
 

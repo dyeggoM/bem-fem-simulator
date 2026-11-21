@@ -1184,3 +1184,89 @@ para esa geometría. Es el tipo de cosa que el sello destapó justamente porque 
 **Consecuencia de diseño.** Un criterio nuevo no se agrega sin la corrida que lo respalde: el
 registro es datos, y cada entrada nombra su ADR. Eso deja el repo en un estado donde "¿qué está
 validado y contra qué?" se responde leyendo un archivo, no buscando en cinco JS.
+
+## D40 — Consulta a Sim-Datos sobre los puntos abiertos: qué hay, qué no, y qué pasa a ser campo del usuario
+
+Se consultó a `sim-datos` (2026-11-20) por los cuatro puntos abiertos. La respuesta ordena el trabajo:
+**un punto tenía referencia analítica clásica y tres no tienen dato citable**, y esos tres pasan a ser
+campos editables con tooltip en vez de valores que el código inventaría.
+
+### 1. Q de la cavidad coclear — NO hay dato citable; la definición sí quedó fijada
+
+No existe un Q medido de la resonancia de la cápsula ótica humana, ni en 0.1–1 kHz ni a
+100 kHz–1 MHz. Lo que está documentado **no es esto**:
+
+- `Q_ERB = CF/ERB ≈ 12.7 ± 1` a 1 kHz (Shera, Guinan y Oxenham, *PNAS* 2002) es **selectividad de los
+  filtros cocleares**, no una resonancia global de la cápsula, y su método aplica desde 1 kHz.
+- `Q_10dB` (pico/ancho 10 dB abajo) se usa para respuestas de membrana basilar y depende del nivel
+  sonoro y del estado fisiológico.
+
+Definición **operativa** adoptada (es la que implementa `sweeps._campana_decaimiento`):
+
+    Q = f_pico / (f₂ − f₁)   con   |H|²(f) = |H|²_max / 2,  o sea   |H| = |H|_max / √2
+
+Son los mismos cruces con `20·log₁₀|H|` o con `10·log₁₀|H|²`; **no es "media amplitud"**. En un campo
+estacionario `|p|²` no representa por sí solo la intensidad neta, así que se mide el ancho de banda del
+pico de `t_interior`, no una potencia absorbida. Equivalente temporal: `Q = ω₀τ_A/2` para
+`A(t) ∝ exp(−t/τ_A)`.
+
+**Medido con esa definición**: con la membrana puesta, en 85–115 kHz la respuesta **no cae 3 dB dentro
+de la banda**, así que no hay un Q que reportar y sí una **cota superior: Q ≤ 3.25** (f_pico 97.5 kHz).
+Es coherente con D29 (Q 287 → <5 al entrar la membrana) y es un resultado, no un fallo: el corte con
+membrana no tiene un pico estrecho. Validado contra lorentzianas sintéticas de Q conocido: 1.000,
+2.000 y 5.000 medidos exactos.
+
+**Lo que se agregó a la UI**, siguiendo la instrucción de Diego: un bloque "Q del pico" con el barrido
+como trabajo en cola (banda desde/hasta y cantidad de puntos, editables) y un **campo de Q de
+referencia opcional con tooltip** que dice exactamente lo de arriba — que no existe un Q citable de
+esta cavidad y que `Q_ERB ≈ 12.7` no es esto. Si el usuario carga un valor de su propia fuente, la UI
+compara: con un valor medido reporta el desvío; con una cota dice si la referencia queda dentro o
+fuera del alcance del modelo. **Comparar una cota con un número exacto y llamarlo "desvío" sería
+inventar precisión**, y por eso son dos mensajes distintos.
+
+### 2. Dispersión penetrable 3D — SÍ hay referencia analítica clásica
+
+- **Esfera fluida**: Anderson (1950), *J. Acoust. Soc. Am.* 22:426–431 — solución por ondas parciales
+  (la "serie de Mie acústica"). Esfera `a`, `ρ₁,c₁` en fluido `ρ₀,c₀`, con continuidad de `p` y de
+  `(1/ρ)∂ₙp`. **No está restringida a `ka ≪ 1`**: la aproximación de Rayleigh es la que lo está.
+- **Esfera sólida elástica**: Faran (1951), *J. Acoust. Soc. Am.* 23:405–418 — ondas longitudinales y
+  de corte en un sólido isótropo sumergido; también solución completa por ondas parciales.
+
+Esto cierra el hueco que D32 había dejado anotado: la fase de dispersión penetrable 3D tiene ahora
+contra qué validarse, y el primer paso es la esfera fluida de Anderson (más simple y sin acoplamiento
+elástico).
+
+### 3. Cápsula ótica y CT — tensor sin dato específico; CT→c sí calibrado
+
+- Peterson y Dechow (2003) midieron propiedades **direccionales 3D** por ultrasonido en cortical
+  externa del temporal de 15 cráneos. Pero **cortical externa ≠ porción petrosa ≠ cápsula ótica**, y no
+  hay tensor `E₁,E₂,E₃,ν_ij,G_ij` citable ni verificado para la cápsula ótica humana, ni validez
+  dinámica hasta 1 MHz. No se traslada el tensor de la bóveda.
+- **CT→velocidad sí tiene calibración experimental**: Webb et al. (2018), 91 fragmentos de dos cráneos,
+  500 kHz, `c = m·HU + b` con `R²` entre 0.23 y 0.53 según adquisición. Ejemplo de la tabla I (GE,
+  120 kVp, kernel BONEPLUS, reconstrucción convencional): **m = 0.75 m·s⁻¹·HU⁻¹, b = 1.32 km/s,
+  R² = 0.46**. No es ley universal: depende de energía, reconstrucción y hueso.
+
+### 4. α del hueso a 100 kHz — sigue siendo extrapolación del material
+
+Hay datos publicados **por debajo** de 270 kHz, pero son **pérdida de inserción del sistema**, no α
+intrínseca: Li et al. (2025), *Phys. Med. Biol.* 70:215024 (20 cráneos ex vivo, barrido 100–290 kHz en
+pasos de 10 kHz) y Li et al. (2025), *JASA* 157:2336–2349 (a 220 kHz, 3.6 ± 3.4 dB en históricos y
+2.9 ± 1.8 dB en conservados con Thiel). Incluyen interfaces, interferencia y geometría. Para **α del
+material** a 100 kHz no hay dato citable que separe esas contribuciones: usar Pichardo/White sigue
+siendo extrapolación, ahora contrastable contra mediciones de transmisión del sistema completo.
+
+### Qué significa para la UI
+
+Los tres puntos sin dato citable quedan como **campos que el usuario ingresa**, con tooltip que explica
+qué hace el número y qué se sabe de él — nunca como constante en el código:
+
+| campo | estado | dónde |
+|---|---|---|
+| Q de referencia | opcional, sin valor por defecto | pestaña cóclea, bloque "Q del pico" |
+| propiedades de la membrana basilar | `VERIFY` (ballpark), editables | pestaña cóclea |
+| tensor elástico de la cápsula | no existe citable → isótropo `VERIFY` (`c_p`, `ρ` fijos y declarados) | pestaña cóclea |
+| `m`, `b` de CT→c | calibración citable con ejemplo (Webb et al.) | fase de geometría de CT |
+
+La regla que sale de acá: cuando `sim-datos` dice "no hay dato citable", el número **no** se rellena —
+se expone como entrada del usuario con la explicación de su efecto, y el resultado lo declara.
