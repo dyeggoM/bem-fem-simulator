@@ -2084,3 +2084,49 @@ número suelto dice cuánto se equivoca; el barrido dice **en qué régimen vale
 es un criterio de una ventana; la fuente ahora lo dice. Lo que falta para tener un criterio de todo el
 rango es entender el error de la total fuera de la ventana —y ahí la hipótesis sigue siendo el dipolo
 suprimido (D48), que pesa más justo donde la total falla: `ka` bajo y `ka` alto.
+
+## D52 — El "error relativo de R" de la escena comparaba fasores con orígenes distintos
+
+**Qué pasaba.** La escena reportaba `error_R_pct` en el rango de **100 % a 200 %** mientras el error
+de amplitud era del **0.2 %** y el sello decía VALIDADO. Un número que se lee como "el modelo se
+equivoca al doble" al lado de un "validado" es exactamente la clase de dato que no se puede dejar
+pasar.
+
+**La causa, medida.** Dos cosas a la vez:
+
+1. **`R` se comparaba como fasor y `T` como módulo.** La línea era
+   `e_r = |r_num − r_an| / |r_an|` para R y `e_t = | |t_num| − |t_an| | / |t_an|` para T. No era una
+   decisión: era un descuido, y hacía que los dos números no fueran comparables entre sí.
+
+2. **Los dos fasores tenían orígenes distintos.** `r_num` sale de ajustar `a·e^{ikx} + b·e^{−ikx}` con
+   la `x` **global**, así que `b/a` está referido a `x = 0`; `r_an` (matriz de transferencia) está
+   referido a la **primera interfaz** (`x = t₁`). Entre los dos hay un giro `e^{2ik·t₁}` que es
+   propagación, no error.
+
+**La verificación.** Si el desvío era sólo ese giro, tenía que cumplirse
+`|ΔR|/|R| = 2·sin(k·t₁)`. Medido contra predicho, con `t₁ = 20 mm` de tejido:
+
+| f | `|ΔR|/|R|` medido | `2·sin(k·t₁)` |
+|---|---|---|
+| 100 kHz | 1.917 | 1.907 |
+| 200 kHz | 1.072 | 1.149 |
+| 300 kHz | 1.259 | 1.215 |
+| 400 kHz | 1.839 | 1.881 |
+
+Cuatro de cuatro, dentro del 7 %. Es el giro de propagación, no un error del solver.
+
+**La corrección.** Se lleva `r` a la referencia de la interfaz (`r·e^{−2ik t₁}`) antes de comparar
+fasores, y se reportan **dos** números con nombre propio:
+
+- `error_R_pct`: sobre el **módulo**, igual que `error_T_pct` — es el número comparable y el que se lee
+  de un vistazo. Ahora da **0.4–2.0 %** (antes 107–199 %).
+- `error_R_fasor_pct`: el fasor ya alineado. Da **6–8 %**, que es del orden del error de **fase** de
+  la malla con `ppw = 8` (~7°), no del error de amplitud. Se reporta porque la fase es información
+  real, pero no se mezcla con la amplitud.
+- `desfase_referencia_R_deg`: el giro que se sacó (935° a 100 kHz, 3740° a 400 kHz), a la vista, para
+  que quien compare fases sepa qué se corrigió.
+
+**Por qué importa para el proyecto.** El criterio de la Fase 1 juzga "dentro del 2 % **en amplitud**" y
+usa `error_R_abs`, que siempre estuvo bien: el sello nunca estuvo mal. Lo que estaba mal era un número
+**al lado** del sello que lo contradecía. Un reporte que se contradice a sí mismo se deja de mirar, y
+ahí se pierde el valor de tener el registro.

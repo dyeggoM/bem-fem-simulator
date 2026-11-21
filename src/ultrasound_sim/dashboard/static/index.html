@@ -677,6 +677,13 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
         <span class="tip" title="Cada criterio vive en el servidor (validacion.py) con su tolerancia y su fuente. Un resultado se sella contra este registro: la UI no tiene umbrales propios. 'sin medir' significa que en esta sesión no se corrió la vista que lo produce; 'sin_referencia' significa que se midió pero la referencia no cubre esa configuración.">?</span>
       </h2>
       <p class="hint" id="criteriosResumen">—</p>
+      <div class="fila-botones">
+        <button class="btn mini" id="btnInforme">descargar informe de la sesión</button>
+        <button class="btn mini" id="btnInformeJson">descargar todo (JSON)</button>
+      </div>
+      <p class="hint" id="informeAviso">El informe junta lo que se resolvió en esta sesión con su sello
+        y su fuente, para pegarlo en una nota o adjuntarlo. No incluye las gráficas: para eso está
+        «exportar vista».</p>
       <div id="tablaCriterios" class="tabla-criterios"></div>
     </div>
   </main>

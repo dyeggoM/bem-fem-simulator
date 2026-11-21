@@ -21,8 +21,104 @@ window.critIniciar = function critIniciar() {
     CRIT.listo = true;
     // si alguna vista resuelve mientras esta pestaña está abierta, al volver se ve el número nuevo
     window.addEventListener('focus', critRefrescar);
+    const bm = document.getElementById('btnInforme');
+    const bj = document.getElementById('btnInformeJson');
+    if (bm) bm.addEventListener('click', () => critInforme('md'));
+    if (bj) bj.addEventListener('click', () => critInforme('json'));
   }
 };
+
+/* Todas las vistas que guardan resultado, con el nombre que se usa en el informe. */
+const CRIT_FUENTES = [
+  ['campo', 'campo 2D (apertura y fuentes)'],
+  ['escena', 'escena FEM de capas'],
+  ['dispersor', 'dispersor BEM/FEM'],
+  ['cochlea', 'cóclea · corte transversal'],
+  ['volumen', 'FEM 3D'],
+  ['esfera', 'esfera elástica'],
+  ['esfera_barrido', 'barrido en ka de la esfera'],
+  ['barridos', 'barrido de frecuencia'],
+];
+
+/* Informe de la sesión: un Markdown que se puede pegar en una nota o adjuntar.
+ *
+ * Qué incluye y qué no: los resultados guardados con su fecha, sus métricas y su sello CON su fuente,
+ * y la tabla de criterios con el estado de lo medido. No incluye las gráficas (para eso está "exportar
+ * vista") ni inventa un resumen: si un criterio no se midió, lo dice. */
+async function critInforme(formato) {
+  const aviso = crit$('informeAviso');
+  const medidos = critMediciones();
+  const ahora = new Date();
+
+  if (formato === 'json') {
+    const todo = {};
+    for (const [clave] of CRIT_FUENTES) {
+      const d = window.vistaCargar(clave);
+      if (d) todo[clave] = d;
+    }
+    const blob = new Blob([JSON.stringify({
+      formato: 'ultrasound-sim/dashboard/sesion/1', fecha: ahora.toISOString(),
+      criterios: CRIT.criterios, medidos, resultados: todo,
+    }, null, 2)], { type: 'application/json' });
+    critDescargar(`sesion_${ahora.toISOString().slice(0, 10)}.json`, blob);
+    aviso.textContent = 'descargado el JSON de la sesión';
+    return;
+  }
+
+  const lineas = [];
+  lineas.push('## Sesión del dashboard · ultrasound-simulator', '');
+  lineas.push(`Generado: ${ahora.toLocaleString('es')}`, '');
+
+  const conResultado = CRIT_FUENTES.filter(([c]) => window.vistaCargar(c));
+  if (!conResultado.length) {
+    lineas.push('_No hay resultados guardados en esta sesión._');
+  } else {
+    lineas.push('### Corridas de esta sesión', '');
+    for (const [clave, nombre] of conResultado) {
+      const d = window.vistaCargar(clave);
+      const r = d.resultado;
+      lineas.push(`**${nombre}** — ${new Date(d.fecha).toLocaleString('es')}`, '');
+      const m = r.metrica || r.metricas || null;
+      if (m) {
+        const pares = Object.entries(m).filter(([, v]) => typeof v === 'number' || typeof v === 'string')
+          .slice(0, 12).map(([k, v]) => `${k} = ${typeof v === 'number' ? Number(v.toPrecision(5)) : v}`);
+        lineas.push(pares.join(' · '), '');
+      }
+      const sello = r.sello;
+      if (sello && sello.texto) {
+        lineas.push(`> ${sello.texto}`, '');
+      }
+    }
+  }
+
+  lineas.push('### Criterios del registro', '');
+  for (const c of CRIT.criterios) {
+    const m = medidos[c.id];
+    // sin backticks anidados: se arma por partes, que es menos frágil de leer y de editar
+    const estado = m
+      ? m.estado + ' (medido ' + critNumero(m.medido, c.unidad) + ', tolerancia '
+        + (100 * c.tolerancia).toFixed(1) + ' %, vista ' + m.vista + ')'
+      : 'sin medir en esta sesión';
+    lineas.push('- ' + c.id + ': ' + estado + ' — ' + c.descripcion);
+  }
+  lineas.push('', '> Un criterio sin medición no es un aprobado. Las fuentes de cada criterio están en',
+    '> `src/ultrasound_sim/dashboard/validacion.py`.', '');
+
+  const blob = new Blob([lineas.join('\n')], { type: 'text/markdown' });
+  critDescargar(`sesion_${ahora.toISOString().slice(0, 10)}.md`, blob);
+  aviso.textContent = `informe con ${conResultado.length} corridas y ${CRIT.criterios.length} criterios`;
+}
+
+function critDescargar(nombre, blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nombre;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
 
 /* Junta lo medido en esta sesión: recorre los resultados guardados por las vistas y se queda con el
  * último sello de cada criterio. `usim.vista.<nombre>` lo escribe app.js en `vistaGuardar`. */

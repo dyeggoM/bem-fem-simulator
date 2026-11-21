@@ -277,7 +277,15 @@ def resolver_escena(datos: dict[str, Any]) -> dict[str, Any]:
         else:
             r_an = t_an = complex("nan")
 
-        e_r = abs(r_num - r_an) / abs(r_an) if abs(r_an) > 1e-12 else 0.0
+        # `r_num` sale de ajustar `a·e^{ikx} + b·e^{−ikx}` con la **x global**, o sea que `b/a` está
+        # referido a x = 0; `r_an` (matriz de transferencia) está referido a la **primera interfaz**
+        # (x = t1). Comparar los fasores así mezclaba un desfase de propagación e^{2ik t1} con el error
+        # del solver: medido, daba "199 %" de error donde la amplitud coincidía al 0.19 % y el número
+        # variaba con la frecuencia (100/200/300/400 kHz → 192/107/126/184 %), con
+        # |ΔR|/|R| = 2·sin(k·t1) en los cuatro puntos. Se lleva `r` a la referencia de la interfaz.
+        r_num_interfaz = r_num * np.exp(-2j * k_1 * t1)
+        e_r = (abs(r_num_interfaz - r_an) / abs(r_an) if abs(r_an) > 1e-12 else 0.0)
+        e_r_modulo = (abs(abs(r_num) - abs(r_an)) / abs(r_an) if abs(r_an) > 1e-12 else 0.0)
         e_t = abs(abs(t_num) - abs(t_an)) / abs(t_an) if abs(t_an) > 1e-12 else 0.0
         # El criterio de la Fase 1 es "dentro del 2 % EN AMPLITUD", no en relativo: cuando R es
         # chico (agua/tejido, R = 1.2 %) el relativo se infla con cualquier ruido de discretización
@@ -289,8 +297,17 @@ def resolver_escena(datos: dict[str, Any]) -> dict[str, Any]:
             "T_analitico": abs(t_an),
             "error_R_abs": float(abs(abs(r_num) - abs(r_an))),
             "error_T_abs": float(abs(abs(t_num) - abs(t_an))),
-            "error_R_pct": 100.0 * e_r,
+            # `error_R_pct` sobre el MÓDULO, igual que `error_T_pct`: es el número comparable entre
+            # los dos y el que se lee de un vistazo. El fasor (ya llevado a la referencia de la
+            # interfaz) va aparte, con nombre propio, porque incluye la fase y por lo tanto es del
+            # orden del error de fase de la malla (ppw 8 → ~7°), no del error de amplitud.
+            "error_R_pct": 100.0 * e_r_modulo,
+            "error_R_fasor_pct": 100.0 * e_r,
             "error_T_pct": 100.0 * e_t,
+            # el desfase que se sacó para comparar los fasores, a la vista: si alguien compara la fase
+            # de R contra el analítico sin corregirlo, va a ver este giro y no un error del solver
+            # `k_1` puede ser complejo (atenuación): el giro de FASE es la parte real
+            "desfase_referencia_R_deg": float(np.degrees(2.0 * np.real(k_1) * t1)),
             "energia": float(abs(r_num) ** 2 + abs(t_num) ** 2),
             "ventana_fit_mm": 0.5 * abs(materiales[0].wavelength(f)) * 1e3,
         })
