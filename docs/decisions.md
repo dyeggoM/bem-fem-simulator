@@ -2601,3 +2601,34 @@ interacción hay que despachar el evento del mouse, no llamar a `focus()` por c�
 **Verificado en el navegador**: encabezado `fase °`, valores en **−152.8° … 179.9°**, y al editar −45° el
 estado interno queda en **−0.7854 rad**. En el backend, un archivo con −5674.6° entra como 1.4905 rad =
 85.40°.
+
+## D64 — «Arreglo» y «fuentes» son el mismo problema; el que cambiaba era el estado guardado
+
+**La pregunta**: al cambiar de pestaña la simulación cambiaba, ¿son los mismos elementos?
+
+**Sí, son los mismos.** Medido: la ruta del servidor (que genera el arreglo a partir de `n` y la apertura)
+y la de fuentes explícitas dan el mismo campo **al bit** — diferencia **0.000e+00 dB** y el mismo pico
+2 354 443.177573 en las dos. Las dos fórmulas son idénticas: `paso = D/n`, `y_j = −D/2 + paso·(j+½)`,
+`φ_j = −k·|F − y_j|`, con la `k` del material. Y en el navegador, cambiar entre pestañas con el mismo
+estado da mapas **idénticos** (`JSON.stringify` del campo, comparado carácter a carácter).
+
+**Lo que sí estaba mal era el estado.** Las fuentes del modo «fuentes» se generan desde el arreglo, pero
+sólo se regeneraban si cambiaba **`n`** o **`d`**. La fase de foco depende de `−k·|F − y|` con
+`k = 2π·f/c`, así que **cambiar el foco, la frecuencia o el material dejaba las fases viejas guardadas**:
+al pasar a «fuentes» se seguía simulando el arreglo anterior, sin ningún aviso. Eso es lo que se veía como
+«cambia la simulación al cambiar de pestaña».
+
+**Lo que se cambió**:
+
+* `CLAVES_QUE_REGENERAN` incluye ahora **`n`, `d`, `fx`, `fy`, `freq` y `material`**, que son exactamente
+  las seis de las que dependen las fuentes (posición, ancho y fase).
+* En modo **«fuentes»** el cambio **regenera al instante** y avisa: si no, la pestaña seguiría diciendo
+  «fuentes» mientras simula las viejas. En modo **«arreglo»** se marca y se regenera al entrar.
+* El aviso dice qué cambió, en vez de hacerlo en silencio.
+
+**Verificado en el navegador**: foco 90 → pico 75.8 mm; se cambia a 55 → 50.6 mm; al pasar a «fuentes»
+el pico sigue en **50.6 mm** (antes se quedaba en 75.8). Y con el foco en 60 en las dos pestañas, los
+mapas son **idénticos**.
+
+**Test que lo fija** (`test_campo_arreglo_vs_fuentes.py`): la diferencia entre las dos rutas es < 1e-6 dB,
+acercar el foco acerca el pico, y la frecuencia cambia la fase de la misma fuente.

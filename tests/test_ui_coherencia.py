@@ -233,6 +233,20 @@ def test_la_cadena_guarda_su_corrida_con_la_clave_pelada():
     assert "usim.vista.cadena'" not in js
 
 
+def test_todo_lo_que_cambia_las_fuentes_del_arreglo_las_invalida():
+    """Cambiar n o la apertura movía las posiciones; el FOCO, la FRECUENCIA y el MATERIAL cambian la
+    FASE de cada elemento (`−k·|F − y|` con `k = 2π·f/c`). Mirar sólo `n` y `d` dejaba fases viejas
+    guardadas y al pasar a «fuentes» se simulaba un arreglo distinto, sin aviso."""
+    js = (ESTATICOS / "app.js").read_text(encoding="utf-8")
+    assert "CLAVES_QUE_REGENERAN" in js
+    for clave in ("'n'", "'d'", "'fx'", "'fy'", "'freq'", "'material'"):
+        assert clave in js.split("CLAVES_QUE_REGENERAN = new Set(")[1].split(")")[0], (
+            f"{clave} tiene que invalidar las fuentes guardadas"
+        )
+    # en «fuentes» se regenera al instante: si no, seguiría simulando fases viejas
+    assert "generarDesdeArreglo();\n        S.fuentesMovidas = false;" in js
+
+
 def test_los_valores_de_la_tabla_de_fuentes_se_pueden_leer_y_ubicar():
     """La tabla tenía 253 px para cinco columnas numéricas: el input quedaba en 52 px y `-29.06` se
     recortaba. Ahora el panel es más ancho, los spinners nativos de `type=number` no roban el campo, el
