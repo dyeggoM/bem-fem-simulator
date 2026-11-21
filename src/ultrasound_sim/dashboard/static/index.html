@@ -249,6 +249,23 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
         <p class="hint" id="cadenaEstado">sin resolver.</p>
       </section>
       <p class="aviso-ux" id="cadenaAviso"></p>
+
+      <section>
+        <label>…o una geometría propia (STL)</label>
+        <p class="hint">Se simula la <b>sección</b> del STL por un plano: el modelo es 2D. La onda entra
+        desde la izquierda y el contorno de la sección es la frontera del sólido.</p>
+        <select id="stlMaterial"></select>
+        <div class="fila-campos">
+          <label>plano <b id="stlPlanoVal">0.0</b> mm</label>
+          <input type="range" id="stlPlano" min="-50" max="50" step="0.5" value="0">
+        </div>
+        <div class="fila-botones">
+          <button class="btn primario" id="stlCargarBtn">cargar STL</button>
+          <button class="btn mini" id="stlEjemplo">ejemplo: cilindro</button>
+        </div>
+        <input type="file" id="stlArchivo" accept=".stl" hidden>
+        <p class="hint" id="stlEstado">sin STL cargado.</p>
+      </section>
     </div>
 
     <div id="vistaEscena" hidden>

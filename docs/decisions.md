@@ -2458,3 +2458,51 @@ archivo para volver a cargarlo.
 **Lo que falta de U10**: no hay todavía un botón para **editar el catálogo** desde la UI (se edita el TOML
 a mano, respetando que `source` no puede estar vacío), y el formato no lleva la geometría del transductor
 curvo: el modelo sigue siendo un arreglo lineal, que es su corte 2D.
+
+## D60 — El STL entra cortado: la sección es lo que se simula, y así la interfaz sí se comparte
+
+**El bloqueo de D55, resuelto por otro lado.** En 3D, dos STL que se tocan no se pueden mallar juntos
+(caras coincidentes, kernel geo vs occ). Pero el simulador **es 2D**: lo que corresponde no es mallar el
+volumen, es mallar **la sección** —el mismo criterio con el que las aperturas se modelan como su corte
+lineal—. Y en 2D el contorno de la sección es **la misma curva** que el borde del agujero del fluido
+(`occ.cut`), así que la malla sale **conforme por construcción**: 12 643 nodos, **0 duplicados**.
+
+**Qué se agregó**: `stl.seccion_por_plano` (corta la superficie y encadena los segmentos en contornos
+cerrados), `stl.area_contorno`, `meshing_volume.mallar_seccion` (sección + fluido con agujero),
+`dashboard/stl_field.py` y en la vista de cadena un bloque para **cargar un STL**, elegir material y plano
+de corte, con un **ejemplo (cilindro)** servido por el servidor para probar sin archivo propio.
+
+**Lo medido, que es lo que decide si sirve**:
+
+| caso | transmitido detrás | qué significa |
+|---|---|---|
+| disco con las propiedades del agua | **1.0099** | no perturba la onda: el acople no inventa nada |
+| hueso cortical | 0.7512 | sombra moderada |
+| acero | 0.6085 | más sombra |
+
+Y el caso transparente **converge**: 1.040 (malla de 0.8 mm) → **1.016** (0.5 mm). El orden
+acero < hueso < transparente es el que dicta la impedancia, así que no es un número que salga de cualquier
+lado. Geometría: la sección del cilindro de 5 mm da **78.414 mm²** contra 78.540 exactos (0.16 % de la
+poligonalización) y la malla cubre los 1200 mm² del dominio.
+
+**Cuatro errores propios en el camino.**
+
+1. **La ABC en las cuatro caras, otra vez.** Es el mismo error de D56: en las paredes laterales la onda
+   plana tiene `∂p/∂n = 0` y la ABC impone `i·k·p`, y refleja. Con las cuatro caras el caso transparente
+   daba **1.15**; con ABC sólo en entrada y salida, **1.016**. Ya está dos veces el mismo tropiezo: la ABC
+   de impedancia sólo vale donde la onda **sale**.
+2. **La caja arrancaba en x = 0 con la sección en x = 0**: la sección quedaba a caballo del borde, el
+   `occ.cut` salía degenerado y el campo daba **exactamente 0** en todo el dominio. Ahora la caja se centra
+   en `desde`, que es el centro de la sección.
+3. **Los triángulos salían en sentido horario** y `elastic2d` los rechaza; se aplica `_ensure_ccw`.
+4. **El plano de corte que no corta** tiene que decirlo («la superficie queda entera de un lado»), no
+   devolver una lista vacía.
+
+**Y una trampa de medición que vale la pena anotar**: medir «en el eje» con `|y| < 1e-12` tomaba **4 nodos**
+en una malla no estructurada, y con eso los números salían con un 45 % que no era del solver. Hay que
+medir en una **banda**.
+
+**Estado del objetivo**: los cinco ejes están implementados y medidos — BEM y FEM con arreglos y
+materiales, acople de espacios (D56), control de posición de fuentes y de estructura (D58), STL (D60) y
+arreglos desde archivo (D59). Lo que queda es de fondo: el **FEM del mismo problema de fuentes** (D54)
+sigue sin cerrar, y el acople de **STL en 3D** no existe (esto es la sección).

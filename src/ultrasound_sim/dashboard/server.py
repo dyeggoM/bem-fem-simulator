@@ -276,6 +276,18 @@ class Handler(BaseHTTPRequestHandler):
                                   "c_s 8.22 %, ρ 1.03 %, Z_r 0.28 %",
                 }],
             })
+        elif partes.path == "/api/stl/opciones":
+            from . import stl_field
+            self._json(stl_field.opciones_stl())
+        elif partes.path == "/api/stl/ejemplo":
+            from . import stl_field
+            cuerpo = stl_field.stl_de_ejemplo()
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "model/stl")
+            self.send_header("Content-Disposition", 'attachment; filename="cilindro_ejemplo.stl"')
+            self.send_header("Content-Length", str(len(cuerpo)))
+            self.end_headers()
+            self.wfile.write(cuerpo)
         elif partes.path == "/api/transductores":
             from .. import transducers
             from .scene import MATERIALES
@@ -324,7 +336,8 @@ class Handler(BaseHTTPRequestHandler):
                         "/api/jobs/sensibilidad", "/api/jobs/q_coclea",
                         "/api/jobs/barrido_escena", "/api/jobs/esfera",
                         "/api/jobs/esfera_barrido", "/api/jobs/barrido_apertura",
-                        "/api/jobs/cadena", "/api/arreglo/cargar", "/api/arreglo/exportar",
+                        "/api/jobs/cadena", "/api/jobs/stl",
+                        "/api/arreglo/cargar", "/api/arreglo/exportar",
                         "/api/volume3d/cost", "/api/volume3d/solve"):
             self._error("no encontrado", HTTPStatus.NOT_FOUND)
             return
@@ -401,6 +414,12 @@ class Handler(BaseHTTPRequestHandler):
                                      "n": len(fuentes)}
                 except (arreglos.ErrorArreglo, KeyError, TypeError, ValueError) as exc:
                     respuesta = {"ok": False, "error": str(exc)}
+            elif ruta == "/api/jobs/stl":
+                trabajo = jobs.COLA.enviar(
+                    "stl", f"STL {cuerpo.get('nombre', '?')} ({cuerpo.get('material', '?')})",
+                    _stl_job, cuerpo,
+                )
+                respuesta = {"ok": True, "job": trabajo.a_dict()}
             elif ruta == "/api/jobs/cadena":
                 capas = cuerpo.get("capas") or []
                 resumen = " + ".join(
@@ -473,6 +492,12 @@ def _barrido_apertura_job(trabajo, datos):
     Sin esto el barrido recibe el objeto `Trabajo` como si fuera el pedido y muere con
     `'Trabajo' object has no attribute 'get'`."""
     return sweeps.barrido_apertura(datos, trabajo)
+
+
+def _stl_job(job, datos):
+    """Adaptador de la cola para la sección de un STL."""
+    from . import stl_field
+    return stl_field.resolver_stl(datos)
 
 
 def _cadena_job(job, datos):

@@ -144,6 +144,77 @@
     }
   }
 
+  async function resolverSTL(archivo) {
+    const estadoSTL = $('stlEstado');
+    estadoSTL.style.color = '';
+    estadoSTL.textContent = `leyendo ${archivo.name}…`;
+    const buffer = await archivo.arrayBuffer();
+    let bin = '';
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.length; i += 1) bin += String.fromCharCode(bytes[i]);
+    const datos_b64 = btoa(bin);
+
+    const cuerpo = {
+      datos_b64,
+      nombre: archivo.name,
+      material: $('stlMaterial').value,
+      frecuencia_hz: CAD.freq * 1e3,
+      ppw: CAD.ppw,
+      plano: { eje: 'z', valor_mm: parseFloat($('stlPlano').value) },
+      nx: 160, ny: 110,
+    };
+    estadoSTL.textContent = `resolviendo la sección de ${archivo.name}…`;
+    try {
+      const alta = await fetch('/api/jobs/stl', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo),
+      }).then((r) => r.json());
+      if (!alta.ok) throw new Error(alta.error || 'no se pudo encolar');
+      let job = null;
+      for (let i = 0; i < 240; i += 1) {
+        await new Promise((r) => setTimeout(r, 600));
+        job = await fetch(`/api/jobs/${alta.job.id}`).then((r) => r.json());
+        if (['listo', 'listo_con_aviso', 'error', 'cancelado'].includes(job.estado)) break;
+      }
+      if (!job || job.estado === 'error') throw new Error((job && job.error) || 'la corrida falló');
+      pintarSTL(job.resultado);
+      estadoSTL.textContent = `${archivo.name} · sección ${job.resultado.stl.seccion.ancho_mm}×`
+        + `${job.resultado.stl.seccion.alto_mm} mm · ${job.resultado.metricas.nodos} nodos · `
+        + `${job.resultado.tiempos.solve_s} s de solve`;
+    } catch (err) {
+      estadoSTL.style.color = '#f85149';
+      estadoSTL.textContent = `${archivo.name}: ${err.message || err}`;
+    }
+  }
+
+  function pintarSTL(r) {
+    const m = r.metricas;
+    const cont = $('cadenaMetricas');
+    cont.hidden = false;
+    cont.innerHTML = `
+      <div class="chip"><span>transmitido detrás</span><b>${m.transmitido === null ? '—' : m.transmitido.toFixed(4)}</b></div>
+      <div class="chip"><span>material</span><b>${r.material.etiqueta}</b></div>
+      <div class="chip"><span>área de la sección</span><b>${r.stl.seccion.area_mm2} mm²</b></div>
+      <div class="chip"><span>malla</span><b>${m.tamano_malla_mm} mm</b></div>
+      <div class="chip"><span>dominio</span><b>${m.dominio_mm[0]}×${m.dominio_mm[1]} mm</b></div>`;
+
+    const g = r.grilla;
+    const shapes = (g.contorno || []).map((c) => ({
+      type: 'path', path: c.map((p, i) => `${i ? 'L' : 'M'}${p[0]},${p[1]}`).join(' ') + ' Z',
+      line: { color: '#58a6ff', width: 2 }, fillcolor: 'rgba(88,166,255,.12)', layer: 'above',
+    }));
+    Plotly.react('mapaCadena', [{
+      type: 'heatmap', x: g.x_mm, y: g.y_mm, z: g.db, zmin: -30, zmax: 0,
+      colorscale: 'Viridis', colorbar: { title: 'dB', thickness: 12 },
+      hovertemplate: 'x %{x:.1f} mm<br>y %{y:.1f} mm<br>%{z:.1f} dB<extra></extra>',
+    }], {
+      margin: { l: 50, r: 10, t: 30, b: 40 }, height: 340,
+      title: { text: `|p| (dB) · sección de ${r.stl.nombre}`, font: { size: 12 } },
+      xaxis: { title: 'x [mm]', range: [Math.min(...g.x_mm), Math.max(...g.x_mm)] },
+      yaxis: { title: 'y [mm]', range: [Math.min(...g.y_mm), Math.max(...g.y_mm)] },
+      shapes,
+    }, { displayModeBar: false, responsive: true });
+  }
+
   /* ---------------------------------------------------------------- pintar */
   function pintar(r) {
     const m = r.metricas;
@@ -346,6 +417,43 @@
       $('cadPpwVal').textContent = CAD.ppw;
     });
     $('cadenaResolver').addEventListener('click', resolver);
+
+    // ---- STL: se simula su sección (el modelo es 2D) -----------------------
+    (async () => {
+      try {
+        const op = await fetch('/api/stl/opciones').then((r) => r.json());
+        const sel = $('stlMaterial');
+        sel.innerHTML = '';
+        for (const s of op.solidos) {
+          const o = document.createElement('option');
+          o.value = s.id;
+          o.textContent = s.etiqueta + (s.verificado ? '' : ' (VERIFY)');
+          if (s.id === 'hueso_cortical') o.selected = true;
+          sel.appendChild(o);
+        }
+      } catch (e) {
+        console.warn('no se pudieron cargar los materiales de STL:', e && e.message);
+      }
+    })();
+    $('stlPlano').addEventListener('input', (e) => {
+      $('stlPlanoVal').textContent = parseFloat(e.target.value).toFixed(1);
+    });
+    $('stlCargarBtn').addEventListener('click', () => $('stlArchivo').click());
+    $('stlEjemplo').addEventListener('click', async () => {
+      try {
+        const blob = await fetch('/api/stl/ejemplo').then((r) => r.blob());
+        resolverSTL(new File([blob], 'cilindro_ejemplo.stl', { type: 'model/stl' }));
+      } catch (e) {
+        const st = $('stlEstado');
+        st.style.color = '#f85149';
+        st.textContent = 'no se pudo traer el ejemplo: ' + (e.message || e);
+      }
+    });
+    $('stlArchivo').addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0];
+      e.target.value = '';
+      if (f) resolverSTL(f);
+    });
 
     // ---- estructura: alto, x, y y arrastre en el mapa ----------------------
     function sincronizarControlesEstructura() {
