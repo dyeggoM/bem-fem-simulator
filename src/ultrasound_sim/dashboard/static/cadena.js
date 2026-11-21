@@ -23,6 +23,7 @@
     // estructura: `alto` 0 = capas infinitas (interfaz plana). Con alto > 0 es una pieza finita que se
     // arrastra sobre el mapa; ahí la onda rodea la pieza y difracta en los bordes.
     estructura: { alto: 0, x: 12, y: 0 },
+    excitacion: 'plana',      // 'plana' | 'fuentes' (el arreglo de la vista BEM · fuentes)
     resultado: null,
     resolviendo: false,
   };
@@ -107,6 +108,11 @@
       ppw: CAD.ppw,
       nx: 160,
       ny: 100,
+      // con "fuentes" se manda el arreglo de la vista de campo tal cual está en pantalla
+      // `campoFuentesActuales` devuelve el arreglo del modo activo (manual o arreglo): leer sólo
+      // `S.fuentes` daba cero en modo arreglo y la corrida caía en onda plana sin avisar
+      fuentes: CAD.excitacion === 'fuentes' && typeof window.campoFuentesActuales === 'function'
+        ? window.campoFuentesActuales() : null,
       estructura_alto_mm: CAD.estructura.alto,
       estructura_x_mm: CAD.estructura.x,
       estructura_y_mm: CAD.estructura.y,
@@ -223,12 +229,24 @@
     const tMed = m.t_medido === null ? '—' : m.t_medido.toFixed(4);
     const tTeo = m.t_teorico === null ? 'sin referencia' : m.t_teorico.toFixed(4);
     const err = m.error_pct === null ? '—' : m.error_pct.toFixed(2) + ' %';
-    cont.innerHTML = `
-      <div class="chip"><span>transmitido medido</span><b>${tMed}</b></div>
-      <div class="chip"><span>exacto (capas fluidas)</span><b>${tTeo}</b></div>
-      <div class="chip"><span>error</span><b>${err}</b></div>
-      <div class="chip"><span>espesor total</span><b>${m.espesor_total_mm} mm</b></div>
-      <div class="chip"><span>λ en agua</span><b>${m.lambda_agua_mm} mm</b></div>`;
+    const pico = m.pico_detras === null || m.pico_detras === undefined
+      ? '—' : m.pico_detras.toExponential(2);
+    const chips = m.hay_fuentes
+      ? `<div class="chip"><span>excitación</span><b>${m.n_fuentes} fuentes</b></div>
+         <div class="chip"><span>pico detrás</span><b>${pico}</b></div>
+         <div class="chip"><span>espesor total</span><b>${m.espesor_total_mm} mm</b></div>
+         <div class="chip"><span>λ en agua</span><b>${m.lambda_agua_mm} mm</b></div>
+         <div class="chip"><span>malla</span><b>${m.ppw_efectivo} elem./λ</b></div>`
+      : `<div class="chip"><span>transmitido medido</span><b>${tMed}</b></div>
+         <div class="chip"><span>exacto (capas fluidas)</span><b>${tTeo}</b></div>
+         <div class="chip"><span>error</span><b>${err}</b></div>
+         <div class="chip"><span>espesor total</span><b>${m.espesor_total_mm} mm</b></div>
+         <div class="chip"><span>λ en agua</span><b>${m.lambda_agua_mm} mm</b></div>`;
+    cont.innerHTML = chips;
+    // el aviso de malla recortada no puede pasar inadvertido: cambia cuánto resuelve el mapa
+    if (m.aviso_malla) {
+      estado(`${m.aviso_malla}.`, false);
+    }
 
     const g = r.grilla;
     const e = r.estructura || { x_mm: 0, y_mm: 0, ancho_mm: 0, alto_mm: null, finita: false };
@@ -417,6 +435,21 @@
       $('cadPpwVal').textContent = CAD.ppw;
     });
     $('cadenaResolver').addEventListener('click', resolver);
+
+    $('cadExcitacion').addEventListener('change', (e) => {
+      CAD.excitacion = e.target.value;
+      const conFuentes = CAD.excitacion === 'fuentes';
+      $('cadExcitacionInfo').textContent = conFuentes
+        ? 'Se usan las fuentes de la vista BEM · fuentes (posición, ancho, amplitud y fase de cada '
+          + 'elemento). El campo enfoca y ya no hay coeficiente exacto contra el cual comparar.'
+        : 'Con onda plana la cadena se compara contra el coeficiente exacto de capas.';
+      // con fuentes, la referencia analítica no aplica: se avisa antes de correr, no después
+      if (conFuentes) {
+        const n = (window.campoFuentesActuales ? window.campoFuentesActuales().length : 0);
+        estado(n ? `${n} fuentes del arreglo listas. Resolvé para ver el campo.`
+                 : 'la vista BEM · fuentes no tiene fuentes cargadas.');
+      }
+    });
 
     // ---- STL: se simula su sección (el modelo es 2D) -----------------------
     (async () => {

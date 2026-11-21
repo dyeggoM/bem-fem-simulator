@@ -2506,3 +2506,49 @@ medir en una **banda**.
 materiales, acople de espacios (D56), control de posición de fuentes y de estructura (D58), STL (D60) y
 arreglos desde archivo (D59). Lo que queda es de fondo: el **FEM del mismo problema de fuentes** (D54)
 sigue sin cerrar, y el acople de **STL en 3D** no existe (esto es la sección).
+
+## D61 — La cadena acepta un arreglo de fuentes, y el tope de malla se adapta en vez de bloquear
+
+**Dos huecos que el usuario encontró usando la UI.**
+
+### 1. La cadena no tenía fuentes
+
+Hasta acá la cadena se excitaba **sólo** con una onda plana, así que no había ningún lugar donde configurar
+un transductor: la pregunta «¿cómo se configuran las fuentes en la cadena?» no tenía respuesta porque no
+existían. Ahora el panel tiene **Excitación: onda plana | las fuentes del arreglo**.
+
+Con fuentes, cada apertura es un dato de **Neumann** sobre el baffle en `x = 0` (`∂p/∂n = +i·ω·ρ·v`, la
+normal saliente es `−x̂`) y la ABC pasa a las tres caras restantes, porque una fuente localizada radia en
+todas direcciones —a diferencia de la onda plana, donde las laterales son rígidas (D56)—. El arreglo que
+se manda es el **de la vista BEM · fuentes tal como está en pantalla**: en modo arreglo `S.fuentes` está
+vacío a propósito, así que al principio llegaban **cero** fuentes y la corrida caía en onda plana sin
+avisar; se corrigió con `campoFuentesActuales()`, que calcula el arreglo del modo activo sin tocar el
+estado.
+
+Medido en el navegador con 32 elementos a 500 kHz: el mapa muestra el foco del arreglo en el agua, la
+**sombra del hueso cortical** (banda de ~−40 dB) y campo transmitido en la perilinfa. Coherencia entre
+las tres capas y el corte axial, que tiene 292 puntos.
+
+**Y con fuentes no hay coeficiente exacto**: la matriz de transferencia es para una onda plana. La vista
+reporta `t_medido = None` y `pico_detras` en su lugar, con la referencia diciendo «se excita con un arreglo
+de fuentes, no con una onda plana». Inventar un «transmitido» ahí sería comparar dos problemas distintos.
+
+### 2. Arriba de 600 kHz la corrida se caía
+
+`ValueError: la malla saldría de ~82668 nodos y el tope interactivo es 60000`. El tope era una pared: el
+usuario pidió una frecuencia y un dominio, no un número de elementos por longitud de onda, y la respuesta
+útil no es «bajá el ppw» sino bajarlo y decirlo.
+
+Ahora el tope es **150 000 nodos** (el solve corre en la cola; ~93 000 medidos son ~10 s) y si aún no
+entra, se **baja el ppw automáticamente** y se devuelve `aviso_malla` con el valor original y el efectivo,
+que la UI escribe en la línea de estado. Sólo falla si ni con 4 elementos por λ entra, y ahí el mensaje
+dice qué bajar.
+
+Medido: **620 kHz → 58 311 nodos, 3.22 s**, sin error. 800 kHz → 102 087 nodos, también entra.
+
+### 3. El corte axial salía vacío (bug de medición, otra vez)
+
+Al medir «en el eje» con una banda de **media celda**, cuando el eje cae justo entre dos filas de nodos
+(`|y|min = h/2` exacto) la selección quedaba vacía y el corte salía con **0 puntos**. Es el tercer
+tropezón con lo mismo (D60 lo dejó anotado para `|y| < 1e-12`): la banda tiene que ser de **al menos una
+celda**.

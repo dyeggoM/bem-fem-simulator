@@ -222,6 +222,16 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
         </div>
       </section>
       <section>
+        <label>Excitación</label>
+        <select id="cadExcitacion">
+          <option value="plana">onda plana (interfaz plana, incidencia normal)</option>
+          <option value="fuentes">las fuentes del arreglo</option>
+        </select>
+        <p class="hint" id="cadExcitacionInfo">Con onda plana la cadena se compara contra el coeficiente
+        exacto de capas. Con fuentes se usa el arreglo de la vista BEM · fuentes: cada apertura es un
+        dato de Neumann sobre el baffle y el campo enfoca.</p>
+      </section>
+      <section>
         <label>Frecuencia <b id="cadFreqVal">500 kHz</b></label>
         <input type="range" id="cadFreq" min="100" max="1000" step="10" value="500">
         <label>Elementos por longitud de onda <b id="cadPpwVal">14</b></label>
