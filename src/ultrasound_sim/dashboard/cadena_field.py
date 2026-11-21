@@ -80,8 +80,10 @@ def resolver_cadena(datos: dict) -> dict:
     h = lam / ppw
     entrada = agua_mm * 1e-3
     espesor_total = sum(e for _, e in capas)
+    x0_dominio = float(datos.get("estructura_x_mm", agua_mm)) * 1e-3
     salida = max(entrada, 8e-3)
-    largo = entrada + espesor_total + salida
+    # el dominio se arma de modo que la estructura entre completa, con agua a los dos lados
+    largo = max(x0_dominio + espesor_total + salida, entrada + espesor_total + salida)
 
     n_largo = int(round(largo / h))
     n_alto = int(round(2 * (alto_mm * 1e-3) / h))
@@ -97,13 +99,27 @@ def resolver_cadena(datos: dict) -> dict:
     t_malla = time.perf_counter()
 
     centro_x = nodos[tris][:, :, 0].mean(axis=1)
+    centro_y = nodos[tris][:, :, 1].mean(axis=1)
     medio_elem = np.full(centro_x.shape, "agua", dtype=object)
     corte = []
-    x = entrada
+
+    # La estructura puede ser una **franja finita** dentro del agua (se puede mover) o atravesar todo el
+    # dominio (capas infinitas, el caso de una interfaz plana). Con `estructura_alto_mm` en 0 o mayor que
+    # el dominio, se comporta como antes.
+    alto_est = float(datos.get("estructura_alto_mm", 0.0)) * 1e-3
+    x0_est = float(datos.get("estructura_x_mm", agua_mm))
+    y0_est = float(datos.get("estructura_y_mm", 0.0)) * 1e-3
+    finita = 0.0 < alto_est < 2.0 * alto_mm * 1e-3
+
+    x = x0_est * 1e-3
     for nombre, espesor in capas:
-        medio_elem[(centro_x >= x) & (centro_x < x + espesor)] = nombre
+        dentro = (centro_x >= x) & (centro_x < x + espesor)
+        if finita:
+            dentro &= np.abs(centro_y - y0_est) <= alto_est / 2.0
+        medio_elem[dentro] = nombre
         corte.append((nombre, x, x + espesor))
         x += espesor
+    fin_estructura = x
 
     ar = boundary_edges(tris)
     mid = edge_midpoints(nodos, ar)
@@ -128,7 +144,7 @@ def resolver_cadena(datos: dict) -> dict:
     x_m = nodos[eje, 0][con_p]
     p_m = np.abs(r.p_todos[eje])[con_p]
     # la zona de medición arranca 4 mm después de la última interfaz, para no leer el campo cercano
-    zona = x_m > (entrada + sum(e for _, e in capas) + 0.004)
+    zona = x_m > (fin_estructura + 0.004)
     t_medido = float(p_m[zona].mean()) if zona.any() else None
 
     # ---- mapa --------------------------------------------------------------
@@ -157,15 +173,27 @@ def resolver_cadena(datos: dict) -> dict:
              "espesor_mm": round((b - a) * 1e3, 3)}
             for nombre, a, b in corte
         ],
+        "estructura": {
+            "x_mm": round(corte[0][1] * 1e3, 3) if corte else 0.0,
+            "y_mm": round(float(datos.get("estructura_y_mm", 0.0)), 3),
+            "ancho_mm": round((fin_estructura - (corte[0][1] if corte else 0.0)) * 1e3, 3),
+            "alto_mm": (round(alto_est * 1e3, 3) if finita else None),
+            "finita": finita,
+        },
         "metricas": {
             "t_medido": t_medido,
             "t_teorico": t_teorico,
             "error_pct": (None if (t_teorico is None or t_medido is None or t_teorico == 0)
                           else round(100 * abs(t_medido - t_teorico) / t_teorico, 2)),
             "hay_solido": hay_solido,
-            "referencia": ("matriz de transferencia de capas fluidas" if t_teorico is not None
-                           else "sin referencia analítica: hay capa sólida y la fórmula de capas "
-                                "fluidas no incluye cizalla"),
+            "referencia": (
+                ("matriz de transferencia de capas fluidas (la estructura es finita: la referencia vale "
+                 "para capas infinitas, así que el error incluye la difracción de los bordes)"
+                 if t_teorico is not None and finita
+                 else "matriz de transferencia de capas fluidas" if t_teorico is not None
+                 else "sin referencia analítica: hay capa sólida y la fórmula de capas fluidas no "
+                      "incluye cizalla")
+            ),
             "frecuencia_hz": f,
             "ppw": ppw,
             "nodos": int(nodos.shape[0]),

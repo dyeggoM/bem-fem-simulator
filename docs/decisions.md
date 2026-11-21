@@ -2388,3 +2388,40 @@ y la advertencia de que son parámetros de modelado va en el panel.
 
 **Lo que queda de U9**: mover la estructura desde el dashboard (hoy las capas se editan como lista, no se
 arrastran) y el STL multicapa, que necesita acople con nodos no coincidentes.
+
+## D58 — La estructura se mueve con el mouse, y para eso tiene que ser finita
+
+**Qué se agregó.** En la vista de cadena, la estructura puede ser una **pieza finita** (alto configurable)
+en vez de capas que atraviesan el dominio. Con alto > 0 se dibuja un rectángulo con borde azul punteado
+**sobre el mapa**, arrastrable en x e y; al soltar se vuelve a resolver. La posición también se fija con
+dos deslizadores, y las interfaces de capa se **recortan al alto de la pieza** (si no, atraviesan todo el
+dominio y parece una capa infinita, que es justo lo que no es).
+
+**Por qué finita y no infinita.** Con capas infinitas, mover la estructura en x **no cambia la física**:
+sólo cambia la fase de referencia. Un control que no hace nada es peor que no tenerlo. Con la pieza
+finita, el campo la rodea y difracta en los bordes, y mover sí cambia lo que se mide.
+
+**Medido en el navegador** (piel 2 mm + hueso 5 mm + perilinfa 5 mm, 500 kHz, alto 14 mm): arrastrar de
+(12, 0) a (15.3, 9.2) mm cambia el transmitido de **1.1915 a 0.9282** y la malla pasa de 38 025 a 41 400
+nodos. Por backend: x = 10 mm da t = 0.9436 y x = 18 mm da t = 0.9682; centrada en el eje t = 0.9443,
+corrida 10 mm t = 0.9690 (la onda pasa casi sin obstáculo por el eje).
+
+**Cuatro cosas que hubo que corregir, todas de presentación o de enganche.**
+
+1. **El listener del arrastre no se registraba.** `$('mapaCadena').on('plotly_relayout', …)` estaba en
+   `init()`, cuando el div **todavía no era un gráfico de Plotly** y no tenía `.on`; el arrastre movía el
+   rectángulo y no recalculaba nada. Ahora se registra en `pintar()`, después del `Plotly.react`, y se
+   quita el handler anterior para no acumularlos.
+2. **La forma del evento no era la que esperaba.** Plotly emite `shapes[N].x0/x1/y0/y1`, con **N igual al
+   índice del rectángulo** (después de las 2 líneas por interfaz, así que con 3 capas es 6, no un índice
+   fijo). Filtrar por un prefijo armado a mano dejaba el arrastre mudo; ahora se acepta cualquier clave
+   que empiece con `shapes` y se lee el shape **por nombre**.
+3. **El rectángulo se confundía con el campo.** El sólido no tiene gdl de presión y salía negro, igual que
+   un mínimo del colormap, así que parecía "zona sin campo" y no un objeto. Ahora va con relleno oscuro
+   semitransparente y borde azul, `layer: above`.
+4. **No había ninguna señal de que se arrastra.** Se agrega `cursor: grab` sobre el mapa cuando la pieza
+   es finita, y el esquema de capas dice «pieza finita de N mm».
+
+**Lo que esto cierra**: el control de posicionamiento de la estructura que pedía el objetivo, para
+estructuras de capas. Mover una **geometría STL** con la misma interacción es el paso que sigue y depende
+de tener el acople de STL multicapa (nodos no coincidentes), que es donde está el trabajo de fondo.

@@ -79,6 +79,42 @@ def test_el_mapa_usa_el_modulo_del_fasor_y_no_solo_la_parte_real():
     assert db.min() > -20.0
 
 
+def test_la_estructura_finita_se_puede_mover_y_el_campo_cambia():
+    """Con la estructura finita, moverla en x tiene que cambiar el campo; con capas infinitas no."""
+    base = _datos([("piel", 2.0), ("perilinfa", 5.0)], estructura_alto_mm=14.0)
+    a = cadena_field.resolver_cadena({**base, "estructura_x_mm": 10.0})
+    b = cadena_field.resolver_cadena({**base, "estructura_x_mm": 18.0})
+    print(f"\n  x=10 mm: t {a['metricas']['t_medido']:.4f} · x=18 mm: t {b['metricas']['t_medido']:.4f}")
+
+    assert a["estructura"]["finita"] is True
+    assert a["estructura"]["alto_mm"] == 14.0
+    assert a["estructura"]["x_mm"] == 10.0 and b["estructura"]["x_mm"] == 18.0
+    assert abs(a["metricas"]["t_medido"] - b["metricas"]["t_medido"]) > 1e-3, (
+        "mover la estructura no cambió el campo: se está resolviendo siempre lo mismo"
+    )
+
+
+def test_mover_en_y_saca_la_estructura_del_eje():
+    """La pieza también se mueve transversalmente: en el eje deja de estar enfrente."""
+    base = _datos([("piel", 2.0), ("perilinfa", 5.0)], estructura_alto_mm=12.0)
+    centrada = cadena_field.resolver_cadena({**base, "estructura_y_mm": 0.0})
+    corrida = cadena_field.resolver_cadena({**base, "estructura_y_mm": 10.0})
+    print(f"\n  centrada: t {centrada['metricas']['t_medido']:.4f} · "
+          f"desplazada 10 mm: t {corrida['metricas']['t_medido']:.4f}")
+    assert centrada["estructura"]["y_mm"] == 0.0
+    assert corrida["estructura"]["y_mm"] == 10.0
+    assert corrida["metricas"]["t_medido"] > centrada["metricas"]["t_medido"], (
+        "con la pieza fuera del eje la onda pasa casi sin obstáculo por el eje"
+    )
+
+
+def test_las_capas_infinitas_siguen_siendo_el_default():
+    r = cadena_field.resolver_cadena(_datos([("piel", 2.0), ("perilinfa", 5.0)]))
+    assert r["estructura"]["finita"] is False
+    assert r["estructura"]["alto_mm"] is None
+    assert r["metricas"]["error_pct"] is not None
+
+
 def test_el_mapa_cubre_agua_capas_y_agua():
     """La grilla tiene que incluir el agua de entrada y de salida, no sólo las capas."""
     r = cadena_field.resolver_cadena(_datos([("piel", 2.0), ("perilinfa", 5.0)]))
