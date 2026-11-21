@@ -2187,3 +2187,51 @@ Medido, 60 mm y 250 kHz, 4 puntos:
 El número en `λ` baja en hueso porque `λ` baja: en milímetros el pitch que cumple es el mismo
 (60 mm / n), lo que cambia es contra qué se compara. Es la comprobación de que normalizar por `λ` del
 medio es lo correcto y no un detalle de presentación.
+
+## D54 — El tablero pasa a un solo problema; el FEM de ese problema todavía no cierra
+
+**Qué se reordenó, y por qué.** El tablero tenía ocho pestañas que resolvían **problemas distintos**
+(una apertura con baffle, ondas planas sobre capas, un cilindro dispersor, un corte de cóclea, una caja
+3D). Comparar métodos así es imposible: no hay dos pestañas que resuelvan lo mismo. La estructura pasa
+a: **BEM · fuentes** (el problema), **FEM · fuentes**, **escena capas**, **dispersor** y **3D**, con
+cóclea, barridos, esfera y criterios marcados **para el futuro**.
+
+Además la **frecuencia se sincroniza** entre campo, escena y 3D (antes campo arrancaba en 250 kHz y las
+otras dos en 100 kHz: comparar obligaba a igualarlas a mano). Sincronizar **no** relanza corridas.
+
+**Lo que está verificado.** El BEM de referencia (`dashboard.field.evaluate`) coincide con la solución
+exacta de un monopolo 2D, `H₀(k·r)`:
+
+| r (mm) | 30 | 60 | 100 | 140 |
+|---|---|---|---|---|
+| razón de módulos | 1.000 | 1.000 | 1.000 | 1.000 |
+| diferencia de fase | 0.0° | 0.0° | 0.0° | 0.0° |
+
+La referencia es buena. Eso convierte cualquier diferencia en un problema del FEM, no en una
+ambigüedad sobre quién tiene razón.
+
+**Lo que NO está verificado.** `dashboard/fuentes_fem.py` resuelve el mismo problema con P1 + ABC-1
+(Neumann en el baffle con `∂p/∂n = −iωρv` en las aristas de cada fuente). Contra el BEM **no
+reproduce el campo**: con una fuente de 2 mm en un dominio de 200×200 mm², la razón de amplitudes va de
+**0.31 a 0.92** según el punto y las fases difieren entre **45° y 165°**. No es un factor global: un
+desfase constante se corregiría con una constante, y acá el cociente complejo cambia punto a punto.
+
+Sospechosos, en orden de probabilidad:
+
+1. **La forma débil de `solve_scattered` no es la de un problema radiante.** Está escrita para un
+   *dispersor*: impone `∂p_s/∂n = −∂p_i/∂n` e integra el dato con una convención de signo que se probó
+   con `±` y ninguna de las dos alinea el campo. Probablemente haya un término de frontera de más (el
+   `p_i` que se resta) que en un problema sin incidente no corresponde.
+2. **El ABC-1 en un contorno rectangular abierto por el baffle.** El orden 2 exige contorno cerrado y
+   no aplica; el orden 1 mete un error que no se midió por separado.
+3. **La malla no resuelve el ancho de cada fuente**: quedaron 3 aristas para 2 mm.
+
+**Decisión.** El módulo queda en el repo (la malla, la clasificación de aristas del baffle, el recorte
+de la fuente por arista y la comparación contra el BEM son correctos y reutilizables) pero **la UI no
+lo expone**: la pestaña se muestra **deshabilitada y con la etiqueta «en desarrollo»**, y el tooltip
+dice exactamente qué falta. Mostrarla como si funcionara sería el peor de los tres caminos (esconderla
+hace creer que no existe; mostrarla hace creer que funciona).
+
+**Siguiente paso concreto**: escribir el problema radiante **como tal** (sin `p_inc`), con un ensamblado
+propio en vez de reusar el del dispersor, y validarlo primero contra la Hankel de un monopolo —el mismo
+test que ya pasa el BEM— antes de intentar con las 32 fuentes.

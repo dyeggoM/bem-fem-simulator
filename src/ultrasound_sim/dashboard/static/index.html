@@ -17,15 +17,20 @@
     </div>
 
     <nav class="vistas">
-      <button class="vista-btn activo" data-vista="campo">campo</button>
-      <button class="vista-btn" data-vista="escena">escena FEM</button>
-      <button class="vista-btn" data-vista="dispersor">dispersor BEM</button>
-      <button class="vista-btn" data-vista="cochlea">cóclea</button>
-      <button class="vista-btn" data-vista="barridos">barridos</button>
+      <button class="vista-btn activo" data-vista="campo">BEM · fuentes</button>
+      <button class="vista-btn en-desarrollo" data-vista="fem" disabled
+        data-tip="El FEM del MISMO problema de fuentes está implementado (dashboard/fuentes_fem.py) pero todavía no reproduce el BEM: la razón de amplitudes va de 0.31 a 0.92 según el punto y las fases difieren 45-165°, así que no es un factor global. El BEM sí está validado contra la solución exacta de un monopolo (módulo 1.000, fase 0.0°). Se habilita cuando cierre contra la referencia — no antes.">FEM · fuentes <span class="etiqueta-dev">en desarrollo</span></button>
+      <button class="vista-btn" data-vista="escena">escena capas</button>
+      <button class="vista-btn" data-vista="dispersor">dispersor</button>
       <button class="vista-btn" data-vista="volumen">3D</button>
-      <button class="vista-btn" data-vista="esfera">esfera elástica</button>
-      <button class="vista-btn" data-vista="criterios">criterios</button>
     </nav>
+    <div class="proximamente">
+      <span>para el futuro:</span>
+      <button class="vista-btn mini" data-vista="cochlea" disabled>cóclea</button>
+      <button class="vista-btn mini" data-vista="barridos" disabled>barridos</button>
+      <button class="vista-btn mini" data-vista="esfera" disabled>esfera elástica</button>
+      <button class="vista-btn mini" data-vista="criterios" disabled>criterios</button>
+    </div>
     <div class="acciones-header">
       <button class="btn mini" id="btnTour"
         data-tip="Recorrido guiado por los controles: mapa, arrastre de fuentes, comparación contra una referencia, las vistas y la exportación.">tour</button>

@@ -296,6 +296,7 @@ vol$('volFuente').addEventListener('change', (e) => {
 });
 vol$('volFreq').addEventListener('input', (e) => {
   VOL.freq = parseInt(e.target.value, 10);
+  if (typeof window.syncFrecuencia === 'function') window.syncFrecuencia(VOL.freq, 'volumen');
   vol$('volFreqVal').textContent = `${VOL.freq} kHz`;
 });
 vol$('volPpw').addEventListener('input', (e) => {
