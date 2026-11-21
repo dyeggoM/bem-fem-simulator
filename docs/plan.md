@@ -378,8 +378,19 @@ agrega a la librería con su criterio, después se enchufa.
   pasa a **`sin_referencia`**, porque con un campo dispersado del orden del 2 % de la incidente el
   error *relativo* no indica nada: se muestra el **error absoluto** contra la incidente
   (7.2e-3 Pa sobre 1 Pa).
-  *Lo que lo arreglaría*: formular el sólido también en campo dispersado (`u_s = u − u_i`), con el
-  operador completo aplicado a la incidente (misma disciplina que D41). No está hecho.
+  *Formulación dispersada IMPLEMENTADA (D49), y el resultado obliga a matizar.* `u_s = u − u_i` con
+  el **operador de contraste** (no el completo: restar el completo deja un residuo O(h²) que empuja un
+  campo espurio del 18 %). El límite transparente ahora **valida exacto**: `|p_s|` converge a cero
+  como `c_s²` (6.7e-2 → 2.6e-3 → 5.3e-4 → 1.2e-4 para `c_s` 100/30/10/3) sin restringir nada.
+  **Pero contra Faran es peor**: acero **19.49 %** y aluminio **44.14 %**, contra 4.29 %/3.99 % de la
+  total+restricción. La razón: para un metal `u_s ≈ −u_i` y `(K−ω²M)u_s` con la rigidez del acero es
+  una resta de términos grandes; el error de interpolación de la incidente se amplifica por `K`.
+  **Consecuencia honesta**: el 4.29 % está en parte **cancelado** con el error de discretización, no
+  ganado. El default sigue en la total (`fijar_rigidos=True`) porque es la sellada, y el criterio queda
+  calificado a metales.
+  *Siguiente paso*: contrastar la **traslación** de la formulación dispersada contra
+  `v/v_inc = 3/(2g+1)` (Bruus 2012) en `k₀a ≪ 1` antes de refinar nada — eso dice si el problema es el
+  acoplamiento con un contorno que se mueve o el resto del campo.
   **Y no es una mejora opcional (D48)**: Sim-Datos confirmó que la premisa de la restricción es
   **falsa** — una onda plana sí ejerce fuerza armónica de primer orden sobre el cuerpo, y Faran
   **incluye** ese *rebound* traslacional (Feuillade y Clay 1999, JASA 106:553, §IV). La amplitud

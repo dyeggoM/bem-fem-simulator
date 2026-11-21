@@ -118,6 +118,22 @@ def strain_matrix(grads: np.ndarray) -> np.ndarray:
     return b
 
 
+def p1_elastic3d_matrices_constantes(
+    nodes: np.ndarray, tets: np.ndarray, lam: float, mu: float, rho: float,
+) -> tuple[sp.csr_matrix, sp.csr_matrix]:
+    """``(K, M)`` desde ``(λ, μ, ρ)`` sueltos, sin pasar por un :class:`ElasticSolid`.
+
+    Hace falta para armar el operador del **fluido** con la misma malla y la misma cuadratura que el
+    del sólido (``μ = 0``, ``λ = ρ₀c₀²``), que es lo que permite escribir el término de contraste como
+    diferencia de matrices y que se anule exactamente cuando los dos materiales coinciden.
+    """
+    d = np.zeros((6, 6))
+    d[:3, :3] = lam
+    d[0, 0] = d[1, 1] = d[2, 2] = lam + 2.0 * mu
+    d[3, 3] = d[4, 4] = d[5, 5] = mu
+    return _matrices(nodes, tets, d, float(rho))
+
+
 def p1_elastic3d_matrices(
     nodes: np.ndarray, tets: np.ndarray, solid: ElasticSolid
 ) -> tuple[sp.csr_matrix, sp.csr_matrix]:
@@ -126,6 +142,11 @@ def p1_elastic3d_matrices(
     ``K`` incorpora únicamente la rigidez elástica: la superficie libre de tracción es la condición
     natural del método, así que un contorno sin término de borde queda con ``σ·n = 0``.
     """
+    return _matrices(nodes, tets, elasticity_matrix(solid), float(solid.rho))
+
+
+def _matrices(nodes, tets, d: np.ndarray, rho: float) -> tuple[sp.csr_matrix, sp.csr_matrix]:
+    """Núcleo del ensamblado, desde la matriz constitutiva ``D`` y la densidad."""
     nodes = np.asarray(nodes, dtype=float)
     tets = np.asarray(tets, dtype=np.int64)
     if tets.ndim != 2 or tets.shape[1] != 4:
@@ -133,7 +154,6 @@ def p1_elastic3d_matrices(
     n = nodes.shape[0]
     grads, volumes = tet_shape_gradients(nodes, tets)
     b = strain_matrix(grads)
-    d = elasticity_matrix(solid)
 
     # K_e = V·BᵀDB  (M, 12, 12) vectorizado
     db = d @ b                                  # (M, 6, 12)
@@ -148,7 +168,7 @@ def p1_elastic3d_matrices(
     for i in range(4):
         for j in range(4):
             masa_local[3 * i:3 * i + 3, 3 * j:3 * j + 3] = np.eye(3) * (2.0 if i == j else 1.0)
-    me = solid.rho * volumes[:, None, None] / 20.0 * masa_local[None, :, :]
+    me = rho * volumes[:, None, None] / 20.0 * masa_local[None, :, :]
     m = sp.coo_matrix((me.reshape(-1), (filas, cols)), shape=(3 * n, 3 * n)).tocsr()
     return k.tocsr(), m.tocsr()
 

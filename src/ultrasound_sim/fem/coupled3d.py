@@ -201,13 +201,23 @@ def resolver(
     frequency: float,
     onda: Any = None,
     abc_order: int = 1,
-    fijar_rigidos: bool = True,
+    fijar_rigidos: bool | None = None,
+    formulacion: str = "total",
 ) -> dict[str, Any]:
-    """Por defecto ``fijar_rigidos=True``: ver la explicación del bloque de la restricción.
+    """Resuelve la esfera elástica sumergida. Dos formulaciones, y la elección no es cosmética.
 
-    Se puede apagar, y hay que apagarlo cuando el cuerpo es **transparente** (esfera indistinguible
-    del medio): ahí el desplazamiento medio no es cero y la restricción mete dispersión falsa
-    (medido: 1.6 Pa sobre una incidente de 1 Pa).
+    ``formulacion="total"`` (por defecto) resuelve el desplazamiento completo y, con
+    ``fijar_rigidos=True``, impone traslación media nula para domar los seis modos rígidos. Es la que
+    reproduce Faran al **4.29 %** en metales. Pero la condición **suprime una respuesta dipolar
+    física** (Feuillade y Clay 1999, §IV; D48), así que ese 4 % es en parte una cancelación
+    afortunada, y con materiales livianos el error crece como ``3/(2g+1)``: 13 % en hueso, catastrófico
+    en tejido.
+
+    ``formulacion="dispersada"`` resuelve ``u_s = u − u_i`` con el **operador de contraste** aplicado
+    a la incidente. Es la correcta —el caso transparente da ``|p_s| = 1e-4`` sin restringir nada— pero
+    numéricamente es una **resta de términos grandes**: para un metal ``u_s ≈ −u_i`` con la rigidez del
+    acero, y cualquier inconsistencia de la incidente se amplifica. Medido contra Faran: 19.49 % en
+    acero y 44.14 % en aluminio. No se usa como default hasta entender esa amplificación (D49).
     """
     """Resuelve el sistema acoplado para una onda plana incidente.
 
@@ -217,6 +227,13 @@ def resolver(
     """
     if onda is None:
         onda = helmholtz3d.plane_wave(frequency, fluid, np.array([0.0, 0.0, 1.0]))
+
+    if formulacion not in ("dispersada", "total"):
+        raise ValueError(f"formulacion tiene que ser 'dispersada' o 'total'; llegó {formulacion!r}")
+    if fijar_rigidos is None:
+        # automático: la restricción sólo tiene sentido en la formulación total. Dejarlo en un
+        # default booleano hacía que pedir la dispersada reventara sin decir por qué.
+        fijar_rigidos = formulacion == "total"
 
     datos = matrices_acopladas(mesh, fluid, solid, frequency, abc_order)
     omega = datos["omega"]
@@ -257,8 +274,50 @@ def resolver(
         [k_solid - omega**2 * m_solid, c.T],
         [omega**2 * c, a_ff],
     ], format="csc")
-    b_global = np.concatenate([b_s, b_f])
+
+    # Desplazamiento de la onda incidente prolongado al interior del sólido. Se usa la relación de
+    # momento del fluido, `u = ∇p/(ρ₀ω²)`, que es la misma con la que se impone la continuidad: eso es
+    # lo que hace que el caso transparente cierre sin restricción.
+    u_inc = np.asarray(onda.gradient(mesh.nodes[nodos_solidos]), dtype=complex) / (
+        float(fluid.rho) * omega**2
+    )
+    u_inc_vec = u_inc.reshape(-1)
+
+    if formulacion == "dispersada":
+        # Sólido en campo DISPERSADO: u = u_i + u_s. La ecuación del sólido queda
+        #   (K − ω²M)·u_s = −[(K − ω²M)·u_i + ∫p_i(n·v)] − Cᵀ·p_s
+        # y el corchete es el residuo del operador ELÁSTICO aplicado a la incidente. Para un cuerpo
+        # indistinguible del fluido ese residuo se anula por consistencia (el término de volumen de
+        # ∫σ:ε(v) cancela contra el de borde), así que u_s = 0 sin imponer nada.
+        # El fluido pierde su dato de Neumann: ρ₀ω²(u_i·n) y ∂p_i/∂n son el mismo número, y se
+        # cancelan. Todo lo que entra al sistema entra por el residuo del sólido.
+        # Término de contraste, no residuo del operador completo. La identidad
+        #   (K_fluido − ω²M_fluido)·u_i = −∮p_i(n·v)
+        # se cumple en el continuo, pero al restarla numéricamente queda un residuo O(h²) (medido:
+        # 0.35 % de la tracción) que **empuja un campo dispersado espurio** de ~0.06 Pa, del orden del
+        # 18 % del campo real de un metal.
+        #
+        # La forma correcta —la misma lección que D41 en el caso escalar— es aplicar sólo el CONTRASTE
+        # del operador sobre la incidente. Con el operador del fluido armado sobre la MISMA malla y la
+        # MISMA cuadratura, un cuerpo indistinguible del fluido da matrices idénticas y el término es
+        # **exactamente cero**, sin depender de h.
+        lam_f = float(fluid.rho) * float(fluid.c) ** 2
+        k_fluido, m_fluido = elastic3d.p1_elastic3d_matrices_constantes(
+            mesh.nodes[nodos_solidos], mapa[mesh.tets_solid], lam_f, 0.0, float(fluid.rho)
+        )
+        contraste = (k_solid - omega**2 * m_solid) - (k_fluido - omega**2 * m_fluido)
+        residuo_incidente = contraste @ u_inc_vec
+        b_global = np.concatenate([-residuo_incidente, np.zeros(nodos_fluido.size, dtype=complex)])
+    else:
+        b_global = np.concatenate([b_s, b_f])
+
     multiplicadores = None
+
+    if fijar_rigidos and formulacion == "dispersada":
+        raise ValueError(
+            "fijar_rigidos es de la formulación 'total'. En 'dispersada' no hace falta: el "
+            "desplazamiento medio de u_s ya es el correcto (y restringirlo suprimiría el dipolo)."
+        )
 
     if fijar_rigidos:
         # El sólido libre tiene seis modos de cuerpo rígido SIN rigidez elástica: la única que los
@@ -289,14 +348,19 @@ def resolver(
     p_s_reducido = x[3 * n_solid:]
 
     # se devuelve en el espacio COMPLETO de nodos para que la interpolación y las gráficas no
-    # tengan que saber de las reducciones internas
+    # tengan que saber de las reducciones internas. En la formulación dispersada lo resuelto es
+    # `u_s`, así que el desplazamiento TOTAL del sólido es `u_i + u_s`.
     desplazamiento = np.zeros((n, 3), dtype=complex)
-    desplazamiento[nodos_solidos] = u
+    desplazamiento[nodos_solidos] = u + (u_inc if formulacion == "dispersada" else 0.0)
+    desplazamiento_dispersado = np.zeros((n, 3), dtype=complex)
+    desplazamiento_dispersado[nodos_solidos] = u
     p_s = np.zeros(n, dtype=complex)
     p_s[datos["nodos_fluido"]] = p_s_reducido
     return {
         "u": desplazamiento, "p_s": p_s, "presion_total": p_s + onda.value(mesh.nodes),
         "frequency": frequency, "onda": onda, "datos": datos, "n_solid": n_solid,
+        "u_dispersado": desplazamiento_dispersado, "u_incidente": u_inc,
+        "formulacion": formulacion,
         # fuerza y torque netos que la malla no canceló (None si no se impuso la restricción)
         "residuo_rigido": multiplicadores,
     }

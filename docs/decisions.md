@@ -1859,3 +1859,76 @@ cuándo un modelo fluido es suficiente: hay que mirar la contribución de corte 
 4. El paso de fondo —sólido en campo dispersado— deja de ser "una mejora" y pasa a ser **la
    corrección de un error conceptual**: la formulación actual suprime un término dipolar que Faran
    incluye.
+
+## D49 — Sólido en campo dispersado: la formulación correcta es numéricamente peor
+
+**Qué se hizo.** Se agregó `formulacion="dispersada"` a `coupled3d.resolver`: se resuelve
+`u_s = u − u_i` en vez del desplazamiento total, y la incidente entra como **término de contraste**.
+Es la respuesta a D48 (la restricción de traslación media nula suprime un dipolo físico).
+
+**El detalle que hace que funcione: contraste, no residuo.** Restar el operador **completo**
+`(K−ω²M)·u_i − b_s` deja un residuo O(h²) —medido: **0.35 %** de la tracción incidente, con los dos
+términos valiendo 2.558e-7 y 2.549e-7— y ese residuo empuja un campo espurio de **~0.06 Pa**, del orden
+del 18 % del campo real de un metal. La forma correcta es la lección de D41 trasladada a elasticidad:
+aplicar sólo el **contraste del operador**, con el operador del fluido armado sobre la **misma malla y
+la misma cuadratura**. Así, un cuerpo indistinguible del fluido da matrices **idénticas** y el término
+es exactamente cero, sin depender de `h`.
+
+**Validado en el límite, y esto sí es exacto.** Con `ρ` y `c_p` del agua y `c_s` bajando:
+
+    c_s = 100 → |p_s| = 6.7e-2 Pa
+    c_s =  30 → |p_s| = 2.6e-3 Pa
+    c_s =  10 → |p_s| = 5.3e-4 Pa
+    c_s =   3 → |p_s| = 1.2e-4 Pa      (incidente = 1 Pa)
+
+Converge a cero como `c_s²`, **sin restringir nada**. Y el test de que las dos matrices coinciden da
+diferencia exactamente 0.0. La formulación está bien.
+
+**Y sin embargo, contra Faran es peor:**
+
+- acero: **19.49 %** (razón 0.847) contra **4.29 %** de la total+restricción
+- aluminio: **44.14 %** (razón 0.673) contra **3.99 %**
+
+**Por qué (hipótesis con fundamento).** Para un metal el cuerpo casi no se mueve, así que
+`u_s ≈ −u_i` con la magnitud de la incidente, y el término elástico `(K−ω²M)u_s` con la rigidez del
+acero es enorme: la ecuación es una **resta de términos grandes**. Cualquier error de interpolación de
+`u_i` en el interior se amplifica por `K` (~1e11). La formulación dispersada es correcta en el
+continuo y **mal condicionada en esta malla**; la total+restricción es incorrecta en el continuo pero
+bien condicionada.
+
+**Consecuencia honesta, y hay que decirla: el 4.29 % estaba en parte de suerte.** No es que la
+restricción acierte: suprime el término dipolar que Faran incluye, y en esta malla el error que
+introduce se cancela parcialmente con el error de discretización del resto. Un número bueno por
+cancelación no es una validación, y por eso el criterio `volumen_esfera_elastica` queda **calificado**
+en D48/D49: vale para metales con la formulación total y **no** para materiales livianos.
+
+**Decisión de default.** Se deja `formulacion="total"` con `fijar_rigidos=True` como default —es la
+que reproduce 4.29 % y la que está sellada— y la dispersada se expone como opción documentada. Cambiar
+el default a la formulación correcta pero 5-10× peor contra la referencia habría empeorado la UI sin
+explicar nada; lo que corresponde es entender la amplificación antes de mover el default.
+
+**Siguiente paso, concreto.** Antes de refinar a ciegas: (a) comparar la **traslación** que resuelve la
+formulación dispersada contra la ley analítica `v_partícula/v_inc = 3/(2g+1)` en el límite `k₀a ≪ 1`
+(Bruus 2012, ecs. 22 y 26) — si la traslación sale bien y el campo mal, el problema es el resto del
+campo; si sale mal, es el acoplamiento con el fluido en un contorno que se mueve; (b) recién después
+decidir si se refina el sólido, el fluido o se cambia de formulación.
+
+#### D49 — apéndice: la corrida vieja, que confirma el diagnóstico
+
+Quedó registrada una corrida del barrido anterior (con el operador **completo** restado, no el
+contraste). Su límite transparente **no converge**:
+
+    c_s = 100 → 1.22e-1 Pa
+    c_s =  30 → 6.42e-2 Pa
+    c_s =  10 → 5.72e-2 Pa      ← se estanca
+
+Contra el operador de contraste, a `c_s = 10`: **5.3e-4 Pa**. Misma malla, mismo caso, **100× menos**.
+O sea que el residuo O(h²) del operador completo no era un detalle de implementación: era el piso del
+error, y por eso el límite no bajaba al bajar `c_s`. Es la evidencia de que el cambio de "restar el
+operador completo" a "aplicar el contraste" era el paso correcto, más allá de que el número contra
+Faran haya empeorado por otra razón.
+
+Y el `fijar_rigidos` con default booleano era una trampa: pedir `formulacion="dispersada"` sin tocar
+nada reventaba con un error que hablaba de la restricción. Ahora su default es `None` y se resuelve
+solo según la formulación (`True` en total, `False` en dispersada); el error queda sólo para quien
+pida explícitamente las dos cosas contradictorias.
