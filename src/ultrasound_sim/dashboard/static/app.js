@@ -681,6 +681,11 @@ function sincronizarEtiquetas() {
 
 function filaFuente(src, i) {
   const tr = document.createElement('tr');
+  // número de fila a la vista: con 32 fuentes hay que poder decir «la 17» sin contarlas
+  const tdIdx = document.createElement('td');
+  tdIdx.className = 'idx';
+  tdIdx.textContent = String(i + 1);
+  tr.appendChild(tdIdx);
   const campos = [
     { k: 'y_mm', v: (src.y * 1e3).toFixed(2), paso: '0.1' },
     { k: 'width_mm', v: (src.width * 1e3).toFixed(2), paso: '0.1' },
@@ -702,6 +707,20 @@ function filaFuente(src, i) {
       } else if (c.k === 'amp') f.amp = v;
       else f.phase = v;
       pedir();
+    });
+    // al editar una fila se resalta su asa en el mapa: es la forma de saber cuál de las 32 es
+    inp.addEventListener('focus', () => {
+      tr.classList.add('editando');
+      resaltarFuente(i);
+    });
+    inp.addEventListener('blur', () => {
+      // se espera un instante: pasar de un campo a otro de la MISMA fila no tiene que apagar el resaltado
+      setTimeout(() => {
+        if (!tr.contains(document.activeElement)) {
+          tr.classList.remove('editando');
+          resaltarFuente(-1);
+        }
+      }, 120);
     });
     td.appendChild(inp);
     tr.appendChild(td);
@@ -889,6 +908,13 @@ function posicionesDelArreglo() {
   for (let j = 0; j < S.n; j += 1) out.push(-S.d / 2 + paso * (j + 0.5));
   return out;
 }
+
+/* Resalta el asa i en el mapa (o ninguna con -1). Se usa desde la tabla de fuentes. */
+window.resaltarFuente = function resaltarFuente(i) {
+  asas.forEach((el, k) => {
+    if (el) el.classList.toggle('fuente-resaltada', k === i);
+  });
+};
 
 function pintarAsas() {
   const capa = $('arrastre');

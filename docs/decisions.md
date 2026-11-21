@@ -2552,3 +2552,31 @@ Al medir «en el eje» con una banda de **media celda**, cuando el eje cae justo
 (`|y|min = h/2` exacto) la selección quedaba vacía y el corte salía con **0 puntos**. Es el tercer
 tropezón con lo mismo (D60 lo dejó anotado para `|y| < 1e-12`): la banda tiene que ser de **al menos una
 celda**.
+
+## D62 — Los valores de la tabla de fuentes no se podían leer: era el ancho del panel
+
+**El síntoma**: la tabla de fuentes no dejaba ver los números para corregirlos. La causa no era el estilo
+de la tabla sino que **el panel medía 318 px** y la tabla **253 px para cinco columnas numéricas**: cada
+input quedaba en **52 px** y `-29.06` no entraba. Cambiar el color o la tipografía no arregla eso; lo que
+faltaba era ancho.
+
+**Lo que se cambió**:
+
+1. **Panel de 380 px** (medido: la tabla pasa a 315 px y cada input a **73 px**, donde `-29.06` entra
+   entero — verificado con `scrollWidth <= clientWidth`).
+2. **Spinners nativos fuera** (`appearance: textfield` y `::-webkit-inner-spin-button` a cero): se comían
+   ~16 px de un campo de 60 y recortaban el número. Se pierden los botones de subir/bajar, que en una tabla
+   de 32 filas no se usan; el `step` sigue funcionando con las flechas del teclado.
+3. **Números alineados a la derecha**, que es como se comparan magnitudes de un vistazo, y **fuente de
+   12.5 px** monoespaciada.
+4. **Columna de fila (#)** y encabezados con unidad (`y mm`, `ancho mm`, `fase rad`): con 32 fuentes hay
+   que poder decir «la 17» sin contarlas.
+5. **Filas alternadas, hover y resaltado al editar**, y —lo que más ayuda— **al enfocar una fila se resalta
+   su asa en el mapa** (`window.resaltarFuente`). Sin eso había que adivinar cuál de las 32 asas
+   correspondía a la fila que se estaba mirando. Verificado con clic real: fila 12 → asa 11 resaltada.
+6. Alto visible de **348 px** → **10 filas** en pantalla en vez de 6, con scroll propio y encabezado fijo.
+
+**Una trampa de prueba, para no repetirla**: `input.blur(); input.focus()` en el mismo tick **no dispara**
+los eventos `focus`/`blur` (el navegador los difiere), y `focus()` sobre un elemento que ya lo tiene
+tampoco. El resaltado parecía roto en la consola y funcionaba perfecto con un clic real. Cuando se prueba
+interacción hay que despachar el evento del mouse, no llamar a `focus()` por código.

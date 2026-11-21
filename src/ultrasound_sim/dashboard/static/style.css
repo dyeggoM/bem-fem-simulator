@@ -14,7 +14,9 @@ body {
 
 /* ---------- panel ---------- */
 .panel {
-  width:318px; flex:0 0 318px; background:var(--panel); border-right:1px solid var(--linea);
+  /* 318 px no alcanzaba para que la tabla de fuentes muestre «-29.06» sin recortarlo (5 columnas
+     numéricas en 253 px). Con 380 el panel sigue dejando el mapa grande en 1440 y los valores se leen. */
+  width:380px; flex:0 0 380px; background:var(--panel); border-right:1px solid var(--linea);
   padding:18px 16px 44px; overflow-y:auto;
 }
 .marca h1 { margin:0; font-size:17px; letter-spacing:-.3px; font-weight:650; }
@@ -50,19 +52,33 @@ select, input[type=number] {
 .fila { display:flex; gap:6px; margin-top:8px; }
 
 table.fuentes { width:100%; border-collapse:collapse; font-size:12px; table-layout:fixed; }
-table.fuentes col.c-y { width:26%; } table.fuentes col.c-ancho { width:24%; }
-table.fuentes col.c-amp { width:17%; } table.fuentes col.c-fase { width:25%; }
-table.fuentes col.c-del { width:8%; }
+table.fuentes col.c-idx { width:6%; } table.fuentes col.c-y { width:25%; }
+table.fuentes col.c-ancho { width:24%; } table.fuentes col.c-amp { width:14%; }
+table.fuentes col.c-fase { width:23%; } table.fuentes col.c-del { width:8%; }
 table.fuentes th {
-  text-align:left; color:var(--dim); font-weight:600; font-size:10.5px;
-  text-transform:uppercase; letter-spacing:.4px; padding:2px 3px;
+  text-align:left; color:var(--dim); font-weight:600; font-size:10px;
+  text-transform:uppercase; letter-spacing:.4px; padding:4px 4px;
 }
+table.fuentes th .ud { text-transform:none; opacity:.7; font-weight:400; }
+table.fuentes th.th-idx { text-align:center; }
 table.fuentes td { padding:2px 3px; }
+/* Los valores tienen que poder LEERSE y corregirse: los spinners nativos de `type=number` se comen
+   ~16 px de un campo de 60 y dejan el número recortado. Se ocultan y el campo se alinea a la derecha,
+   que es como se comparan magnitudes de un vistazo. */
 table.fuentes input {
   width:100%; background:var(--panel2); border:1px solid var(--linea); border-radius:4px;
-  color:var(--texto); padding:3px 5px; font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size:11.5px;
+  color:var(--texto); padding:5px 6px; font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size:12.5px; text-align:right; -moz-appearance:textfield; appearance:textfield;
 }
+table.fuentes input::-webkit-outer-spin-button,
+table.fuentes input::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+table.fuentes input:focus {
+  outline:none; border-color:#4493f8; background:#0d1117; box-shadow:0 0 0 1px rgba(68,147,248,.35);
+}
+table.fuentes tbody tr:nth-child(even) { background:rgba(255,255,255,.02); }
+table.fuentes tbody tr:hover { background:rgba(88,166,255,.07); }
+table.fuentes tbody tr.editando { background:rgba(88,166,255,.12); }
+table.fuentes td.idx { text-align:center; color:var(--dim); font-size:10.5px; font-variant-numeric:tabular-nums; }
 table.fuentes button {
   background:transparent; border:0; color:var(--dim); cursor:pointer; font-size:14px; padding:0 2px;
 }
@@ -381,7 +397,7 @@ body.tour-abierto .app { filter: none; }
 
 /* La tabla de fuentes con 32 elementos mide ~900 px: más alta que la ventana. En vez de arrastrar
    todo el panel para llegar a la fuente 30, la tabla scrollea sola y el encabezado queda fijo. */
-.tabla-scroll { max-height: 232px; overflow-y: auto; overflow-x: hidden; border: 1px solid var(--linea);
+.tabla-scroll { max-height: 348px; overflow-y: auto; overflow-x: hidden; border: 1px solid var(--linea);
   border-radius: 6px; }
 .tabla-scroll .fuentes { margin: 0; }
 .tabla-scroll thead th { position: sticky; top: 0; z-index: 1; background: #161b22; }
@@ -393,3 +409,9 @@ body.tour-abierto .app { filter: none; }
    ("el pico real está en 75.8 mm…"): son del explorador de campo y acá confunden. */
 body.vista-cadena #avisoUX,
 body.vista-cadena #estado { display: none !important; }
+
+
+/* El asa del mapa que corresponde a la fila que se está editando: sin esto hay que adivinar cuál de
+   las 32 filas es la que se está mirando en el campo. */
+.arrastre .asa.fuente-resaltada { background:#58a6ff; transform:scale(1.6); z-index:2;
+  box-shadow:0 0 0 3px rgba(88,166,255,.35); }
