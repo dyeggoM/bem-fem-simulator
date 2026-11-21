@@ -24,8 +24,7 @@ const VOL = {
   ocupado: false,
 };
 
-const CRITERIO_GREEN = 10.0;   // % de error L2 contra el Green
-const CRITERIO_RT = 0.02;      // 2 % en amplitud (Fase 1)
+/* Los criterios (Green al 10 %, R/T al 2 %) los evalúa el servidor: acá no hay umbrales (U6). */
 
 const vol$ = (id) => document.getElementById(id);
 const volFmt = (v, d = 2) => (v === null || v === undefined || Number.isNaN(v) ? '—' : Number(v).toFixed(d));
@@ -105,20 +104,7 @@ function volPintar(r) {
   vol$('volErrR').textContent = esPuntual ? '—' : `abs ${volFmt(m.error_R_abs, 4)}`;
   vol$('volErrT').textContent = esPuntual ? '—' : `abs ${volFmt(m.error_T_abs, 4)}`;
 
-  if (esPuntual) {
-    const ok = m.error_green_pct !== null && m.error_green_pct < CRITERIO_GREEN;
-    vol$('volSello').textContent = ok
-      ? `reproduce el Green 3D dentro del ${CRITERIO_GREEN} % (error ${volFmt(m.error_green_pct, 1)} %, ` +
-        `amplitud ${volFmt(m.amplitud_green, 3)} contra 1.0 esperado).`
-      : `error ${volFmt(m.error_green_pct, 1)} % contra el Green: fuera del ${CRITERIO_GREEN} %. ` +
-        `Subí ppw o agrandá la caja (la ABC tiene que quedar lejos de la fuente).`;
-  } else {
-    const ok = Math.abs(m.error_R_abs) < CRITERIO_RT && Math.abs(m.error_T_abs) < CRITERIO_RT;
-    vol$('volSello').textContent = ok
-      ? `R y T dentro del 2 % en amplitud contra la matriz de transferencia 1D ` +
-        `(energía ${volFmt(m.energia, 4)}).`
-      : `R o T fuera del 2 %: subí ppw antes de usar estos números.`;
-  }
+  mostrarSello('volSello', r.sello, 'esta corrida no reportó criterio.');
 }
 
 /* ------------------------------------------------------------------ dibujo */

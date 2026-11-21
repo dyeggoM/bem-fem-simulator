@@ -29,6 +29,7 @@ from .. import materials, meshing
 from ..analytic import scattering
 from ..bem import helmholtz2d as bem
 from ..fem import helmholtz2d as fem
+from . import validacion
 
 MATERIAL = materials.WATER
 FREQUENCY = 100.0e3
@@ -264,8 +265,15 @@ def resolver_dispersor(datos: dict[str, Any]) -> dict[str, Any]:
         "max_serie": float(np.abs(p_serie).max()),
     }
 
+    sello = validacion.sello_conjunto({
+        # las métricas vienen en %, el criterio está en fracción
+        "dispersor_fem_serie": metricas["fem_vs_serie_pct"] / 100.0,
+        "dispersor_bem_serie": metricas["bem_vs_serie_pct"] / 100.0,
+    })
+
     return {
         "ok": True,
+        "sello": sello,
         "escena": p,
         "geo": {
             "radio_mm": radio * 1e3,

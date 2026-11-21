@@ -29,6 +29,7 @@ from typing import Any
 import numpy as np
 
 from .. import attenuation as att
+from . import validacion
 from .. import cochlea, materials as mats
 
 FRECUENCIA_HZ = 1.0e5
@@ -46,6 +47,11 @@ BASE_ESPESOR_M = 2.0e-3
 
 #: Puntos por parámetro. Los extremos tienen que ser los del barrido de D30: el "rango relativo" es
 #: (máx − mín), así que recortar los extremos cambia el resultado.
+#: Pesos publicados en D30 (con membrana), en % del `t_interior` base. Es la referencia contra la
+#: que se sella el barrido; vive acá y no en el JS (U6).
+REFERENCIA_D30 = {"espesor": 53.11, "c_p": 16.06, "atenuacion": 9.60,
+                  "c_s": 8.22, "rho": 1.03, "Z_r": 0.28}
+
 PUNTOS = {
     # 13 puntos 1.0 … 7.0 mm cada 0.5: los del script. Con menos puntos se pierde un extremo
     # interior (t_interior NO es monótona en el espesor, D24/D29) y el rango sale 1.1 % corto.
@@ -175,6 +181,14 @@ def barrido_sensibilidad(trabajo, **_ignorado: Any) -> dict[str, Any]:
         })
     ranking.sort(key=lambda r: r["rango_pct"], reverse=True)
 
+    desvios = [
+        abs(f["rango_pct"] - REFERENCIA_D30[f["parametro"]]) / REFERENCIA_D30[f["parametro"]]
+        for f in ranking if f["parametro"] in REFERENCIA_D30
+    ]
+    sello = validacion.sello_conjunto(
+        {"barrido_d30": max(desvios) if desvios else None}
+    )
+
     return resumen_para_ui({
         "ok": True,
         "base": {"t_interior": base, "espesor_mm": BASE_ESPESOR_M * 1e3, "c_p": BASE_CP,
@@ -183,8 +197,8 @@ def barrido_sensibilidad(trabajo, **_ignorado: Any) -> dict[str, Any]:
         "filas": filas,
         "ranking": ranking,
         # referencia ya medida (D30, con membrana): el contraste que la UI muestra
-        "referencia_d30": {"espesor": 53.11, "c_p": 16.06, "atenuacion": 9.60,
-                           "c_s": 8.22, "rho": 1.03, "Z_r": 0.28},
+        "referencia_d30": dict(REFERENCIA_D30),
+        "sello": sello,
     })
 
 

@@ -129,6 +129,11 @@ body.vista-barridos #estado,
 body.vista-volumen #aviso,
 body.vista-volumen #estado { display:none !important; }
 
+/* ---- sellos de validación (U6) ---- */
+.sello-validado { color:#3fb950; }
+.sello-fuera { color:#f85149; }
+.sello-sin_referencia { color:var(--warn); }
+
 /* ---- barridos (U5) ---- */
 .progreso { height:6px; background:var(--panel2); border-radius:3px; margin-top:10px; overflow:hidden; }
 .progreso-barra { height:100%; width:0%; background:var(--acento); transition:width .3s linear; }

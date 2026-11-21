@@ -25,7 +25,18 @@ const ESC = {
   ocupado: false,
 };
 
-const CRITERIO_AMPLITUD = 0.02;   // Fase 1: R y T dentro del 2 % en amplitud
+/* El criterio NO vive acá: lo evalúa el servidor (dashboard/validacion.py) y llega en `r.sello`.
+   Si hiciera falta un umbral en el cliente sería una señal de que la validación quedó partida. */
+function mostrarSello(id, sello, alternativa) {
+  const el = esc$(id);
+  if (!sello || !sello.texto) {
+    el.textContent = alternativa || 'sin sello: esta corrida no reportó criterio.';
+    el.className = 'hint sello-sin_referencia';
+    return;
+  }
+  el.textContent = sello.texto;
+  el.className = `hint sello-${sello.estado}`;
+}
 
 const esc$ = (id) => document.getElementById(id);
 const escFmt = (v, d = 4) => (v === null || v === undefined || Number.isNaN(v) ? '—' : Number(v).toFixed(d));
@@ -150,22 +161,10 @@ function escPintarResultado(r) {
   esc$('escEnergia').textContent = hay ? escFmt(m.energia) : '—';
   esc$('escTiempo').textContent = `${escFmt(r.tiempos.solve_s, 3)} s`;
 
-  if (hay) {
-    const eR = m.error_R_abs;
-    const eT = m.error_T_abs;
-    const okR = eR < CRITERIO_AMPLITUD;
-    const okT = eT < CRITERIO_AMPLITUD;
-    esc$('escErrR').textContent = `abs ${escFmt(eR)} ${okR ? '✓' : '✗'}`;
-    esc$('escErrT').textContent = `abs ${escFmt(eT)} ${okT ? '✓' : '✗'}`;
-    // sello: sale de la corrida, no de una constante
-    esc$('escSello').textContent = (okR && okT)
-      ? `validado contra la matriz de transferencia 1D: R y T dentro del ${100 * CRITERIO_AMPLITUD} % en amplitud (criterio Fase 1).`
-      : `fuera del criterio de la Fase 1 (${100 * CRITERIO_AMPLITUD} % en amplitud): subí ppw antes de usar estos números.`;
-  } else {
-    esc$('escErrR').textContent = '—';
-    esc$('escErrT').textContent = '—';
-    esc$('escSello').textContent = m.aviso || 'la corrida no reportó R ni T.';
-  }
+  esc$('escErrR').textContent = hay ? `abs ${escFmt(m.error_R_abs)}` : '—';
+  esc$('escErrT').textContent = hay ? `abs ${escFmt(m.error_T_abs)}` : '—';
+  // El sello lo evalúa el servidor con su criterio y su fuente (U6): acá no hay umbrales.
+  mostrarSello('escSello', r.sello, m.aviso || 'la corrida no reportó R ni T.');
 }
 
 /* ------------------------------------------------------------------ dibujo */

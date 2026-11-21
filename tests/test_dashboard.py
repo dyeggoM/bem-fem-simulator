@@ -507,6 +507,26 @@ def test_api_volume3d_rechaza_oblicua(servidor):
     assert exc.value.code == 400
 
 
+# ------------------------------------------------------------------ trazabilidad (U6)
+
+
+def test_api_validacion_publica_el_catalogo(servidor):
+    _estado, cuerpo = _get(servidor + "/api/validacion")
+    datos = json.loads(cuerpo)
+    ids = {c["id"] for c in datos["criterios"]}
+    assert {"escena_rt_r", "volumen_green", "barrido_d30"} <= ids
+    for c in datos["criterios"]:
+        assert c["fuente"], f"{c['id']} sin fuente"
+
+
+def test_las_corridas_por_http_traen_sello(servidor):
+    """El sello viaja en la respuesta: la UI no lo calcula."""
+    r = _post(servidor + "/api/scene/solve", ESCENA_HTTP)
+    assert "sello" in r
+    assert r["sello"]["estado"] == "validado"
+    assert "Fuente:" in r["sello"]["texto"]
+
+
 def test_la_pagina_expone_la_vista_3d():
     html = (ESTATICOS / "index.html").read_text(encoding="utf-8")
     for pieza in ('data-vista="volumen"', 'id="vistaVolumen"', 'id="mapaVolumen"',
@@ -514,7 +534,7 @@ def test_la_pagina_expone_la_vista_3d():
         assert pieza in html, f"falta {pieza} en index.html"
     js = (ESTATICOS / "volumen.js").read_text(encoding="utf-8")
     for pieza in ("function volResolver", "function volDibujar", "/api/volume3d/solve",
-                  "CRITERIO_GREEN", "scaleanchor"):
+                  "mostrarSello", "scaleanchor"):
         assert pieza in js, f"falta {pieza} en volumen.js"
 
 
@@ -535,7 +555,7 @@ def test_la_pagina_expone_la_vista_de_cochlea():
         assert pieza in html, f"falta {pieza} en index.html"
     js = (ESTATICOS / "cochlea.js").read_text(encoding="utf-8")
     for pieza in ("function cocfResolver", "function cocfDibujar", "/api/cochlea/field",
-                  "REF_T_INTERIOR", "0.53187"):
+                  "mostrarSello"):
         assert pieza in js, f"falta {pieza} en cochlea.js"
 
 
@@ -546,7 +566,7 @@ def test_la_pagina_expone_la_vista_de_dispersor():
         assert pieza in html, f"falta {pieza} en index.html"
     js = (ESTATICOS / "dispersor.js").read_text(encoding="utf-8")
     for pieza in ("function disResolver", "function disDibujar", "/api/scatterer/solve",
-                  "/api/scatterer/cost", "CRITERIO_DISP"):
+                  "/api/scatterer/cost", "mostrarSello"):
         assert pieza in js, f"falta {pieza} en dispersor.js"
 
 
@@ -556,8 +576,9 @@ def test_la_pagina_expone_la_vista_de_escena():
                   'id="mapaEscena"', 'id="escR"', 'id="escErrR"', 'escena.js'):
         assert pieza in html, f"falta {pieza} en index.html"
     js = (ESTATICOS / "escena.js").read_text(encoding="utf-8")
+    # el criterio ya no vive acá: lo evalúa el servidor y la vista lo pinta (U6)
     for pieza in ("function escResolver", "function escPintarCapas", "function escDibujar",
-                  "CRITERIO_AMPLITUD", "/api/scene/solve", "/api/scene/cost"):
+                  "function mostrarSello", "/api/scene/solve", "/api/scene/cost"):
         assert pieza in js, f"falta {pieza} en escena.js"
 
 

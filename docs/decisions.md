@@ -1148,3 +1148,39 @@ diagnóstico (mirando el mapa) fue "el solver no da una onda esférica" y era fa
 **Nota de física que la UI dice explícitamente.** En el modo *plano* el campo es uniforme en *y/z*:
 en incidencia normal un apilado 3D es un problema 1D. No es un defecto del render; es la física. El
 modo puntual es el que muestra algo realmente 3D, y por eso es el que abre por defecto.
+
+## D39 — U6: el sello vive en el servidor, y tres criterios que no son lo que parecían
+
+**Qué se entregó.** `dashboard/validacion.py`: un registro de 10 criterios, cada uno con
+descripción, referencia, tolerancia, unidad y **fuente** (fase o ADR). Los cinco endpoints de
+simulación devuelven `sello` ya evaluado, con tres estados —`validado`, `fuera`, `sin_referencia`— y
+la UI se limita a pintarlo. `GET /api/validacion` publica el catálogo completo para que la UI pueda
+listar qué se valida y contra qué, sin inventar nada.
+
+**Lo que se eliminó.** Hasta U5 cada vista tenía su propio umbral en JavaScript: `0.02` en la escena,
+`0.53187` en la cóclea, `10.0` en el 3D, `2.0` en el dispersor. Cuatro copias del mismo tipo de
+decisión, en el lugar donde nadie las audita y sin decir de dónde salió el número. Ahora hay un test
+que falla si cualquiera de esos valores reaparece en el JS.
+
+**Decisión 1 — `sin_referencia` es un estado, no un hueco.** El error clásico de este tipo de código
+es que un `None` termine contando como "cumple" (nadie compara contra nada, entonces nada falla). El
+registro tiene un tercer estado explícito y un test que verifica que **no** es `validado`. Caso real:
+la cóclea con espesor 3 mm no tiene referencia de `t_interior` (D30 sólo cubre 2 mm), y la UI dice
+"SIN REFERENCIA" en lugar de mostrar 0.45708 como si estuviera validado.
+
+**Decisión 2 — el resumen no promedia.** Con varios criterios por corrida, el conjunto se queda con
+el peor estado: un error grande no puede compensarse con uno chico. Promediar criterios de validación
+es cómo se aprueba un simulador que no sirve.
+
+**Hallazgo — el balance de energía de la cóclea empeora al refinar.** Con la membrana y espesor
+4 mm, el cierre `P_total + P_membrana` da **1.42 %** a ppw 20, **2.76 %** a ppw 24 y **4.07 %** a
+ppw 28. Al principio iba a escribir en el sello "subí ppw" (lo que dice el reflejo); medirlo antes
+mostró que ese consejo era **falso** y que refinar empeora. El sello ahora reporta el estado sin
+prescribir la solución, y el fenómeno queda como pregunta abierta: no es discretización (crece con
+la malla), así que apunta a la medición del flujo —el radio y los anillos de la integral de potencia—
+para esa geometría. Es el tipo de cosa que el sello destapó justamente porque ahora hay un lugar
+único donde se declara el criterio.
+
+**Consecuencia de diseño.** Un criterio nuevo no se agrega sin la corrida que lo respalde: el
+registro es datos, y cada entrada nombra su ADR. Eso deja el repo en un estado donde "¿qué está
+validado y contra qué?" se responde leyendo un archivo, no buscando en cinco JS.

@@ -18,7 +18,7 @@ const DIS = {
   ocupado: false,
 };
 
-const CRITERIO_DISP = 2.0;   // Fase 4: discrepancia < 2 % en campo
+/* El criterio de la Fase 4 lo evalúa el servidor (U6): acá no hay umbrales. */
 
 const dis$ = (id) => document.getElementById(id);
 const disFmt = (v, d = 2) => (v === null || v === undefined || Number.isNaN(v) ? '—' : Number(v).toFixed(d));
@@ -92,12 +92,8 @@ function disPintarMetricas(r) {
   dis$('disTFem').textContent = `${disFmt(r.tiempos.fem_s * 1e3, 0)} ms`;
   dis$('disTBem').textContent = `${disFmt(r.tiempos.bem_s * 1e3, 0)} ms`;
 
-  // sello: sale de los números de esta corrida, no de una constante
-  const ok = m.fem_vs_serie_pct < CRITERIO_DISP && m.bem_vs_serie_pct < CRITERIO_DISP;
-  dis$('disSello').textContent = ok
-    ? `los dos métodos quedan dentro del ${CRITERIO_DISP} % de la serie de Bessel (criterio Fase 4). ` +
-      `El que más se aleja es ${m.fem_vs_serie_pct > m.bem_vs_serie_pct ? 'FEM' : 'BEM'}.`
-    : `fuera del criterio de la Fase 4 (${CRITERIO_DISP} %): subí ppw o la cantidad de paneles antes de usar estos números.`;
+  // sello del servidor: criterio y fuente (U6)
+  mostrarSello('disSello', r.sello, 'esta corrida no reportó criterio.');
 }
 
 /* ------------------------------------------------------------------ dibujo */

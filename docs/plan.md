@@ -295,7 +295,14 @@ agrega a la librería con su criterio, después se enchufa.
   `attenuation.py` (3.777 / 6.243 / 15.312 Np/m a 100 kHz), no se escriben a mano.
   Falta de esta fase: barrido de frecuencia (necesita la definición de Q, ver D37), el de las 15
   configuraciones de D25 y la exportación a CSV desde la UI.
-- **U6 — Trazabilidad.** Cada resultado lleva su "sello": qué criterio, contra qué número de
+- **U6 — Trazabilidad. ENTREGADA.** `dashboard/validacion.py` con un registro de *10 criterios*, cada
+  uno con su descripción, referencia, tolerancia, unidad y **fuente** (fase o ADR). Cada endpoint
+  devuelve `sello` ya evaluado —`validado` / `fuera` / `sin_referencia`— y la UI sólo lo pinta. El
+  resumen **no promedia**: si un criterio falla, el conjunto falla. `sin_referencia` es un estado
+  explícito, no un aprobado por omisión: la cóclea con espesor 3 mm lo muestra (el caso base de D30
+  no la cubre). Test que fija el contrato: ningún JS del cliente puede contener `0.53187` ni
+  `CRITERIO_*` — si aparecen, la validación volvió a partirse entre servidor y cliente.
+  Cada resultado lleva su "sello": qué criterio, contra qué número de
   referencia y con cuánto margen. Un resultado sin sello se marca como *no verificado*.
   *Aceptación*: la UI rechaza mostrar un número como validado si el test que lo respalda no corrió
   para esa configuración —el sello sale de la corrida, no de una constante escrita a mano en el JS.

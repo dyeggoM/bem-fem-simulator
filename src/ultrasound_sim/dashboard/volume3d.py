@@ -26,6 +26,7 @@ from .. import materials as mats
 from ..analytic import helmholtz1d
 from ..fem import helmholtz3d as h3
 from ..meshing3d import boundary_faces, faces_on_plane, grid_tet_mesh
+from . import validacion
 
 MATERIALES: dict[str, Any] = {
     "agua": mats.WATER,
@@ -302,8 +303,20 @@ def resolver_volumen(datos: dict[str, Any]) -> dict[str, Any]:
     elif p["fuente"] == "plano":
         metricas["aviso"] = "capas demasiado finas para la ventana de ajuste (0.5 λ)"
 
+    if p["fuente"] == "puntual":
+        sello = validacion.sello_conjunto(
+            {"volumen_green": (None if metricas.get("error_green_pct") is None
+                               else metricas["error_green_pct"] / 100.0)}
+        )
+    else:
+        sello = validacion.sello_conjunto({
+            "volumen_rt_r": metricas.get("error_R_abs"),
+            "volumen_rt_t": metricas.get("error_T_abs"),
+        })
+
     return {
         "ok": True,
+        "sello": sello,
         "escena": {**p, "capas": [{"material": m, "espesor_m": e} for m, e in p["capas"]]},
         "malla": {
             "n_nodos": int(malla.n_nodes),

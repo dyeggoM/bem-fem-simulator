@@ -37,6 +37,7 @@ from .. import materials as mats
 from ..analytic import helmholtz1d
 from ..fem import helmholtz2d
 from ..meshing import boundary_edges, grid_tri_mesh
+from . import validacion
 
 MATERIALES: dict[str, Any] = {
     "agua": mats.WATER,
@@ -299,6 +300,12 @@ def resolver_escena(datos: dict[str, Any]) -> dict[str, Any]:
             "(0.5 λ): R y T no se reportan"
         )
 
+    # ---- sello: lo evalúa el servidor, con la referencia y la fuente del criterio (U6) ----
+    sello = validacion.sello_conjunto({
+        "escena_rt_r": metricas.get("error_R_abs"),
+        "escena_rt_t": metricas.get("error_T_abs"),
+    })
+
     # ---- cortes utiles para la UI ----
     col_pico = int(np.argmax(amplitud.max(axis=0)))
     fila_central = int(np.argmin(np.abs(ys - 0.5 * escena.alto_m)))
@@ -327,6 +334,7 @@ def resolver_escena(datos: dict[str, Any]) -> dict[str, Any]:
             "x_pico_mm": float(xs[col_pico] * 1e3),
         },
         "metricas": metricas,
+        "sello": sello,
         "tiempos": {
             "malla_s": round(t_solve - t0, 4),
             "solve_s": round(dt_solve, 4),

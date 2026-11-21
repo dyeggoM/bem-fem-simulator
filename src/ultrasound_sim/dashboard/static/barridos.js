@@ -110,20 +110,11 @@ function barPintar(r, segundos) {
     </div>`;
   }).join('');
 
-  const desvios = comp.filter((f) => f.d30_pct !== null && f.desvio_pct !== null)
-    .map((f) => Math.abs(f.desvio_pct));
-  // sin comparación no se puede declarar nada: `Math.max(...[], 0)` da 0 y diría "desvío 0 %"
-  // — un falso positivo que ya me comí una vez
-  if (!desvios.length) {
-    bar$('barSello').textContent =
-      'el barrido terminó pero no trajo comparación contra D30: revisá el resultado antes de usarlo.';
-    return;
-  }
-  const peor = Math.max(...desvios);
-  bar$('barSello').textContent = peor < 5
-    ? `el ranking reproduce el de D30: el peor desvío es ${barFmt(peor, 1)} % ` +
-      `(${r.puntos} puntos, ${barFmt(segundos, 0)} s, t_interior base ${barFmt(r.base.t_interior, 5)}).`
-    : `el ranking se aparta de D30 hasta un ${barFmt(peor, 1)} %: no usar estos pesos sin revisar el barrido.`;
+  // sello del servidor (U6). Ojo: si no viene, NO se declara éxito — el `Math.max(...[], 0)` de la
+  // versión anterior devolvía 0 y anunciaba "desvío 0 %" con la tabla vacía.
+  mostrarSello('barSello', r.sello,
+    `el barrido terminó (${r.puntos} puntos, ${barFmt(segundos, 0)} s) pero no trajo criterio: ` +
+    'revisá el resultado antes de usarlo.');
 
   const colores = comp.map((f) => (f.d30_pct !== null && Math.abs(f.desvio_pct) < 5 ? '#3fb950' : '#f85149'));
   Plotly.react('barrasBarrido', [{

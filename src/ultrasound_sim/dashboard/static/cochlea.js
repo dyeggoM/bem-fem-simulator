@@ -18,8 +18,8 @@ const COCF = {
   ocupado: false,
 };
 
-const REF_T_INTERIOR = 0.53187;   // D30: espesor 2 mm, c_s 1900, alpha 0, membrana del ballpark
-const TOL_T_INTERIOR = 0.01;      // 1 %
+/* Las referencias de validación viven en el servidor (`dashboard/validacion.py`): acá no hay
+   ningún número de D30 escrito. `mostrarSello` viene de escena.js. */
 
 const cocf$ = (id) => document.getElementById(id);
 const cocfFmt = (v, d = 4) => (v === null || v === undefined || Number.isNaN(v) ? '—' : Number(v).toFixed(d));
@@ -91,28 +91,10 @@ function cocfPintar(r) {
   cocf$('cocFieldBalance').textContent = `${cocfFmt(100 * m.balance_energia, 2)} %`;
   cocf$('cocFieldTiempo').textContent = `${cocfFmt(r.tiempos.solve_s, 2)} s`;
 
-  // el sello se arma con la comparación contra el valor de D30 y con el balance medido: sólo tiene
-  // sentido contra la referencia si los parámetros son los de la referencia
-  const esBase = Math.abs(COCF.esp - 2.0) < 1e-9 && Math.abs(COCF.cs - 1900) < 1e-9 &&
-                 Math.abs(COCF.alpha) < 1e-9 && COCF.membrana && COCF.ventana;
-  const desvio = Math.abs(m.t_interior - REF_T_INTERIOR) / REF_T_INTERIOR;
-  const balanceOk = m.balance_energia < 0.01;   // 1 % de la potencia interceptada
-
-  if (esBase) {
-    cocf$('cocFieldSello').textContent = desvio < TOL_T_INTERIOR
-      ? `reproduce el valor de D30 (${REF_T_INTERIOR}) dentro del ${100 * TOL_T_INTERIOR} %: ` +
-        `desvío ${cocfFmt(100 * desvio, 2)} %. El balance de energía cierra al ${cocfFmt(100 * m.balance_energia, 2)} %.`
-      : `no reproduce D30: t_interior ${cocfFmt(m.t_interior, 5)} contra ${REF_T_INTERIOR} ` +
-        `(desvío ${cocfFmt(100 * desvio, 1)} %).`;
-  } else {
-    cocf$('cocFieldSello').textContent =
-      `parámetros fuera del caso base, así que no se compara contra D30. El balance de energía ` +
-      `cierra al ${cocfFmt(100 * m.balance_energia, 2)} %. Q (ancho de banda) necesita un barrido ` +
-      `de frecuencia: es U5.`;
-  }
-  if (!balanceOk) {
-    cocf$('cocFieldSello').textContent += ' Ojo: el balance no cierra por debajo del 1 %: revisá la malla.';
-  }
+  // El sello viene del servidor: incluye la comparación contra D30 (sólo cuando los parámetros son
+  // los del caso base) y el cierre del balance. Acá no hay umbrales ni referencias (U6).
+  mostrarSello('cocFieldSello', r.sello,
+    'esta corrida no reportó criterio. Q (ancho de banda) sigue pendiente: necesita una definición.');
 }
 
 /* ------------------------------------------------------------------ dibujo */

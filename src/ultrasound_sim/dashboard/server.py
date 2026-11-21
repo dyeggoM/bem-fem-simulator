@@ -27,7 +27,7 @@ import numpy as np
 from .. import cochlea, materials as mats
 from . import bem_field
 from . import field as campo
-from . import cochlea_field, jobs, scatterer, scene, sweeps, volume3d
+from . import cochlea_field, jobs, scatterer, scene, sweeps, validacion, volume3d
 
 ESTATICOS = Path(__file__).resolve().parent / "static"
 MATERIALES = {
@@ -228,6 +228,9 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(calcular_coclea(consulta))
             except (ValueError, KeyError) as exc:
                 self._error(str(exc))
+        elif partes.path == "/api/validacion":
+            # el catálogo de criterios con su fuente: la UI puede listarlos sin inventar ninguno
+            self._json({"criterios": validacion.catalogo()})
         elif partes.path == "/api/jobs":
             self._json({"jobs": jobs.COLA.listar()})
         elif partes.path.startswith("/api/jobs/"):

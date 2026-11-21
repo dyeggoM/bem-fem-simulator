@@ -28,6 +28,7 @@ import numpy as np
 from scipy.interpolate import LinearNDInterpolator
 
 from .. import cochlea, materials as mats
+from . import validacion
 
 FRECUENCIA_HZ = 1.0e5
 RADIO_M = 20.0e-3
@@ -248,8 +249,22 @@ def resolver_cochlea(datos: dict[str, Any]) -> dict[str, Any]:
     )
     resumen["extincion"] = float(getattr(sol, "power_extinction_fraction", 0.0))
 
+    # El criterio de t_interior sólo aplica al caso base de D30: con otros parámetros no hay
+    # referencia contra la cual comparar, y eso se declara (sin_referencia), no se omite.
+    es_caso_base = (
+        abs(p["thickness_mm"] - 2.0) < 1e-9
+        and abs(p["c_s"] - 1900.0) < 1e-9
+        and abs(p["alpha_np_m"]) < 1e-9
+        and p["membrana"] and p["ventana"]
+    )
+    sello = validacion.sello_conjunto({
+        "cochlea_t_interior": resumen["t_interior"] if es_caso_base else None,
+        "cochlea_balance": resumen["balance_energia"],
+    })
+
     return {
         "ok": True,
+        "sello": sello,
         "parametros": p,
         "mapa": {
             "x_mm": np.round(eje, 4).tolist(),
