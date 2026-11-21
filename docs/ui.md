@@ -17,7 +17,7 @@ de un solve).
 | **dispersor BEM** | cilindro rígido por BEM **y** FEM contra la serie de Bessel | ~2 s | `dispersor_bem_serie`, `dispersor_fem_serie` |
 | **cóclea** | corte transversal de la cápsula (sólido + fluido + membrana) | ~3 s | `cochlea_t_interior`, `cochlea_balance` |
 | **barridos** | sensibilidad de la cóclea, frecuencia de la escena, **apertura (FWHM vs pitch)** | 10 s – varios min | según el barrido |
-| **3D** | FEM de volumen: fuente puntual contra Green, esfera contra la serie | 2–30 s | `volumen_*` |
+| **3D** | FEM de volumen: **isosuperficie 3D real** (gl3d) + dos rebanadas; fuente puntual contra Green, esfera contra la serie | 2–30 s | `volumen_*` |
 | **esfera elástica** | sólido elástico real (ondas P y S) contra Faran, dos formulaciones | 2 s (rápida) / ~30 s (precisa) | `volumen_esfera_elastica` |
 | **criterios** | el registro completo de criterios y lo medido en la sesión | instantáneo | — |
 
@@ -42,6 +42,23 @@ los dos modos (32 en un arreglo de 32 elementos). El cursor cambia a mano abiert
 
 *Por qué existía la confusión*: con el `dragmode` de Plotly activo, el gesto lo tomaba el zoom y las
 asas sólo existían en modo «fuentes»; arrastrar en modo arreglo no hacía nada y el mapa se acercaba.
+
+## Layout y legibilidad
+
+- **El menú de vistas es una grilla de 2 columnas.** Antes eran diez botones en una fila con `flex:1`
+  y en pantallas angostas había que scrollear horizontalmente para llegar a los últimos. «tour» y
+  «exportar vista» salieron del nav a su propia fila.
+- **La acción principal está fija al pie del panel.** «resolver», «barrer» y «lanzar» se distinguen en
+  azul (`.btn.accion`) y su fila se mueve a una barra `sticky` al pie: en una columna de controles
+  larga, el botón quedaba fuera de pantalla. En «campo» la barra avisa que **se recalcula solo**.
+- **Los tooltips son claros y propios.** Ni el `title` nativo ni los hoverlabels de Plotly: ambos eran
+  oscuros sobre oscuro. El globo de los `?` va con fondo `#f2f5f9` y texto oscuro, y los hoverlabels
+  de las gráficas usan el mismo esquema.
+- **Cada vista dice qué está mirando** en una tarjeta al principio del panel. Las vistas resuelven
+  problemas físicos **distintos** (una apertura, capas planas, un cilindro dispersor, un corte de
+  cóclea): sin decirlo, parece que el dashboard muestra cosas incoherentes.
+- **Los estáticos se sirven con `no-store`.** Con `no-cache` y sin ETag, el navegador podía seguir
+  usando el JS viejo y un arreglo de UI "no surtía efecto".
 
 ## Flujos de trabajo
 

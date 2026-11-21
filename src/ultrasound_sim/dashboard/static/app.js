@@ -36,9 +36,15 @@ const BASE = {
   paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
   font: { color: '#d7dde5', size: 11 },
   margin: { l: 52, r: 16, t: 26, b: 40 },
-  hoverlabel: { bgcolor: '#1b2129', bordercolor: '#2e3746', font: { size: 11 } },
+  // Los hoverlabels de Plotly venían con fondo #1b2129 (casi negro): legibles, pero es el mismo
+  // "tooltip oscuro" que el usuario reporta. Se unifican con el globo de los `?`: fondo claro, texto
+  // oscuro, un solo lenguaje visual para todo lo que aparece al pasar el mouse.
+  hoverlabel: { bgcolor: '#f2f5f9', bordercolor: '#8b95a1', font: { size: 12, color: '#0d1117' } },
 };
-const CONFIG = { displayModeBar: true, displaylogo: false, responsive: true,
+// `displayModeBar: 'hover'` y no `true`: con `true` cada gráfica deja su barra de herramientas fija
+// arriba a la derecha, y en las vistas con varias gráficas se apilan en la esquina (se veían tres
+// barras grises encimadas). Al hover siguen estando, que es cuando se usan.
+const CONFIG = { displayModeBar: 'hover', displaylogo: false, responsive: true,
                  modeBarButtonsToRemove: ['select2d', 'lasso2d', 'autoScale2d'] };
 
 let temporizador = null;
@@ -51,6 +57,52 @@ function pedir() {
   clearTimeout(temporizador);
   temporizador = setTimeout(enviar, 150);
 }
+
+/* ---------------------------------------------------------------------------------------------
+ * Barra de acciones fija al pie del panel.
+ *
+ * Las vistas tienen muchas secciones de configuración y el botón que hace correr la simulación
+ * quedaba al final: había que scrollear el panel para encontrarlo (y en pantallas bajas ni siquiera
+ * aparecía). Acá se MUEVE la `.fila-botones` que contiene la acción principal de la vista activa a una
+ * barra pegada al pie, y se devuelve a su lugar cuando cambia la vista.
+ *
+ * Se mueve el NODO, no se recrea: mover conserva los listeners ya enganchados. Recrear el botón
+ * obligaría a volver a enganchar cada handler en cada cambio de vista.
+ * ------------------------------------------------------------------------------------------- */
+
+const ACCIONES = { origen: new Map() };
+
+function devolverAcciones() {
+  for (const [nodo, donde] of ACCIONES.origen) {
+    donde.padre.insertBefore(nodo, donde.siguiente);
+  }
+  ACCIONES.origen.clear();
+  // el aviso de "se recalcula sola" no es un nodo original: se descarta
+  document.querySelectorAll('#accionesVista [data-fijo]').forEach((n) => n.remove());
+}
+
+window.ubicarAcciones = function ubicarAcciones(vista) {
+  const barra = document.getElementById('accionesVista');
+  if (!barra) return;
+  devolverAcciones();
+  const panel = document.getElementById(`vista${vista.charAt(0).toUpperCase()}${vista.slice(1)}`);
+  if (!panel) return;                       // criterios no tiene panel de control
+  // Sólo la PRIMERA fila con acción: la esfera tiene dos (resolver y barrer ka) y moverlas las dos
+  // apilaba cuatro botones en la barra. La segunda queda en su sección, que es donde corresponde.
+  const fila = [...panel.querySelectorAll('.fila-botones')].find((f) => f.querySelector('.btn.accion'));
+  if (fila) {
+    ACCIONES.origen.set(fila, { padre: fila.parentElement, siguiente: fila.nextSibling });
+    barra.appendChild(fila);
+  } else if (vista === 'campo') {
+    // en campo no hay botón: se recalcula solo. Decirlo evita que el usuario lo busque (o que crea
+    // que la barra está rota porque está vacía).
+    const aviso = document.createElement('p');
+    aviso.className = 'hint';
+    aviso.dataset.fijo = '1';
+    aviso.textContent = 'Esta vista se recalcula sola al mover los controles.';
+    barra.appendChild(aviso);
+  }
+};
 
 /* ---------------------------------------------------------------------------------------------
  * Spinner de corrida.
@@ -140,9 +192,14 @@ function tipOcultar() {
 }
 
 window.activarTips = function activarTips() {
+  // Dos casos: los `?` traen el texto en el `title` (se mueve a `data-tip` y se borra), y los botones
+  // que ya nacen con `data-tip` (no hay que tocarlos). Sin el segundo selector, los `title` que
+  // quedaban en botones seguían saliendo con el globo oscuro del navegador.
   document.querySelectorAll('.tip[title]').forEach((el) => {
     el.dataset.tip = el.getAttribute('title');
     el.removeAttribute('title');            // sin esto el navegador muestra además el suyo
+  });
+  document.querySelectorAll('[data-tip]').forEach((el) => {
     if (el.dataset.tipListo) return;
     el.dataset.tipListo = '1';
     el.addEventListener('mouseenter', () => tipMostrar(el));

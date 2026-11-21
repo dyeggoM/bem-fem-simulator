@@ -15,7 +15,7 @@ body {
 /* ---------- panel ---------- */
 .panel {
   width:318px; flex:0 0 318px; background:var(--panel); border-right:1px solid var(--linea);
-  padding:18px 18px 28px; overflow-y:auto;
+  padding:18px 16px 44px; overflow-y:auto;
 }
 .marca h1 { margin:0; font-size:17px; letter-spacing:-.3px; font-weight:650; }
 .marca h1 span { color:var(--acento); }
@@ -155,9 +155,13 @@ body.vista-volumen #estado { display:none !important; }
 .corte.ancho { flex:1 1 auto; width:100%; min-height:180px; }
 
 /* ---- escena FEM (U1) ---- */
-.vistas { display:flex; gap:6px; background:var(--panel2); padding:3px; border-radius:7px; margin-bottom:14px; }
-.vista-btn { flex:1; border:0; background:transparent; color:var(--dim); font:inherit; font-size:11.5px;
-  padding:6px 8px; border-radius:5px; cursor:pointer; }
+.vistas { display:grid; grid-template-columns:1fr 1fr; gap:4px; background:var(--panel2);
+  padding:4px; border-radius:7px; margin-bottom:8px; }
+.vista-btn { border:0; background:transparent; color:var(--dim); font:inherit; font-size:11.5px;
+  padding:7px 8px; border-radius:5px; cursor:pointer; text-align:center; white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; }
+.acciones-header { display:flex; gap:6px; margin-bottom:14px; }
+.acciones-header .btn { flex:1 1 auto; }
 .vista-btn.activo { background:#26303c; color:var(--texto); font-weight:600; }
 .fila-capa { display:grid; grid-template-columns:1fr 78px 26px; gap:6px; margin-top:6px; align-items:center; }
 .fila-capa select, .fila-capa input { background:var(--panel2); color:var(--texto); border:1px solid var(--linea);
@@ -279,3 +283,57 @@ body.vista-volumen #estado { display:none !important; }
 .tour-flex { flex: 1 1 auto; }
 .tour-caja .btn.mini[disabled] { opacity: .35; cursor: default; }
 body.tour-abierto .app { filter: none; }
+
+
+/* ---------- botones de acción ----------
+   "resolver", "barrer" y "lanzar" son los botones que hacen que la simulación ocurra, y estaban
+   pintados igual que "guardar" o "cancelar". El color de acento los separa del resto sin agregar
+   ruido: es el único lugar donde el azul saturado significa "esto corre un cálculo". */
+.btn.accion {
+  background: #1f6feb; border-color: #388bfd; color: #fff; font-weight: 600;
+}
+.btn.accion:hover:not(:disabled) { background: #2a7ff5; }
+.btn.accion:disabled { background: #1f6feb; opacity: .45; }
+/* y una marca chica a la izquierda, para que se distinga incluso en escala de grises */
+.btn.accion::before { content: '▶'; font-size: 8px; margin-right: 5px; opacity: .85; }
+
+
+/* ---------- "qué estás viendo" ----------
+   Las vistas resuelven problemas físicos DISTINTOS (una apertura, capas planas, un cilindro
+   dispersor, un corte de cóclea). Sin decirlo, parece que el dashboard muestra cosas incoherentes o
+   que está roto. Esta línea es el contrato de cada pestaña. */
+.que-ves {
+  margin: 0 0 12px; padding: 8px 10px; border-radius: 6px; font-size: 11px; line-height: 1.5;
+  color: #a9b4c0; background: rgba(88, 166, 255, 0.07);
+  border-left: 2px solid rgba(88, 166, 255, 0.5);
+}
+.que-ves b { color: #d7dde5; font-weight: 600; }
+
+
+/* El panel es una columna de secciones y sin separación explícita quedan pegadas: el último control
+   terminaba al ras del borde inferior. 18px entre secciones y 44px de aire abajo. */
+.panel > section { margin-bottom: 18px; }
+.panel > section:last-of-type { margin-bottom: 6px; }
+/* los botones secundarios del header no tienen que verse como inactivos: borde visible */
+.acciones-header .btn { border-color: var(--linea); color: var(--texto); }
+.acciones-header .btn:hover { border-color: var(--acento); color: var(--acento); }
+
+
+/* ---------- barra de acciones al pie del panel ----------
+   `position: sticky; bottom: 0` dentro del panel que scrollea: la acción principal de la vista queda
+   siempre a la vista, sin importar cuánto se haya bajado. El fondo es opaco y hay una sombra arriba
+   para que no se mezcle con el contenido que pasa por debajo. */
+.acciones-vista {
+  position: sticky; bottom: -44px; margin: 14px -16px -44px; padding: 12px 16px 44px;
+  background: linear-gradient(to top, var(--panel) 78%, rgba(13, 17, 23, 0.92));
+  border-top: 1px solid var(--linea); z-index: 6;
+}
+.acciones-vista:empty { display: none; }
+.acciones-vista .fila-botones { margin-top: 0; }
+.acciones-vista .btn.accion { flex: 1 1 auto; padding: 9px 12px; font-size: 12px; }
+.acciones-vista .btn.mini:not(.accion) { flex: 0 0 auto; }
+
+
+/* El mapa del dispersor es radial: con un contenedor cuadrado el cilindro sale circular sin usar
+   `scaleanchor` (que rompe con divs angostos, D27). `aspect-ratio` no afecta a Plotly, sólo al div. */
+#mapaDisp { aspect-ratio: 1 / 1; }

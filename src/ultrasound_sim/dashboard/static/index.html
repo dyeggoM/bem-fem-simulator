@@ -25,13 +25,16 @@
       <button class="vista-btn" data-vista="volumen">3D</button>
       <button class="vista-btn" data-vista="esfera">esfera elástica</button>
       <button class="vista-btn" data-vista="criterios">criterios</button>
-      <button class="btn mini" id="btnTour"
-        title="Recorrido guiado por los controles: mapa, arrastre de fuentes, comparación contra una referencia, las vistas y la exportación.">tour</button>
-      <button class="btn mini" id="btnExportarVista"
-        title="Baja un PNG de cada gráfica visible y un JSON con sus trazas. Sirve igual en todas las vistas: no depende de lo que cada una tenga montado, lee las gráficas que están en pantalla.">exportar vista</button>
     </nav>
+    <div class="acciones-header">
+      <button class="btn mini" id="btnTour"
+        data-tip="Recorrido guiado por los controles: mapa, arrastre de fuentes, comparación contra una referencia, las vistas y la exportación.">tour</button>
+      <button class="btn mini" id="btnExportarVista"
+        data-tip="Baja un PNG de cada gráfica visible y un JSON con sus trazas. Sirve igual en todas las vistas: no depende de lo que cada una tenga montado, lee las gráficas que están en pantalla.">exportar vista</button>
+    </div>
 
     <div id="vistaCampo">
+      <p class="que-ves">Una apertura (o tus fuentes) radiando en agua u otro medio. Es la única vista donde las fuentes son libres: acá se ve el haz y el foco.</p>
 
     <section>
       <label>Material</label>
@@ -161,7 +164,7 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
       <input type="range" id="cocAlpha" min="0" max="40" step="0.5" value="0">
 
       <div class="fila">
-        <button class="btn mini" id="btnCoclea">resolver corte</button>
+        <button class="btn mini accion" id="btnCoclea">resolver corte</button>
       </div>
       <div class="metricas coclea-metricas">
         <div class="chip"><span>t_interior</span><b id="cocT">—</b></div>
@@ -184,6 +187,7 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
     </div><!-- /vistaCampo -->
 
     <div id="vistaEscena" hidden>
+      <p class="que-ves">A diferencia de «campo» (una apertura que enfoca), acá son <b>ondas planas atravesando capas</b>. No hay fuentes: se mide reflexión y transmisión contra la matriz de transferencia exacta.</p>
       <section>
         <label>Capas <span class="mini">(eje de propagación: x)</span></label>
         <div class="tabla-capas-head">
@@ -224,7 +228,7 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
         </div>
         <div class="fila-botones">
           <button class="btn mini" id="btnEstimar">estimar</button>
-          <button class="btn" id="btnEscena">resolver FEM</button>
+          <button class="btn accion" id="btnEscena">resolver FEM</button>
         </div>
       </section>
 
@@ -247,6 +251,7 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
     </div><!-- /vistaEscena -->
 
     <div id="vistaDispersor" hidden>
+      <p class="que-ves">A diferencia de «campo» (una apertura que enfoca), acá no hay transductor: es una <b>onda plana contra un cilindro rígido</b>, resuelta por BEM, por FEM y por la serie exacta. Lo que interesa es cuánto discrepan los métodos entre sí.</p>
       <section>
         <label>Dispersor</label>
         <p class="hint">Cilindro rígido en agua, onda plana desde la izquierda. Los tres caminos
@@ -285,7 +290,7 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
         </div>
         <div class="fila-botones">
           <button class="btn mini" id="btnDisEstimar">estimar</button>
-          <button class="btn" id="btnDisolver">resolver los tres</button>
+          <button class="btn accion" id="btnDisolver">resolver los tres</button>
         </div>
       </section>
 
@@ -306,6 +311,7 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
     </div><!-- /vistaDispersor -->
 
     <div id="vistaCochlea" hidden>
+      <p class="que-ves">El <b>corte transversal de la cápsula ótica</b>: hueso, perilinfa y membrana basilar. La geometría y los materiales son de la cóclea; no hay arreglo de transductores acá.</p>
       <section>
         <label>Corte transversal</label>
         <p class="hint">Cápsula elástica + perilinfa, con la membrana basilar y la ventana redonda.
@@ -343,7 +349,7 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
         </div>
         <div class="fila-botones">
           <button class="btn mini" id="btnCocFieldEstimar">estimar</button>
-          <button class="btn" id="btnCocField">resolver corte</button>
+          <button class="btn accion" id="btnCocField">resolver corte</button>
         </div>
       </section>
 
@@ -391,6 +397,7 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
     </div><!-- /vistaCochlea -->
 
     <div id="vistaBarridos" hidden>
+      <p class="que-ves">Barridos de un parámetro sobre las otras vistas. No dibujan un campo nuevo: resumen cómo cambia una métrica (FWHM, error, resonancias) al mover un parámetro.</p>
       <section>
         <label>Barrido de apertura (FWHM contra pitch)
           <span class="tip" title="Con el ancho de apertura fijo, variar la cantidad de elementos es variar el paso entre elementos. Es la variable que manda (D25/D26): para empatar con una apertura continua dentro del ~2 % hace falta pitch ≤ λ/4. Cada punto es un campo de verdad (~1 s).">
@@ -416,7 +423,7 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
           </label>
         </div>
         <div class="fila-botones">
-          <button class="btn mini" id="btnBarApertura">barrer apertura</button>
+          <button class="btn mini accion" id="btnBarApertura">barrer apertura</button>
           <button class="btn mini" id="btnBarAperturaCancelar" disabled>cancelar</button>
         </div>
         <div class="progreso"><div class="progreso-barra" id="barApProgreso"></div></div>
@@ -434,7 +441,7 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
         <label>Sensibilidad de la cóclea <span class="mini">(one-at-a-time)</span></label>
         <p class="hint" id="barInfo">—</p>
         <div class="fila-botones">
-          <button class="btn" id="btnBarrido">lanzar barrido</button>
+          <button class="btn accion" id="btnBarrido">lanzar barrido</button>
           <button class="btn mini" id="btnCancelar" disabled>cancelar</button>
         </div>
         <div class="progreso"><div class="progreso-barra" id="barProgreso"></div></div>
@@ -453,7 +460,7 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
         <label>puntos <b id="barEscPuntosVal">30</b></label>
         <input type="range" id="barEscPuntos" min="5" max="61" step="2" value="30">
         <div class="fila-botones">
-          <button class="btn" id="btnBarridoEscena">barrer frecuencia</button>
+          <button class="btn accion" id="btnBarridoEscena">barrer frecuencia</button>
           <button class="btn mini" id="btnCancelarEscena" disabled>cancelar</button>
         </div>
         <div class="progreso"><div class="progreso-barra" id="barEscProgreso"></div></div>
@@ -469,6 +476,7 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
     </div><!-- /vistaBarridos -->
 
     <div id="vistaVolumen" hidden>
+      <p class="que-ves"><b>FEM de volumen en 3D</b>: fuente puntual contra el Green, o capas planas. Es la única vista con geometría 3D real; las demás son cortes o modelos 2D.</p>
       <section>
         <label>Escena 3D</label>
         <p class="hint">Caja tetraédrica P1 con ABC. En <b>puntual</b> el medio es agua y se compara
@@ -521,8 +529,12 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
         </div>
         <div class="fila-botones">
           <button class="btn mini" id="btnVolEstimar">estimar</button>
-          <button class="btn" id="btnVolumen">resolver 3D</button>
+          <button class="btn accion" id="btnVolumen">resolver 3D</button>
         </div>
+        <label>Nivel de la isosuperficie <b id="volIsoVal">−20 dB</b>
+          <span class="tip" title="El 3D dibuja la superficie donde |p| alcanza este nivel, en dB respecto del máximo. Va en dB y no en fracción lineal a propósito: con una fuente puntual el campo decae como 1/r y el nivel 0.5·máx es una esferita de un par de milímetros que se ve como un punto. En dB la burbuja tiene tamaño útil. Bajarlo agranda la superficie; subirlo la achica y deja sólo el lóbulo principal.">?</span>
+        </label>
+        <input type="range" id="volIso" min="-40" max="-3" step="1" value="-20">
       </section>
 
       <section>
@@ -545,6 +557,7 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
 
     <p class="aviso" id="aviso" hidden></p>
     <p class="pie" id="estado">listo</p>
+    <div class="acciones-vista" id="accionesVista" aria-live="polite"></div>
   </aside>
 
   <main class="vista" id="mainCampo">
@@ -560,6 +573,7 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
 
 
     <div id="vistaEsfera" hidden>
+      <p class="que-ves">Una <b>onda plana contra una esfera elástica</b> sumergida, que sostiene ondas de corte. Se compara contra la serie de Faran, que es la solución exacta.</p>
 
       <section>
         <label>Material del sólido
@@ -618,7 +632,7 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
       </section>
 
       <div class="fila-botones">
-        <button class="btn" id="btnEsfera">resolver esfera</button>
+        <button class="btn accion" id="btnEsfera">resolver esfera</button>
         <button class="btn mini" id="btnEsferaCancelar" disabled>cancelar</button>
       </div>
       <div class="progreso"><div class="progreso-barra" id="esfProgreso"></div></div>
@@ -636,7 +650,7 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
           <label class="mini-campo">puntos <input type="number" id="esfBarPuntos" value="7" min="2" max="25" step="1"></label>
         </div>
         <div class="fila-botones">
-          <button class="btn mini" id="btnEsfBarrido">barrer ka</button>
+          <button class="btn mini accion" id="btnEsfBarrido">barrer ka</button>
           <button class="btn mini" id="btnEsfBarridoCancelar" disabled>cancelar</button>
         </div>
         <label class="hist-fila" style="padding-left:0">
@@ -678,11 +692,14 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
   </main>
 
   <main class="vista" id="vistaVolumenMain" hidden>
+    <!-- el 3D va primero y grande: es lo que uno espera de una pestaña "3D". Antes eran dos rebanadas
+         y el volumen quedaba abajo, fuera de la pantalla. -->
     <div class="mapa-wrap">
-      <div id="mapaVolumen" class="mapa"></div>
+      <div id="volumen3d" class="mapa"></div>
     </div>
     <div class="cortes">
-      <div id="corteVolumen" class="corte ancho"></div>
+      <div id="mapaVolumen" class="corte"></div>
+      <div id="corteVolumen" class="corte"></div>
     </div>
   </main>
 
@@ -727,6 +744,8 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
   </main>
 
   <main class="vista" id="vistaCriteriosMain" hidden>
+    <p class="que-ves">El <b>registro de validación</b> del servidor: qué se mide, con qué tolerancia y
+      con qué fuente, y qué se midió en esta sesión.</p>
     <div class="mapa-wrap criterios-wrap">
       <h2 class="criterios-titulo">Registro de criterios
         <span class="tip" title="Cada criterio vive en el servidor (validacion.py) con su tolerancia y su fuente. Un resultado se sella contra este registro: la UI no tiene umbrales propios. 'sin medir' significa que en esta sesión no se corrió la vista que lo produce; 'sin_referencia' significa que se midió pero la referencia no cubre esa configuración.">?</span>

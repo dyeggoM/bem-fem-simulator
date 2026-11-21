@@ -193,7 +193,12 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", TIPOS.get(ruta.suffix, "application/octet-stream"))
         self.send_header("Content-Length", str(len(datos)))
-        self.send_header("Cache-Control", "no-cache")
+        # `no-store` y no `no-cache`: `no-cache` permite guardar y sólo obliga a revalidar, y sin
+        # ETag ni Last-Modified el navegador decide solo. Eso hacía que tras editar el JS se siguiera
+        # viendo el viejo (y un arreglo de UI "no surtía efecto"). Es un servidor de desarrollo: no
+        # tiene sentido cachear nada.
+        self.send_header("Cache-Control", "no-store, must-revalidate")
+        self.send_header("Pragma", "no-cache")
         self.end_headers()
         self.wfile.write(datos)
 

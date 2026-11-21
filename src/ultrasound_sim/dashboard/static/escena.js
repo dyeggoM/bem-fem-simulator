@@ -263,6 +263,8 @@ function escCambiarVista(vista) {
   if (vista === 'volumen' && typeof window.volIniciar === 'function') window.volIniciar();
   if (vista === 'esfera' && typeof window.esfIniciar === 'function') window.esfIniciar();
   if (vista === 'criterios' && typeof window.critIniciar === 'function') window.critIniciar();
+  // la acción principal de la vista, siempre visible al pie del panel
+  if (typeof window.ubicarAcciones === 'function') window.ubicarAcciones(vista);
   // el aviso naranja y la línea de estado son del explorador de campo ("32 fuentes · baffle…",
   // habla del foco de la apertura): en la vista de escena confunden. Se ocultan por CSS
   // (`body.vista-escena`), no por `hidden`: `app.js` los re-muestra cuando llega su respuesta.

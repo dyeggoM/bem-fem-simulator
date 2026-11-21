@@ -115,6 +115,44 @@ def test_el_arrastre_de_fuentes_no_lo_come_el_zoom_de_plotly():
     assert "btnMover" in js and "btnZoom" in js
 
 
+def test_el_nav_no_necesita_scroll_horizontal():
+    """Diez botones en una fila con `flex:1` desbordaban y había que scrollear para llegar a los
+    últimos. La grilla de dos columnas los muestra todos."""
+    css = (ESTATICOS / "style.css").read_text(encoding="utf-8")
+    assert ".vistas { display:grid" in css and "grid-template-columns:1fr 1fr" in css
+    assert ".acciones-header" in css, "tour y exportar van fuera del nav"
+
+
+def test_la_accion_principal_queda_fija_y_visible():
+    """El botón que corre la simulación estaba al final de una columna larga: había que scrollear
+    para encontrarlo. Ahora la fila con la acción se mueve a una barra sticky al pie del panel."""
+    js = (ESTATICOS / "app.js").read_text(encoding="utf-8")
+    css = (ESTATICOS / "style.css").read_text(encoding="utf-8")
+    html = (ESTATICOS / "index.html").read_text(encoding="utf-8")
+    assert 'id="accionesVista"' in html
+    assert "ubicarAcciones" in js
+    assert "position: sticky" in css and ".acciones-vista" in css
+    # se mueve el nodo, no se recrea: recrear perdería los listeners
+    assert "appendChild(fila)" in js
+
+
+def test_los_hoverlabels_de_plotly_son_claros():
+    """El usuario reportó "tooltips muy oscuros": no eran sólo los `?`, también los hoverlabels de
+    Plotly, que venían con fondo #1b2129."""
+    js = (ESTATICOS / "app.js").read_text(encoding="utf-8")
+    assert "hoverlabel" in js
+    assert "bgcolor: '#f2f5f9'" in js
+    assert "bgcolor: '#1b2129'" not in js
+
+
+def test_los_estaticos_no_se_cachean():
+    """`no-cache` permite guardar y sólo obliga a revalidar; sin ETag el navegador decide solo. Eso
+    hacía que un arreglo de UI "no surtiera efecto" hasta recargar a mano."""
+    fuente = (Path(__file__).resolve().parents[1] / "src" / "ultrasound_sim" / "dashboard"
+              / "server.py").read_text(encoding="utf-8")
+    assert "no-store" in fuente
+
+
 def test_las_vistas_guardan_su_resultado_para_no_repetir_el_solve():
     """La persistencia es lo que permite volver a una pestaña sin pagar otro solve (la esfera precisa
     son ~30 s). Se comprueba que cada vista cara tenga su `vistaGuardar` y su `vistaCargar`."""

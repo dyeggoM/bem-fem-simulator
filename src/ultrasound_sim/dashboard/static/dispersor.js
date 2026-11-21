@@ -129,6 +129,9 @@ function disDibujar(r) {
     // sin scaleanchor/scaleratio: cuando el div queda angosto Plotly falla con
     // "Something went wrong with axis scaling" (D27). El círculo se ve ovalado si el div no es
     // cuadrado, pero el mapa se dibuja siempre.
+    // OJO: NO poner `scaleanchor` acá. Se ve ovalado, pero con un div angosto Plotly aborta con
+    // "Something went wrong with axis scaling" (D27) y la vista queda vacía. Es preferible un círculo
+    // ovalado a un mapa que no se dibuja; el aspecto se arregla dando al contenedor forma cuadrada.
     xaxis: { title: { text: 'x (mm)' }, gridcolor: '#21262d', zeroline: false },
     yaxis: { title: { text: 'y (mm)' }, gridcolor: '#21262d', zeroline: false },
     showlegend: false,
