@@ -817,9 +817,13 @@ function cambiarModo(modo) {
   if (modo === 'manual') {
     // si cambió el arreglo mientras se veían fuentes a mano, se regeneran UNA vez y se avisa
     if (S.regenerarAlVolver || !S.fuentes) {
+      const veniaDeCambios = S.regenerarAlVolver;
       generarDesdeArreglo();
       S.regenerarAlVolver = false;
-      if (S.fuentesMovidas) avisar('se regeneraron las fuentes desde el arreglo: n o apertura cambiaron');
+      if (veniaDeCambios || S.fuentesMovidas) {
+        avisar('las fuentes se regeneraron desde el arreglo: cambiaron n, apertura, foco, frecuencia '
+          + 'o material');
+      }
       S.fuentesMovidas = false;
     }
   } else if (modo === 'array' && S.fuentesMovidas) {
@@ -842,15 +846,29 @@ function cambiarModo(modo) {
 
 document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => cambiarModo(t.dataset.modo)));
 
+/* Parámetros de los que dependen las fuentes del arreglo: la posición y el ancho salen de `n` y `d`, y
+ * la fase de foco de `−k·|F − y|` con `k = 2π·f/c`, o sea de `fx`, `fy`, `freq` y `material`. Si cambia
+ * cualquiera, las fuentes guardadas ya no describen el mismo arreglo. */
+const CLAVES_QUE_REGENERAN = new Set(['n', 'd', 'fx', 'fy', 'freq', 'material']);
+
 const enlazar = (id, clave, escala = 1) => {
   $(id).addEventListener('input', (e) => {
     S[clave] = clave === 'material' ? e.target.value : parseFloat(e.target.value) * escala;
-    // Antes esto hacía `S.fuentes = null`, o sea que tocar la cantidad de elementos o la apertura
-    // BORRABA en silencio las fuentes que el usuario había movido. Ahora se marcan para regenerar sólo
-    // cuando vuelva a «fuentes», y el aviso lo dice.
-    if (clave === 'n' || clave === 'd') {
-      if (S.fuentes && S.modo === 'manual') S.regenerarAlVolver = true;
-      else S.fuentes = null;
+    // Todo lo que cambia las fuentes del arreglo o SUS FASES invalida las que haya guardadas. Antes sólo
+    // se miraban `n` y `d`: cambiar el foco, la frecuencia o el material dejaba las fases viejas, y al
+    // pasar a «fuentes» se simulaba un arreglo distinto del que se veía en «arreglo» sin ningún aviso.
+    // Esas son las cuatro cosas de las que depende la fase de foco: −k·|F − y| con k = 2π·f/c.
+    if (CLAVES_QUE_REGENERAN.has(clave)) {
+      if (S.modo === 'manual') {
+        // en «fuentes» se regenera en el acto: si no, seguiría mostrando y simulando fases viejas
+        // mientras la pestaña dice otra cosa
+        generarDesdeArreglo();
+        S.fuentesMovidas = false;
+        avisar('las fuentes se regeneraron desde el arreglo: cambió n, apertura, foco, frecuencia '
+          + 'o material');
+      } else {
+        S.regenerarAlVolver = true;   // en «arreglo», al entrar a «fuentes»
+      }
     }
     sincronizarEtiquetas(); pintarFuentes(); pedir();
   });
@@ -863,7 +881,12 @@ enlazar('nEl', 'n');
 enlazar('ap', 'd');
 enlazar('fx', 'fx');
 enlazar('fy', 'fy');
-$('mat').addEventListener('change', (e) => { S.material = e.target.value; sincronizarEtiquetas(); pedir(); });
+$('mat').addEventListener('change', (e) => {
+  S.material = e.target.value;
+  // el material cambia `c` y con eso `k`: las fases de foco guardadas dejan de valer
+  if (S.fuentes && S.modo === 'manual') S.regenerarAlVolver = true; else S.fuentes = null;
+  sincronizarEtiquetas(); pedir();
+});
 $('model').addEventListener('change', (e) => {
   S.modelo = e.target.value;
   $('modeloHint').textContent = S.modelo === 'libre'
