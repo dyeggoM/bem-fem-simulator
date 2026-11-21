@@ -27,7 +27,7 @@ import numpy as np
 from .. import cochlea, materials as mats
 from . import bem_field
 from . import field as campo
-from . import scene
+from . import scatterer, scene
 
 ESTATICOS = Path(__file__).resolve().parent / "static"
 MATERIALES = {
@@ -169,7 +169,10 @@ class Handler(BaseHTTPRequestHandler):
 
     # ------------------------------------------------------------------ utilidades
     def _json(self, datos: dict, codigo: int = 200) -> None:
-        cuerpo = json.dumps(datos, separators=(",", ":")).encode()
+        # `allow_nan=False`: si algún número sale NaN/Inf el pedido falla acá con un 500 y un
+        # mensaje, en vez de llegar al navegador como un cuerpo que `JSON.parse` rechaza entero
+        # (`NaN` no es JSON válido). Pasó con el mapa del dispersor, que tiene huecos.
+        cuerpo = json.dumps(datos, separators=(",", ":"), allow_nan=False).encode()
         self.send_response(codigo)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(cuerpo)))
@@ -239,7 +242,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         ruta = urlparse(self.path).path
-        if ruta not in ("/api/field", "/api/cochlea", "/api/scene/solve", "/api/scene/cost"):
+        if ruta not in ("/api/field", "/api/cochlea", "/api/scene/solve", "/api/scene/cost",
+                        "/api/scatterer/solve", "/api/scatterer/cost"):
             self._error("no encontrado", HTTPStatus.NOT_FOUND)
             return
         largo = int(self.headers.get("Content-Length") or 0)
@@ -259,6 +263,10 @@ class Handler(BaseHTTPRequestHandler):
                 respuesta = scene.estimar_costo(cuerpo)
             elif ruta == "/api/scene/solve":
                 respuesta = scene.resolver_escena(cuerpo)
+            elif ruta == "/api/scatterer/cost":
+                respuesta = scatterer.estimar_dispersor(cuerpo)
+            elif ruta == "/api/scatterer/solve":
+                respuesta = scatterer.resolver_dispersor(cuerpo)
             else:
                 respuesta = calcular(cuerpo)
             self._json(respuesta)

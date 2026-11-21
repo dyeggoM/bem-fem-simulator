@@ -243,7 +243,16 @@ agrega a la librería con su criterio, después se enchufa.
   escena guarda/carga en JSON con la malla reproducible bit a bit.
   *Bloqueante técnico*: el servidor es síncrono hoy; un solve 2D de 5 k elementos tarda ~1 s, así que
   U1 puede quedar síncrona. Recién 3D obliga a trabajos asíncronos.
-- **U2 — Dispersores y BEM.** Elegir dispersor (círculo/elipse/polígono), ecuación de frontera
+- **U2 — Dispersores y BEM. ENTREGADA (cilindro rígido).** `dashboard/scatterer.py` + pestaña
+  "dispersor BEM": el mismo cilindro rígido en agua resuelto por BEM (exterior), FEM (corona en
+  campo dispersado) y la serie de Bessel, con el mapa del campo dispersado, las tres curvas `|p|`
+  contra θ en `r = 1.5a` y las tres discrepancias. Medido: ka=1 → *FEM−BEM 0.97 %*, *FEM−serie
+  0.94 %*, *BEM−serie 0.05 %*; ka=2 → 0.58/0.60/0.14 %; ka=3 → 0.84/0.72/0.27 %. Las tres
+  ecuaciones (standard/Burton-Miller/CHIEF) dan el mismo campo dentro del criterio. Costo 2.2 s
+  por corrida (de los cuales 1.9 s es el mapa BEM).
+  Falta de esta fase: elipse/polígono (contornos BEM no circulares) y dispersor **penetrable**
+  (el mismo frente que D32 dejó abierto en 3D).
+  Editor de regiones rectangulares (material por región),
   (`standard`/`burton_miller`/`chief`), y el **mismo problema por los dos métodos lado a lado**.
   *Aceptación*: el cilindro rígido contra la serie de Bessel da < 2 % mostrado en pantalla, y el panel
   de contraste FEM/BEM muestra la discrepancia y el tiempo de cada uno (referencia: 0.97 %/0.59 %,

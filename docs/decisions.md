@@ -998,3 +998,42 @@ Con el rango en 10 dB aparecen las franjas.
 rígidas; una onda oblicua se reflejaría ahí, y el pedido con `angulo_deg != 0` se rechaza con esa
 razón en vez de devolver un campo que parece válido), sólo fluido acústico, y tope de 60 000
 elementos con mensaje que dice qué bajar.
+
+## D35 — U2: el dispersor en la UI, y tres formas de romperse que no se ven en los tests
+
+**Qué se entregó.** Una pestaña "dispersor BEM" donde el mismo cilindro rígido en agua se resuelve
+por tres caminos a la vez: BEM (exterior, ecuación seleccionable entre `standard`, Burton-Miller y
+CHIEF), FEM (corona `a <= r <= R` en campo dispersado con dato Neumann y ABC-2) y la **serie de
+Bessel** como referencia. Se ve el mapa del campo dispersado, las tres curvas `|p|` contra θ en
+`r = 1.5a` sobrepuestas, y las tres discrepancias. La receta está copiada de `cross_validate.py` —el
+script que ya tiene los números de D12— y no reinventada.
+
+**Aceptación cumplida** (Fase 4, 2 %): ka=1 → FEM−BEM *0.97 %*, FEM−serie *0.94 %*, BEM−serie
+*0.05 %*; ka=2 → *0.58 / 0.60 / 0.14 %*; ka=3 → *0.84 / 0.72 / 0.27 %*. Las tres ecuaciones dan el
+mismo campo: BM sube el condicionamiento de 2.37 a 12.78 y su error contra la serie de 0.05 % a
+0.24 %, que sigue siendo 8× más chico que el criterio — el precio conocido de regularizar para
+poder cruzar resonancias en un barrido.
+
+**Hallazgo 1 — `NaN` no es JSON.** El mapa tiene huecos (dentro del cilindro no hay campo) y el
+`json.dumps` de Python escribe el literal `NaN`, que **no es JSON válido**: el navegador rechaza el
+cuerpo entero con `Unexpected token 'N'` y la UI queda sin nada, sin un mensaje que explique por qué.
+Ahora los huecos se mandan como `None` (→ `null`) y el servidor serializa con `allow_nan=False`, así
+que un NaN futuro revienta en el servidor con un 500 y un mensaje en vez de morir en el navegador.
+
+**Hallazgo 2 — `flex-basis` le gana a `height`.** La gráfica de comparación quedó en *12 px* de alto.
+No era Plotly: `.corte.ancho { flex: 1 1 100% }` fija el `flex-basis` en 100 %, y en un contenedor
+flex de columna con alto automático ese 100 % resuelve a 0 y pisotea el `height: 190px` de la regla
+responsive. Se cambió a `flex: 1 1 auto` con `min-height`. Tercera variante del mismo tema en D27 y
+D34: **el render no falla, simplemente no se ve**, y el único detector es mirar el navegador.
+
+**Hallazgo 3 — un test con la premisa equivocada.** El primer test de "sanity física" pedía que el
+campo decayera al alejarse. Falla por física correcta: el mapa muestra `|p_total|`, que lejos tiende
+a la onda incidente (|p| → 1), porque el **total** es incidente + dispersado. Medido: esquina −2.9 dB
+contra −3.8 dB cerca. Se reemplazó por la condición de radiación sobre `p_scattered`
+(`|p_s(4a)| / |p_s(1.6a)| < 0.75`), que es lo que de verdad tiene que decaer.
+
+**Costo y su optimización.** El mapa son 4 812 puntos (70×70) evaluados con el BEM: 11.3 s con la
+cuadratura por defecto para las 64 curvas. Bajar `quad_order` a 4 para el mapa lo deja en *1.9 s* con
+*0.00 %* de diferencia contra `quad_order=12` — los puntos del mapa están lejos de la superficie y el
+integrando es suave. La cuadratura alta se reserva para las 64 curvas de comparación, donde 0.05 %
+importa.

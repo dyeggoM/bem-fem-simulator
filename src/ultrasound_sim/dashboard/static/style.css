@@ -119,7 +119,13 @@ table.fuentes button:hover { color:var(--no); }
    mostrar cada vez que llega una respuesta (carrera real: ocultarlos por JS desde la vista de
    escena no aguanta). Por CSS no compite: mientras el body tenga la clase, no se ven. */
 body.vista-escena #aviso,
-body.vista-escena #estado { display:none !important; }
+body.vista-escena #estado,
+body.vista-dispersor #aviso,
+body.vista-dispersor #estado { display:none !important; }
+
+/* `flex-basis` le gana a `height` en un flex de columna: con `flex:1 1 100%` la gráfica angosta
+   colapsaba a 12 px (medido en el navegador). Con `auto` respeta el alto de la regla responsive. */
+.corte.ancho { flex:1 1 auto; width:100%; min-height:180px; }
 
 /* ---- escena FEM (U1) ---- */
 .vistas { display:flex; gap:6px; background:var(--panel2); padding:3px; border-radius:7px; margin-bottom:14px; }

@@ -355,6 +355,57 @@ def test_api_materials_expone_la_escena_y_sus_topes(servidor):
     assert "abc1" in datos["scene_limits"]["abc"]
 
 
+# ------------------------------------------------------------------ dispersor (U2)
+
+
+def test_api_scatterer_cost_y_solve(servidor):
+    costo = _post(servidor + "/api/scatterer/cost", {"ka": 1.0})
+    assert costo["ok"] is True
+    assert costo["malla"]["n_elementos"] > 0
+    assert "metricas" not in costo
+
+    r = _post(servidor + "/api/scatterer/solve", {"ka": 1.0})
+    assert r["ok"] is True
+    m = r["metricas"]
+    assert m["fem_vs_serie_pct"] < 2.0
+    assert m["bem_vs_serie_pct"] < 2.0
+    assert len(r["mapa"]["db"]) == len(r["mapa"]["x_mm"])
+
+
+def test_api_scatterer_solve_emite_json_sin_nan(servidor):
+    """El cuerpo tiene que ser JSON estricto: con `NaN` el navegador no parsea nada."""
+    datos = json.dumps({"ka": 1.0}).encode("utf-8")
+    req = urllib.request.Request(
+        servidor + "/api/scatterer/solve", data=datos, headers={"content-type": "application/json"}
+    )
+    with urllib.request.urlopen(req, timeout=120) as r:
+        crudo = r.read()
+    assert b"NaN" not in crudo, "el servidor emitió NaN: JSON.parse lo rechaza"
+    json.loads(crudo)  # revienta si no es JSON estricto
+
+
+def test_api_scatterer_rechaza_ecuacion_desconocida(servidor):
+    req = urllib.request.Request(
+        servidor + "/api/scatterer/solve",
+        data=json.dumps({"ka": 1.0, "equation": "galerkin"}).encode("utf-8"),
+        headers={"content-type": "application/json"},
+    )
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        urllib.request.urlopen(req, timeout=60)
+    assert exc.value.code == 400
+
+
+def test_la_pagina_expone_la_vista_de_dispersor():
+    html = (ESTATICOS / "index.html").read_text(encoding="utf-8")
+    for pieza in ('data-vista="dispersor"', 'id="vistaDispersor"', 'id="mapaDisp"',
+                  'id="comparacionDisp"', 'id="disFemSerie"', 'dispersor.js'):
+        assert pieza in html, f"falta {pieza} en index.html"
+    js = (ESTATICOS / "dispersor.js").read_text(encoding="utf-8")
+    for pieza in ("function disResolver", "function disDibujar", "/api/scatterer/solve",
+                  "/api/scatterer/cost", "CRITERIO_DISP"):
+        assert pieza in js, f"falta {pieza} en dispersor.js"
+
+
 def test_la_pagina_expone_la_vista_de_escena():
     html = (ESTATICOS / "index.html").read_text(encoding="utf-8")
     for pieza in ('data-vista="escena"', 'id="vistaEscena"', 'id="capas"', 'id="btnEscena"',

@@ -19,6 +19,7 @@
     <nav class="vistas">
       <button class="vista-btn activo" data-vista="campo">campo</button>
       <button class="vista-btn" data-vista="escena">escena FEM</button>
+      <button class="vista-btn" data-vista="dispersor">dispersor BEM</button>
     </nav>
 
     <div id="vistaCampo">
@@ -217,11 +218,70 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
       <p class="pie" id="escEstado">sin resolver</p>
     </div><!-- /vistaEscena -->
 
+    <div id="vistaDispersor" hidden>
+      <section>
+        <label>Dispersor</label>
+        <p class="hint">Cilindro rígido en agua, onda plana desde la izquierda. Los tres caminos
+        resuelven el mismo problema: BEM el exterior, FEM la corona en campo dispersado, y la
+        serie de Bessel da la referencia.</p>
+      </section>
+
+      <section>
+        <label>ka = 2πa/λ <b id="disKaVal">1.0</b></label>
+        <input type="range" id="disKa" min="0.2" max="6" step="0.1" value="1">
+        <label>Elementos por longitud de onda <b id="disPpwVal">20</b></label>
+        <input type="range" id="disPpw" min="8" max="40" step="1" value="20">
+        <label>R/a (dominio FEM) <b id="disRoutVal">3.0</b></label>
+        <input type="range" id="disRout" min="1.5" max="6" step="0.5" value="3">
+        <label>ABC del FEM
+          <select id="disAbc">
+            <option value="2" selected>orden 2 (BGT)</option>
+            <option value="1">orden 1</option>
+          </select>
+        </label>
+        <label>Ecuación integral del BEM
+          <select id="disEcuacion">
+            <option value="standard" selected>standard</option>
+            <option value="burton_miller">Burton-Miller</option>
+            <option value="chief">CHIEF</option>
+          </select>
+        </label>
+      </section>
+
+      <section>
+        <div class="chips">
+          <div class="chip"><span>radio</span><b id="disRadio">—</b></div>
+          <div class="chip"><span>elementos FEM</span><b id="disElems">—</b></div>
+          <div class="chip"><span>paneles BEM</span><b id="disPaneles">—</b></div>
+          <div class="chip"><span>estimado</span><b id="disEstimado">—</b></div>
+        </div>
+        <div class="fila-botones">
+          <button class="btn mini" id="btnDisEstimar">estimar</button>
+          <button class="btn" id="btnDisolver">resolver los tres</button>
+        </div>
+      </section>
+
+      <section>
+        <label>Contraste</label>
+        <div class="chips">
+          <div class="chip"><span>FEM − BEM</span><b id="disFemBem">—</b></div>
+          <div class="chip"><span>FEM − serie</span><b id="disFemSerie">—</b></div>
+          <div class="chip"><span>BEM − serie</span><b id="disBemSerie">—</b></div>
+          <div class="chip"><span>cond. BEM</span><b id="disCond">—</b></div>
+          <div class="chip"><span>t FEM</span><b id="disTFem">—</b></div>
+          <div class="chip"><span>t BEM</span><b id="disTBem">—</b></div>
+        </div>
+        <p class="hint" id="disSello"></p>
+      </section>
+
+      <p class="pie" id="disEstado">sin resolver</p>
+    </div><!-- /vistaDispersor -->
+
     <p class="aviso" id="aviso" hidden></p>
     <p class="pie" id="estado">listo</p>
   </aside>
 
-  <main class="vista">
+  <main class="vista" id="mainCampo">
     <div class="mapa-wrap">
       <div id="mapa" class="mapa"></div>
       <div id="arrastre" class="arrastre"></div>
@@ -242,8 +302,18 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
     </div>
   </main>
 
+  <main class="vista" id="vistaDispersorMain" hidden>
+    <div class="mapa-wrap">
+      <div id="mapaDisp" class="mapa"></div>
+    </div>
+    <div class="cortes">
+      <div id="comparacionDisp" class="corte ancho"></div>
+    </div>
+  </main>
+
 </div>
 <script src="/static/app.js"></script>
 <script src="/static/escena.js"></script>
+<script src="/static/dispersor.js"></script>
 </body>
 </html>

@@ -237,18 +237,27 @@ function escDibujar(r) {
 
 /* ------------------------------------------------------------- vista activa */
 
+/* Tres vistas, un solo conmutador: panel + main por nombre. Agregar una vista es agregarla acá. */
+const VISTAS = {
+  campo: { panel: 'vistaCampo', main: 'mainCampo' },
+  escena: { panel: 'vistaEscena', main: 'vistaEscenaMain' },
+  dispersor: { panel: 'vistaDispersor', main: 'vistaDispersorMain' },
+};
+
 function escCambiarVista(vista) {
   document.querySelectorAll('.vista-btn').forEach((b) => b.classList.toggle('activo', b.dataset.vista === vista));
-  esc$('vistaCampo').hidden = vista !== 'campo';
-  esc$('vistaEscena').hidden = vista !== 'escena';
-  const mainCampo = document.querySelector('main.vista:not(#vistaEscenaMain)');
-  const mainEscena = esc$('vistaEscenaMain');
-  if (mainCampo) mainCampo.hidden = vista !== 'campo';
-  mainEscena.hidden = vista !== 'escena';
+  for (const [nombre, ref] of Object.entries(VISTAS)) {
+    const panel = esc$(ref.panel);
+    const main = esc$(ref.main);
+    if (panel) panel.hidden = nombre !== vista;
+    if (main) main.hidden = nombre !== vista;
+  }
+  if (vista === 'dispersor' && typeof window.disIniciar === 'function') window.disIniciar();
   // el aviso naranja y la línea de estado son del explorador de campo ("32 fuentes · baffle…",
   // habla del foco de la apertura): en la vista de escena confunden. Se ocultan por CSS
   // (`body.vista-escena`), no por `hidden`: `app.js` los re-muestra cuando llega su respuesta.
   document.body.classList.toggle('vista-escena', vista === 'escena');
+  document.body.classList.toggle('vista-dispersor', vista === 'dispersor');
   if (vista === 'escena') {
     if (!ESC.materiales.length) escCargarMateriales().then(escEstimar);
     else if (!ESC.resuelto) escEstimar();
