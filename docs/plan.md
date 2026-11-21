@@ -274,7 +274,13 @@ agrega a la librería con su criterio, después se enchufa.
   *Aceptación*: reproduce `t_interior = 0.53187` dentro de 1 %, energía dentro de 0.46 % y `Q < 5`
   (los números de D29/D30), y los tres sliders ya expuestos siguen moviendo el resultado con los
   pesos medidos (53 %/8 %/10 %).
-- **U4 — 3D.** Escena de cajas (o malla externa), solver P1 con ABC-1/BGT-2, y visualización por
+- **U4 — 3D. ENTREGADA (dos modos, con rebanadas).** `dashboard/volume3d.py` + pestaña "3D" con el
+  plano *x-y* a mitad de *z* y el *x-z* a mitad de *y*. Dos modos: **puntual** (monopolo en agua, ABC
+  en las seis caras, se compara con el Green 3D) y **plano** (capas, ABC sólo en *x*, R/T contra la
+  matriz de transferencia). Medido: puntual → error Green *7.0 %* con amplitud *0.969* en 9 261 nodos
+  y *1.0 s*; plano → *R 0.9032 vs 0.9037* (abs 0.0005), *T 0.4343 vs 0.4281* (abs 0.0061), energía
+  *1.0044*. Tope de 90 000 nodos con mensaje, y el techo conocido de D32 declarado antes de resolver.
+  Escena de cajas (o malla externa), solver P1 con ABC-1/BGT-2, y visualización por
   **rebanadas** (no volumen completo: con 18 k nodos el campo es un sólido y Plotly no lo pinta bien).
   *Aceptación*: reproduce D32 desde la UI —onda plana 3.53 % a ppw 20, pistón 0.0000 % contra
   Rayleigh-Sommerfeld, R/T estratificado 2.91 %/2.11 %— con el conteo de nodos y el tiempo a la vista.

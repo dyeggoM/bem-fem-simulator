@@ -208,6 +208,26 @@ def _box_tet_mesh(xs: np.ndarray, ys: np.ndarray, zs: np.ndarray) -> TetMesh:
     return TetMesh(nodes=nodes, tets=tets)
 
 
+def grid_tet_mesh(xs, ys, zs) -> TetMesh:
+    """Malla de una caja desde las coordenadas de sus planos de nodos (no necesariamente uniformes).
+
+    Es lo que hace falta cuando hay **interfaces internas**: si los planos del reticulado incluyen
+    exactamente la coordenada de la interfaz, la malla es conforme ahí por construcción y no hay que
+    pegar regiones (el análogo 3D de `meshing.grid_tri_mesh`).
+    """
+    ejes = []
+    for nombre, coords in (("xs", xs), ("ys", ys), ("zs", zs)):
+        valores = np.asarray(coords, dtype=float).reshape(-1)
+        if valores.size < 2:
+            raise ValueError(f"{nombre} necesita al menos 2 coordenadas")
+        if not np.all(np.isfinite(valores)):
+            raise ValueError(f"{nombre} tiene valores no finitos")
+        if np.any(np.diff(valores) <= 0):
+            raise ValueError(f"{nombre} tiene que ser estrictamente creciente")
+        ejes.append(valores)
+    return _box_tet_mesh(*ejes)
+
+
 def box_tet_mesh(
     xmin: float, xmax: float, ymin: float, ymax: float, zmin: float, zmax: float,
     nx: int, ny: int, nz: int,

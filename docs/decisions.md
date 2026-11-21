@@ -1118,3 +1118,33 @@ definición (probablemente con Diego: es una decisión de métrica, no de códig
 que dos barridos en paralelo no aceleran nada y ensucian los tiempos. La cancelación es cooperativa
 —se consulta entre pasos— porque interrumpir dentro de SuperLU no es posible sin threads anidados, y
 no vale la pena para esperar 2 s.
+
+## D38 — U4: el 3D en la UI, y las tres cosas que mentían en pantalla
+
+**Qué se entregó.** Una pestaña "3D" con dos modos. *Puntual*: monopolo en una caja de agua con ABC
+en las seis caras, comparado contra el Green 3D en un anillo — error **7.0 %** y amplitud **0.969**
+(9 261 nodos, 1.0 s). *Plano*: capas apiladas con ABC sólo en *x*, R y T contra la matriz de
+transferencia — **R 0.9032 vs 0.9037** (abs 0.0005), **T 0.4343 vs 0.4281** (abs 0.0061), energía
+1.0044. Rebanadas *x-y* y *x-z*. Tope de 90 000 nodos y el techo de D32 declarado antes de apretar.
+
+**Hallazgo 1 — la fuente estaba pegada a la ABC (48 % de error que no bajaba al refinar).** La caja
+arrancaba en `x = 0` y la fuente se elige como "el nodo más cercano al origen": caía sobre la cara.
+El error era 48.7 % a 1.5 λ y 49.0 % a 2.5 λ — constante, que es la firma de un problema de *puesta
+en escena*, no de discretización. Centrando la caja: **7.0 %**. Queda un test que verifica que el
+nodo de la fuente no pertenece a ninguna cara de la frontera, porque el síntoma (error que no
+converge) no dice nada por sí solo.
+
+**Hallazgo 2 — la rebanada salía transpeusta.** Plotly lee `z[fila][columna]` como `[y][x]` y la
+matriz sale `[x][y]`: sin `.T` los ejes quedan cruzados. No se ve como un error, se ve como un
+patrón raro.
+
+**Hallazgo 3 — una esfera que se veía como un lóbulo.** El campo *era* radialmente simétrico (el
+Green cierra al 7 % en todo el anillo), pero el `div` es 740 × 270 px y Plotly estiraba 30 mm × 30 mm
+dentro de eso: la circunferencia se veía como un elipse horizontal. Con `scaleanchor` + `constrain:
+'domain'` el área de trazado queda cuadrada y la simetría se ve. Es la cuarta variante del mismo
+tema (D27, D34, D35): **el render no falla, miente**. Acá costó dos vueltas porque el primer
+diagnóstico (mirando el mapa) fue "el solver no da una onda esférica" y era falso.
+
+**Nota de física que la UI dice explícitamente.** En el modo *plano* el campo es uniforme en *y/z*:
+en incidencia normal un apilado 3D es un problema 1D. No es un defecto del render; es la física. El
+modo puntual es el que muestra algo realmente 3D, y por eso es el que abre por defecto.

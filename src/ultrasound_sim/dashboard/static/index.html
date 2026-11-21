@@ -22,6 +22,7 @@
       <button class="vista-btn" data-vista="dispersor">dispersor BEM</button>
       <button class="vista-btn" data-vista="cochlea">cóclea</button>
       <button class="vista-btn" data-vista="barridos">barridos</button>
+      <button class="vista-btn" data-vista="volumen">3D</button>
     </nav>
 
     <div id="vistaCampo">
@@ -362,6 +363,63 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
       </section>
     </div><!-- /vistaBarridos -->
 
+    <div id="vistaVolumen" hidden>
+      <section>
+        <label>Escena 3D</label>
+        <p class="hint">Caja tetraédrica P1 con ABC. En <b>puntual</b> el medio es agua y se compara
+        con el Green 3D; en <b>plano</b> se apilan capas y se miden R y T contra la matriz de
+        transferencia. Las rebanadas son el plano x-y a mitad de z y el x-z a mitad de y.</p>
+      </section>
+
+      <section>
+        <label>Fuente
+          <select id="volFuente">
+            <option value="puntual" selected>puntual (monopolo)</option>
+            <option value="plano">onda plana con capas</option>
+          </select>
+        </label>
+        <label>Frecuencia <b id="volFreqVal">100 kHz</b></label>
+        <input type="range" id="volFreq" min="20" max="400" step="10" value="100">
+        <label>Elementos por longitud de onda <b id="volPpwVal">10</b></label>
+        <input type="range" id="volPpw" min="6" max="20" step="1" value="10">
+        <label>Alto de la caja <b id="volAltoVal">30 mm</b></label>
+        <input type="range" id="volAlto" min="5" max="40" step="1" value="30">
+      </section>
+
+      <section id="volCapasBox" hidden>
+        <label>Capas <span class="mini">(eje x)</span></label>
+        <div id="volCapas"></div>
+      </section>
+
+      <section>
+        <div class="chips">
+          <div class="chip"><span>nodos</span><b id="volNodos">—</b></div>
+          <div class="chip"><span>elementos</span><b id="volElems">—</b></div>
+          <div class="chip"><span>estimado</span><b id="volEstimado">—</b></div>
+          <div class="chip"><span>solve</span><b id="volTiempo">—</b></div>
+        </div>
+        <div class="fila-botones">
+          <button class="btn mini" id="btnVolEstimar">estimar</button>
+          <button class="btn" id="btnVolumen">resolver 3D</button>
+        </div>
+      </section>
+
+      <section>
+        <label>Resultado</label>
+        <div class="chips">
+          <div class="chip"><span>error Green</span><b id="volGreen">—</b></div>
+          <div class="chip"><span>amplitud</span><b id="volAmp">—</b></div>
+          <div class="chip"><span>R</span><b id="volR">—</b></div>
+          <div class="chip"><span>R analítico</span><b id="volRan">—</b></div>
+          <div class="chip"><span>error R</span><b id="volErrR">—</b></div>
+          <div class="chip"><span>error T</span><b id="volErrT">—</b></div>
+        </div>
+        <p class="hint" id="volSello"></p>
+      </section>
+
+      <p class="pie" id="volEstado">sin resolver</p>
+    </div><!-- /vistaVolumen -->
+
     <p class="aviso" id="aviso" hidden></p>
     <p class="pie" id="estado">listo</p>
   </aside>
@@ -384,6 +442,15 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
     <div class="cortes">
       <div id="axialEscena" class="corte"></div>
       <div id="lateralEscena" class="corte"></div>
+    </div>
+  </main>
+
+  <main class="vista" id="vistaVolumenMain" hidden>
+    <div class="mapa-wrap">
+      <div id="mapaVolumen" class="mapa"></div>
+    </div>
+    <div class="cortes">
+      <div id="corteVolumen" class="corte ancho"></div>
     </div>
   </main>
 
@@ -420,5 +487,6 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
 <script src="/static/dispersor.js"></script>
 <script src="/static/cochlea.js"></script>
 <script src="/static/barridos.js"></script>
+<script src="/static/volumen.js"></script>
 </body>
 </html>

@@ -27,7 +27,7 @@ import numpy as np
 from .. import cochlea, materials as mats
 from . import bem_field
 from . import field as campo
-from . import cochlea_field, jobs, scatterer, scene, sweeps
+from . import cochlea_field, jobs, scatterer, scene, sweeps, volume3d
 
 ESTATICOS = Path(__file__).resolve().parent / "static"
 MATERIALES = {
@@ -274,7 +274,8 @@ class Handler(BaseHTTPRequestHandler):
         if ruta not in ("/api/field", "/api/cochlea", "/api/scene/solve", "/api/scene/cost",
                         "/api/scatterer/solve", "/api/scatterer/cost",
                         "/api/cochlea/field", "/api/cochlea/field/cost",
-                        "/api/jobs/sensibilidad"):
+                        "/api/jobs/sensibilidad",
+                        "/api/volume3d/cost", "/api/volume3d/solve"):
             self._error("no encontrado", HTTPStatus.NOT_FOUND)
             return
         largo = int(self.headers.get("Content-Length") or 0)
@@ -302,6 +303,10 @@ class Handler(BaseHTTPRequestHandler):
                 respuesta = cochlea_field.estimar_cochlea(cuerpo)
             elif ruta == "/api/cochlea/field":
                 respuesta = cochlea_field.resolver_cochlea(cuerpo)
+            elif ruta == "/api/volume3d/cost":
+                respuesta = volume3d.estimar_volumen(cuerpo)
+            elif ruta == "/api/volume3d/solve":
+                respuesta = volume3d.resolver_volumen(cuerpo)
             elif ruta == "/api/jobs/sensibilidad":
                 trabajo = sweeps.enviar_barrido(jobs.COLA)
                 respuesta = {"ok": True, "job": trabajo.a_dict()}

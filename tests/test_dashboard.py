@@ -476,6 +476,48 @@ def test_api_jobs_lista_todos(servidor):
     assert "jobs" in json.loads(cuerpo)
 
 
+# ------------------------------------------------------------------ 3D por rebanadas (U4)
+
+
+def test_api_volume3d_cost_y_solve(servidor):
+    cuerpo = {
+        "frecuencia_hz": 100.0e3, "ppw": 10, "alto_m": 22.0e-3, "fuente": "puntual",
+        "capas": [{"material": "agua", "espesor_m": 22.0e-3}],
+    }
+    costo = _post(servidor + "/api/volume3d/cost", cuerpo)
+    assert costo["ok"] is True
+    assert costo["malla"]["n_nodos"] > 0
+    assert costo["tope_nodos"] > 0
+    assert "metricas" not in costo
+
+    r = _post(servidor + "/api/volume3d/solve", cuerpo)
+    assert r["ok"] is True
+    assert r["metricas"]["error_green_pct"] < 10.0
+    assert len(r["rebanadas"]["xy"]["db"]) == len(r["rebanadas"]["xy"]["y_mm"])
+
+
+def test_api_volume3d_rechaza_oblicua(servidor):
+    req = urllib.request.Request(
+        servidor + "/api/volume3d/solve",
+        data=json.dumps({"fuente": "plano", "angulo_deg": 20.0}).encode("utf-8"),
+        headers={"content-type": "application/json"},
+    )
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        urllib.request.urlopen(req, timeout=60)
+    assert exc.value.code == 400
+
+
+def test_la_pagina_expone_la_vista_3d():
+    html = (ESTATICOS / "index.html").read_text(encoding="utf-8")
+    for pieza in ('data-vista="volumen"', 'id="vistaVolumen"', 'id="mapaVolumen"',
+                  'id="corteVolumen"', 'id="volFuente"', 'volumen.js'):
+        assert pieza in html, f"falta {pieza} en index.html"
+    js = (ESTATICOS / "volumen.js").read_text(encoding="utf-8")
+    for pieza in ("function volResolver", "function volDibujar", "/api/volume3d/solve",
+                  "CRITERIO_GREEN", "scaleanchor"):
+        assert pieza in js, f"falta {pieza} en volumen.js"
+
+
 def test_la_pagina_expone_la_vista_de_barridos():
     html = (ESTATICOS / "index.html").read_text(encoding="utf-8")
     for pieza in ('data-vista="barridos"', 'id="vistaBarridos"', 'id="barProgreso"',

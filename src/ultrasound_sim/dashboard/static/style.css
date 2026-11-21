@@ -125,7 +125,9 @@ body.vista-dispersor #estado,
 body.vista-cochlea #aviso,
 body.vista-cochlea #estado,
 body.vista-barridos #aviso,
-body.vista-barridos #estado { display:none !important; }
+body.vista-barridos #estado,
+body.vista-volumen #aviso,
+body.vista-volumen #estado { display:none !important; }
 
 /* ---- barridos (U5) ---- */
 .progreso { height:6px; background:var(--panel2); border-radius:3px; margin-top:10px; overflow:hidden; }
