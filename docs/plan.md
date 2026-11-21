@@ -56,7 +56,16 @@ Resumen de lo que está *cerrado con número medido*, no de lo que está escrito
   tabla de referencia: condición unitaria a **1e-16**, teorema óptico al **1.0e-3 %**, límite de
   fluido cayendo como `c_s²` (**1.62e-3 → 4.04e-4 → 1.01e-4**) y aproximación monótona al rígido
   contra `sphere.py` (aluminio 5.2e-3 · acero 2.3e-3 · tungsteno 1.2e-3). 14 tests.
-  Lo que falta: el **solver FEM elástico 3D** (fase 6b) contra el cual compararla.
+  **Fase 6b — primera mitad ENTREGADA (D46).** Malla esfera+cáscara de fluido con Gmsh (interfaz
+  compartida nodo a nodo; volumen del sólido 3.51 % → 1.57 % al refinar) y elasticidad vectorial P1
+  con acoplamiento fluido–sólido. Elasticidad **exacta**: modos rígidos en el núcleo de `K` a *4.1e-16*,
+  energía de deformación uniforme exacta, masa `3ρV` exacta. El acoplamiento está bien por sus
+  límites: sin contraste no dispersa y el límite rígido da *10.66 %* contra `sphere.py`, que es el
+  *10.35 %* que da en el mismo dominio el Helmholtz ya validado (D41) — o sea, el dominio y el ABC.
+  **Lo que falta**: contra **Faran** con acero a `ka = 1` el error es **22 %** (amplitud 18 % baja,
+  forma y fase correctas), y la convergencia medida es O(h), que no es lo que deja una formulación
+  correcta. El siguiente paso es comparar el desplazamiento interior contra `Φ`/`Ψ` de Faran fuera
+  del eje, donde `Pₙ(1) = 1` esconde los órdenes `n ≥ 1`.
 
   **Faran (1951) — la derivación, guardada (D44).** La serie de la esfera elástica (dos
   potenciales P/S, tres condiciones de borde en `r = a`, sistema 3×3 por orden) quedó a mitad de

@@ -4,10 +4,13 @@ version = "0.1.0"
 description = "Ultrasound simulator with BEM and FEM for cross-verification"
 requires-python = ">=3.10"
 license = {text = "MIT"}
-dependencies = ["numpy", "scipy", "matplotlib"]
+dependencies = ["numpy", "scipy", "matplotlib", "gmsh"]
 
+# gmsh: mallador de la esfera sumergida (Fase 6b). El mallador propio sólo sabe de cajas
+# estructuradas, y armar a mano una malla conforme sobre una superficie curva con dos regiones no
+# salió (el split de prismas no es conforme, ver D46).
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "sympy"]
 
 [build-system]
 requires = ["setuptools>=68"]

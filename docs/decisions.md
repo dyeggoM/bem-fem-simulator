@@ -1475,3 +1475,53 @@ límite de fluido se testea con `c_s` chico pero finito, donde la convergencia s
 que comparar contra ella (la fase 6b del plan). La serie sirve desde ya para dos cosas: dar la
 respuesta exacta cuando esté el solver, y verificar los límites del propio solver (rígido y fluido)
 antes de mirar un caso con contraste real.
+
+## D46 — Fase 6b, primera mitad: malla de esfera, elasticidad 3D y acoplamiento (y lo que falta)
+
+**Entregado y validado.**
+
+- `meshing3d_sphere.sphere_shell_tet_mesh`: esfera sólida rodeada de una cáscara de fluido, con la
+  interfaz **compartida nodo a nodo**, hecha con **Gmsh** (4.15.2, ahora dependencia). Volumen del
+  sólido: error **3.51 % a h = a/3** y **1.57 % a h = a/4.5**; área de interfaz al **98.4 %** de
+  `4πa²`; conformidad verificada (cada cara de interfaz es frontera de las dos regiones).
+- `fem/elastic3d`: elasticidad vectorial P1 sobre tetraedros. Los seis **modos de cuerpo rígido**
+  caen en el núcleo de `K` a **4.1e-16**, la **energía de una deformación uniforme** da exacta a
+  **1e-16** (P1 reproduce campos lineales, así que no hay tolerancia de malla) y la masa total es
+  `3ρV` exacta.
+- `fem/coupled3d`: los dos bloques acoplados, con ABC-2 en la esfera exterior.
+
+**Qué NO está validado, y hay que decirlo claro.** La comparación con **Faran** para acero a
+`ka = 1` da **22 %**, y ese número **no** se reporta como validación. Lo que se sabe del error:
+
+- El patrón angular coincide en **forma y fase** (razón de amplitudes 0.80–0.88 casi constante, fases
+  dentro de unos pocos grados salvo en `θ = 0`), pero la amplitud sale **18 % baja**. Un déficit
+  uniforme no es un error de forma: es algo que escala.
+- El **desplazamiento interior** del FEM sale casi uniforme —el sólido se mueve como rígido— mientras
+  Faran predice deformación. Para acero la respuesta exterior es casi rígida (los `Cₙ` de Faran
+  difieren de la esfera rígida en 2.3e-3), así que la diferencia interior debería pesar poco… y sin
+  embargo pesa.
+- **A/B hecho**: el mismo dominio resuelto con el Helmholtz **ya validado** (D41) más ABC-2 da
+  **10.35 %** contra la esfera rígida. O sea que el dominio y el ABC aportan ~10 % por sí solos en
+  esta malla, y en el **límite rígido** el acoplado da **10.66 %** — coincidiendo con el camino
+  validado. El acoplamiento está bien; lo que falta aislar es la respuesta **elástica**.
+
+**Los cuatro errores propios de esta mitad** (los cuatro daban resultados plausibles):
+
+1. **Malla de capas hecha a mano, no conforme.** Icósfera + capas de prismas: el split de 3
+   tetraedros por prisma no respeta las diagonales de las caras compartidas. Medido: **2 240 caras
+   internas** apareciendo una sola vez en vez de 320. Se abandonó por Gmsh en vez de pelear el split.
+2. **`∇N₀` sumando el eje equivocado.** `-inv.sum(axis=1)` sobre un stack `(M,3,3)` no da la suma de
+   columnas. Efecto: los gradientes no sumaban cero, una **traslación producía deformación** y la
+   energía salía **5× más grande**. Se reescribió sumando los tres gradientes ya calculados.
+3. **`∇Nᵢ` como fila de `J⁻¹` en vez de columna.** Es `J·∇N = eᵢ`. Con la transpuesta mal, los modos
+   rígidos no se anulaban (6.6e-4) y la energía quedaba 4.6 % baja — un error del tamaño justo para
+   confundirse con convergencia.
+4. **Espacios reducidos.** Armar `K` sobre todos los nodos deja filas vacías en los nodos que sólo
+   existen dentro de la esfera (44 medidas) y el sistema global sale singular. Lo mismo del lado del
+   fluido. El error de SuperLU es "Factor is exactly singular", que no dice nada de la causa.
+
+**Lo siguiente, concreto.** Aislar la respuesta elástica: comparar el desplazamiento interior del FEM
+contra `Φ`/`Ψ` de Faran punto por punto (no sólo en el eje, donde `Pₙ(1) = 1` esconde los órdenes
+`n ≥ 1`), y con eso decidir de qué lado está la diferencia. Recién después tiene sentido refinar:
+la convergencia medida (22.4 → 19.6 → 17.5 % al pasar de h = a/3 a a/5) es **O(h)**, y un error de
+primer orden no es el que deja una formulación correcta sobre una superficie facetada.

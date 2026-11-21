@@ -290,3 +290,32 @@ def residuos(
         "sigma_rr": float(abs(res[1]) / max(esc[1], 1e-300)),
         "sigma_rt": float(abs(res[2]) / max(escala_normal, 1e-300)),
     }
+
+def campo_dispersado(
+    coef: dict[str, Any], points, radio: float, direccion=(0.0, 0.0, 1.0)
+) -> np.ndarray:
+    """Presión dispersada **exacta** en puntos arbitrarios (no sólo en el campo lejano).
+
+        p_s(x) = Σₙ (2n+1)·iⁿ·Cₙ·hₙ⁽¹⁾(k₀r)·Pₙ(cosθ)
+
+    Se evalúa la serie con las Hankel completas en vez de la asíntota ``e^{ikr}/r``: si se compara
+    contra el FEM en ``r = 1.5a``, la asíntota introduce un error de orden ``1/(k₀r)`` que se
+    confundiría con error de discretización.
+    """
+    C = np.asarray(coef["C"])
+    k0 = coef["k0"]
+    d = np.asarray(direccion, dtype=float)
+    d = d / np.linalg.norm(d)
+    x = np.atleast_2d(np.asarray(points, dtype=float))
+    r = np.linalg.norm(x, axis=1)
+    cos_t = np.clip(x @ d / np.where(r > 0, r, 1.0), -1.0, 1.0)
+    salida = np.zeros(x.shape[0], dtype=complex)
+    for n, cn in enumerate(C):
+        if cn == 0.0:
+            continue
+        coef_leg = np.zeros(n + 1)
+        coef_leg[n] = 1.0
+        # hₙ⁽¹⁾ vectorizada: `_h1` devuelve un escalar de Python y no acepta arrays de r
+        hankel = spherical_jn(n, k0 * r) + _I * spherical_yn(n, k0 * r)
+        salida += (2 * n + 1) * (_I ** n) * cn * hankel * _leg.legval(cos_t, coef_leg)
+    return salida
