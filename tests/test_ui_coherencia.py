@@ -233,6 +233,21 @@ def test_la_cadena_guarda_su_corrida_con_la_clave_pelada():
     assert "usim.vista.cadena'" not in js
 
 
+def test_los_valores_de_la_tabla_de_fuentes_se_pueden_leer_y_ubicar():
+    """La tabla tenía 253 px para cinco columnas numéricas: el input quedaba en 52 px y `-29.06` se
+    recortaba. Ahora el panel es más ancho, los spinners nativos de `type=number` no roban el campo, el
+    número se alinea a la derecha, hay columna de fila y al editar se resalta el asa en el mapa."""
+    css = (ESTATICOS / "style.css").read_text(encoding="utf-8")
+    js = (ESTATICOS / "app.js").read_text(encoding="utf-8")
+    html = (ESTATICOS / "index.html").read_text(encoding="utf-8")
+    assert "width:380px" in css, "el panel tiene que dejar entrar los valores"
+    assert "-webkit-inner-spin-button" in css, "los spinners nativos recortan el número"
+    assert "text-align:right" in css
+    assert 'class="c-idx"' in html and 'th-idx' in html
+    assert "window.resaltarFuente" in js
+    assert "tr.classList.add('editando')" in js
+
+
 def test_la_tabla_de_fuentes_scrollea_sola_y_muestra_cuantas_hay():
     """Con 32 fuentes la tabla media 911 px, mas alta que la ventana: habia que arrastrar todo el panel
     para llegar a la fuente 30. Ahora tiene scroll propio y encabezado fijo, y un contador que dice
