@@ -140,6 +140,7 @@ async function esfBarrido() {
   };
   esf$('btnEsfBarrido').disabled = true;
   esf$('btnEsfBarridoCancelar').disabled = false;
+  window.cargando('barridoEsf', 'encolando el barrido en ka…', '');
   esf$('esfBarResumen').textContent = '';
   esf$('esfBarProgreso').style.width = '0%';
   esf$('esfBarEstado').textContent = 'encolando…';
@@ -170,13 +171,16 @@ function esfBarridoSeguir() {
       const j = await (await fetch(`/api/jobs/${ESF.barridoJob}`)).json();
       esf$('esfBarProgreso').style.width = `${Math.round(100 * j.progreso)}%`;
       esf$('esfBarEstado').textContent = `${j.estado} · ${Math.round(100 * j.progreso)} % · ${j.mensaje}`;
+      window.cargando('barridoEsf', `barriendo ka · ${Math.round(100 * j.progreso)} %`, j.mensaje);
       if (j.estado === 'listo') {
         clearInterval(ESF.barridoTimer);
+        window.terminarCargando('barridoEsf');
         esfPintarBarrido(j.resultado);
         esf$('btnEsfBarrido').disabled = false;
         esf$('btnEsfBarridoCancelar').disabled = true;
       } else if (j.estado === 'error' || j.estado === 'cancelado') {
         clearInterval(ESF.barridoTimer);
+        window.terminarCargando('barridoEsf');
         esf$('esfBarEstado').textContent = j.estado === 'error' ? `error: ${j.error}` : 'cancelado';
         esf$('btnEsfBarrido').disabled = false;
         esf$('btnEsfBarridoCancelar').disabled = true;
@@ -390,6 +394,7 @@ async function esfEstimar() {
 async function esfLanzar() {
   esf$('btnEsfera').disabled = true;
   esf$('btnEsferaCancelar').disabled = false;
+  window.cargando('mapaEsf', 'encolando la esfera…', '');
   esf$('esfProgreso').style.width = '0%';
   esf$('esfEstado').textContent = 'encolando…';
   esf$('esfSello').textContent = '';
@@ -423,13 +428,16 @@ function esfSeguir() {
       const j = await (await fetch(`/api/jobs/${ESF.jobId}`)).json();
       esf$('esfProgreso').style.width = `${Math.round(100 * j.progreso)}%`;
       esf$('esfEstado').textContent = `${j.estado} · ${Math.round(100 * j.progreso)} % · ${j.mensaje}`;
+      window.cargando('mapaEsf', `resolviendo la esfera · ${Math.round(100 * j.progreso)} %`, j.mensaje);
       if (j.estado === 'listo') {
         clearInterval(ESF.timer);
+        window.terminarCargando('mapaEsf');
         esfPintar(j.resultado);
         esf$('btnEsfera').disabled = false;
         esf$('btnEsferaCancelar').disabled = true;
       } else if (j.estado === 'error' || j.estado === 'cancelado') {
         clearInterval(ESF.timer);
+        window.terminarCargando('mapaEsf');
         esf$('esfEstado').textContent = j.estado === 'error' ? `error: ${j.error}` : 'cancelado';
         esf$('btnEsfera').disabled = false;
         esf$('btnEsferaCancelar').disabled = true;

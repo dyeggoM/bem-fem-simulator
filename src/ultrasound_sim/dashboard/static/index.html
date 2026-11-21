@@ -25,6 +25,8 @@
       <button class="vista-btn" data-vista="volumen">3D</button>
       <button class="vista-btn" data-vista="esfera">esfera elástica</button>
       <button class="vista-btn" data-vista="criterios">criterios</button>
+      <button class="btn mini" id="btnTour"
+        title="Recorrido guiado por los controles: mapa, arrastre de fuentes, comparación contra una referencia, las vistas y la exportación.">tour</button>
       <button class="btn mini" id="btnExportarVista"
         title="Baja un PNG de cada gráfica visible y un JSON con sus trazas. Sirve igual en todas las vistas: no depende de lo que cada una tenga montado, lee las gráficas que están en pantalla.">exportar vista</button>
     </nav>
@@ -90,8 +92,13 @@
         <button class="btn mini" id="btnAdd">+ fuente</button>
         <button class="btn mini" id="btnArray">← desde arreglo</button>
       </div>
-      <p class="hint">Arrastrá las asas azules sobre el mapa para mover una fuente;
-      doble clic sobre el mapa agrega una en esa altura.</p>
+      <div class="fila-botones">
+        <button class="btn mini activo" id="btnMover">mover con el mouse</button>
+        <button class="btn mini" id="btnZoom">zoom</button>
+      </div>
+      <p class="hint" id="hintMover">Arrastrá sobre el mapa para mover la fuente más cercana
+      (o el foco, si estás en modo arreglo). Doble clic agrega una fuente en esa altura. Con «zoom»
+      el arrastre vuelve a ser el de Plotly.</p>
     </section>
 
     <section class="fila">
@@ -745,5 +752,6 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
 <script src="/static/volumen.js"></script>
 <script src="/static/esfera.js"></script>
 <script src="/static/criterios.js"></script>
+<script src="/static/tour.js"></script>
 </body>
 </html>

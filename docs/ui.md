@@ -21,6 +21,28 @@ de un solve).
 | **esfera elástica** | sólido elástico real (ondas P y S) contra Faran, dos formulaciones | 2 s (rápida) / ~30 s (precisa) | `volumen_esfera_elastica` |
 | **criterios** | el registro completo de criterios y lo medido en la sesión | instantáneo | — |
 
+## Primer uso
+
+La primera vez que se abre, el dashboard lanza solo un **tour de 9 pasos** que resalta cada control y
+explica para qué está. Se cierra con `Esc` o «saltear», y se repite con el botón **tour** de arriba.
+El tour **no cambia de vista** para resaltar las otras pestañas: resalta el botón del nav, porque
+cambiar de vista dispara solves y un tour que lanza simulaciones para explicarse es peor que no tenerlo.
+
+## Mover las fuentes con el mouse
+
+Dos modos, con botón explícito en el panel:
+
+- **mover con el mouse** (por defecto): arrastrar sobre el mapa mueve la fuente más cercana; en modo
+  «arreglo» no hay fuentes sueltas y lo que se mueve es el **foco en y** (el haz se inclina). Doble
+  clic agrega una fuente en esa altura.
+- **zoom**: el arrastre vuelve a ser el de Plotly.
+
+El arrastre funciona desde cualquier punto del mapa, no sólo sobre las asas de 12 px, y hay asas en
+los dos modos (32 en un arreglo de 32 elementos). El cursor cambia a mano abierta para que se note.
+
+*Por qué existía la confusión*: con el `dragmode` de Plotly activo, el gesto lo tomaba el zoom y las
+asas sólo existían en modo «fuentes»; arrastrar en modo arreglo no hacía nada y el mapa se acercaba.
+
 ## Flujos de trabajo
 
 **Comparar dos configuraciones.** En `campo`: *fijar referencia* congela el campo actual; cambiá lo

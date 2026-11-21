@@ -67,6 +67,54 @@ def test_el_registro_no_declara_una_unidad_que_no_mide(html):
     assert criterio.unidad != "L2 relativo", "declara L2 pero se le pasa un máximo"
 
 
+def test_el_tour_existe_tiene_pasos_y_se_puede_reabrir(html):
+    """El tour es la única documentación que el usuario ve sin buscarla. Tiene que existir el archivo,
+    estar cargado en la página, tener pasos y poder reabrirse (si sólo se viera la primera vez, el que
+    lo cerró sin querer no lo encuentra más)."""
+    js = (ESTATICOS / "tour.js").read_text(encoding="utf-8")
+    assert 'src="/static/tour.js"' in html
+    assert 'id="btnTour"' in html, "sin botón no se puede repetir el tour"
+    assert "TOUR_PASOS" in js and js.count("titulo:") >= 5
+    assert "tourAbrir" in js and "localStorage" in js
+    print(f"\n  pasos del tour: {js.count('titulo:')}")
+
+
+def test_los_tooltips_no_usan_el_title_nativo():
+    """El `title` nativo se dibuja con los colores del sistema y en tema oscuro no se lee: por eso el
+    texto se mueve a `data-tip` y se borra el `title`. Si alguien vuelve a dejar el `title`, salen los
+    dos globos y el ilegible es el primero."""
+    js = (ESTATICOS / "app.js").read_text(encoding="utf-8")
+    css = (ESTATICOS / "style.css").read_text(encoding="utf-8")
+    assert "activarTips" in js
+    assert "removeAttribute('title')" in js
+    assert ".globo-tip" in css
+    # contraste: fondo claro y texto oscuro, no al revés
+    assert "#f2f5f9" in css
+
+
+def test_los_barridos_muestran_un_spinner_mientras_corren():
+    """Un barrido de minutos con el panel vacío parece que no hizo nada. Cada barrido tiene que
+    encender el spinner al lanzar y apagarlo al terminar, en éxito y en error."""
+    js = (ESTATICOS / "app.js").read_text(encoding="utf-8")
+    assert "window.cargando" in js and "terminarCargando" in js
+    for archivo, contenedor in (("barridos.js", "graficoApertura"),
+                                ("barridos.js", "graficoBarrido"),
+                                ("esfera.js", "barridoEsf")):
+        fuente = (ESTATICOS / archivo).read_text(encoding="utf-8")
+        assert f"cargando('{contenedor}'" in fuente, f"{archivo} no enciende el spinner de {contenedor}"
+        assert f"terminarCargando('{contenedor}')" in fuente, f"{archivo} no lo apaga"
+
+
+def test_el_arrastre_de_fuentes_no_lo_come_el_zoom_de_plotly():
+    """El síntoma que reportó el usuario: arrastrar hacía zoom. La causa era el `dragmode` de Plotly,
+    que se queda con el gesto. Con el modo "mover" el dragmode tiene que estar apagado, y el arrastre
+    tiene que existir también en modo arreglo (antes sólo había asas en modo "fuentes")."""
+    js = (ESTATICOS / "app.js").read_text(encoding="utf-8")
+    assert "dragmode: S.mover ? false : 'zoom'" in js
+    assert "posicionesDelArreglo" in js, "en modo arreglo no hay nada que arrastrar"
+    assert "btnMover" in js and "btnZoom" in js
+
+
 def test_las_vistas_guardan_su_resultado_para_no_repetir_el_solve():
     """La persistencia es lo que permite volver a una pestaña sin pagar otro solve (la esfera precisa
     son ~30 s). Se comprueba que cada vista cara tenga su `vistaGuardar` y su `vistaCargar`."""

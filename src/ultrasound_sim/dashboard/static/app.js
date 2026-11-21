@@ -20,6 +20,9 @@ const S = {
   // quiero ver QUÉ cambió". Restar mapas en dB responde eso; mirar dos mapas de a uno, no.
   referencia: null,       // {p2_db, x_mm, y_mm, meta} congelado con "fijar referencia"
   diferencia: false,      // mostrar la diferencia en vez del campo
+  // `mover`: el arrastre sobre el mapa mueve fuentes (o el foco) y NO hace zoom. Era el problema
+  // real: con el `dragmode` de Plotly el gesto se lo comía el zoom y las fuentes no se movían.
+  mover: true,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -48,6 +51,108 @@ function pedir() {
   clearTimeout(temporizador);
   temporizador = setTimeout(enviar, 150);
 }
+
+/* ---------------------------------------------------------------------------------------------
+ * Spinner de corrida.
+ *
+ * Se engancha al contenedor de resultados (un `.mapa` o un `.corte`) y se muestra encima mientras el
+ * job corre, con el mensaje de progreso del servidor. Tapa el gráfico anterior a propósito: dejarlo a
+ * la vista mientras el job corre hace creer que ese es el resultado nuevo.
+ * ------------------------------------------------------------------------------------------- */
+
+window.cargando = function cargando(contenedorId, texto, detalle) {
+  const caja = document.getElementById(contenedorId);
+  if (!caja) return null;
+  let capa = caja.querySelector(':scope > .cargando');
+  if (!capa) {
+    capa = document.createElement('div');
+    capa.className = 'cargando';
+    capa.innerHTML = '<div class="aro"></div><div class="texto"></div><div class="detalle"></div>';
+    caja.appendChild(capa);
+  }
+  capa.hidden = false;
+  capa.querySelector('.texto').textContent = texto || 'resolviendo…';
+  capa.querySelector('.detalle').textContent = detalle || '';
+  return capa;
+};
+
+window.terminarCargando = function terminarCargando(contenedorId) {
+  const caja = document.getElementById(contenedorId);
+  const capa = caja && caja.querySelector(':scope > .cargando');
+  if (capa) capa.hidden = true;
+};
+
+/* ---------------------------------------------------------------------------------------------
+ * Tooltip propio.
+ *
+ * El `title` nativo se dibuja con los colores del sistema: en tema oscuro sale texto gris sobre fondo
+ * oscuro y no se lee. Acá el texto se mueve a `data-tip`, se borra el `title` (si no, aparecen los dos)
+ * y se dibuja un globo de la página, con contraste alto y posición calculada para no salirse.
+ * ------------------------------------------------------------------------------------------- */
+
+const TIP = { globo: null };
+
+function tipGlobo() {
+  if (!TIP.globo) {
+    TIP.globo = document.createElement('div');
+    TIP.globo.className = 'globo-tip';
+    document.body.appendChild(TIP.globo);
+  }
+  return TIP.globo;
+}
+
+function tipMostrar(el) {
+  const texto = el.dataset.tip;
+  if (!texto) return;
+  const globo = tipGlobo();
+  globo.textContent = texto;
+  globo.classList.add('visible');
+  const caja = el.getBoundingClientRect();
+  const ancho = globo.offsetWidth;
+  const alto = globo.offsetHeight;
+  const M = 12;
+  const cabeDer = caja.right + 10 + ancho <= window.innerWidth - M;
+  const cabeAbajo = caja.bottom + 10 + alto <= window.innerHeight - M;
+
+  // Prioridad: a la derecha del signo → debajo → arriba. Los `?` viven en el panel de controles, así
+  // que cuando el globo no entra a la derecha se pone DEBAJO del signo en vez de encima del panel
+  // (que es lo que tapaba los controles que el globo está explicando).
+  let x;
+  let y;
+  if (cabeDer) {
+    x = caja.right + 10;
+    y = caja.top + caja.height / 2 - alto / 2;
+  } else if (cabeAbajo) {
+    x = caja.left;
+    y = caja.bottom + 10;
+  } else {
+    x = caja.left;
+    y = caja.top - alto - 10;
+  }
+  x = Math.max(M, Math.min(x, window.innerWidth - ancho - M));
+  y = Math.max(M, Math.min(y, window.innerHeight - alto - M));
+  globo.style.left = `${x}px`;
+  globo.style.top = `${y}px`;
+}
+
+function tipOcultar() {
+  if (TIP.globo) TIP.globo.classList.remove('visible');
+}
+
+window.activarTips = function activarTips() {
+  document.querySelectorAll('.tip[title]').forEach((el) => {
+    el.dataset.tip = el.getAttribute('title');
+    el.removeAttribute('title');            // sin esto el navegador muestra además el suyo
+    if (el.dataset.tipListo) return;
+    el.dataset.tipListo = '1';
+    el.addEventListener('mouseenter', () => tipMostrar(el));
+    el.addEventListener('mouseleave', tipOcultar);
+    // también con foco por teclado: el `?` es un span, así que se le pone tabindex
+    el.setAttribute('tabindex', '0');
+    el.addEventListener('focus', () => tipMostrar(el));
+    el.addEventListener('blur', tipOcultar);
+  });
+};
 
 /* ---------------------------------------------------------------------------------------------
  * Persistencia del último resultado de una vista.
@@ -320,6 +425,9 @@ function pintar(r) {
         line: { color: '#58a6ff', width: 1, dash: 'dot' } },
     ],
     showlegend: false,
+    // sin `dragmode` de zoom cuando el modo es "mover": si no, arrastrar sobre el mapa hace zoom y
+    // las fuentes nunca se mueven (el usuario ve el mapa acercarse y cree que el arrastre no existe)
+    dragmode: S.mover ? false : 'zoom',
   }, CONFIG).then(() => {
     // Los márgenes reales no son los estimados (la barra de color se come ~65 px del área de
     // trazado), así que se compara el px/mm **medido** en cada eje y se corrige si difieren.
@@ -519,12 +627,24 @@ function yDePx(l, py) {
   return a.range[1] + (a.range[0] - a.range[1]) * f;
 }
 
+function posicionesDelArreglo() {
+  // las `y` de los elementos del arreglo, en mm, tal como las arma el servidor
+  const paso = S.d / S.n;
+  const out = [];
+  for (let j = 0; j < S.n; j += 1) out.push(-S.d / 2 + paso * (j + 0.5));
+  return out;
+}
+
 function pintarAsas() {
   const capa = $('arrastre');
   const l = $('mapa')._fullLayout;
   if (!l || !l.xaxis || !l.yaxis) return;
-  const fuentes = S.modo === 'manual' && S.fuentes ? S.fuentes : null;
-  const n = fuentes ? fuentes.length : 0;
+  // En modo arreglo también hay asas: mueven el FOCO en y (el haz se inclina). Antes sólo existían en
+  // modo "fuentes" y en arreglo no había nada que arrastrar, que es lo que Diego encontró.
+  const fuentes = S.modo === 'manual' && S.fuentes
+    ? S.fuentes.map((f) => ({ ymm: f.y * 1e3, etiqueta: 'fuente' }))
+    : posicionesDelArreglo().map((y) => ({ ymm: y, etiqueta: 'elemento' }));
+  const n = fuentes.length;
 
   while (asas.length > n) capa.removeChild(asas.pop());
   for (let i = 0; i < n; i += 1) {
@@ -538,26 +658,34 @@ function pintarAsas() {
       asas[i] = el;
     }
     const x = pxDeX(l, 0);
-    const y = pxDeY(l, fuentes[i].y * 1e3);
+    const y = pxDeY(l, fuentes[i].ymm);
     el.style.left = `${x}px`;
     el.style.top = `${y}px`;
-    el.title = `fuente ${i + 1}: y = ${(fuentes[i].y * 1e3).toFixed(2)} mm`;
+    el.dataset.tip = S.modo === 'manual'
+      ? `fuente ${i + 1}: y = ${fuentes[i].ymm.toFixed(2)} mm`
+      : `elemento ${i + 1} del arreglo: y = ${fuentes[i].ymm.toFixed(2)} mm`
+        + ' (arrastrar mueve el foco en y)';
   }
 }
 
-function iniciarArrastre(ev) {
-  if (S.modo !== 'manual' || !S.fuentes) {
-    $('estado').textContent = 'pasá a la pestaña "fuentes" para arrastrarlas';
-    return;
-  }
+function iniciarArrastre(ev, indice) {
+  if (!S.mover) return;                       // en modo zoom manda Plotly
+  const i = (indice !== undefined) ? indice : parseInt(ev.currentTarget.dataset.i, 10);
+  // el evento no puede llegar a Plotly: si llega, el `dragmode` de zoom se queda con el gesto
   ev.preventDefault();
-  const i = parseInt(ev.currentTarget.dataset.i, 10);
-  arrastre = { i, y0: S.fuentes[i].y };
-  ev.currentTarget.classList.add('activa');
+  ev.stopPropagation();
+  if (S.modo === 'manual' && S.fuentes) {
+    arrastre = { i, y0: S.fuentes[i].y, arreglo: false };
+  } else {
+    // modo arreglo: no hay una fuente que mover, así que se mueve el FOCO en y (el haz se inclina)
+    arrastre = { i, y0: S.fy, arreglo: true };
+  }
+  if (asas[i]) asas[i].classList.add('activa');
+  $('mapa').classList.add('arrastrando');
   // La captura es opcional: con pointers sintéticos (o navegadores viejos) tira y no hay que
   // romper el jalón por eso. Los listeners van en window para que el asa siga al puntero aunque
   // se salga del cuadrado.
-  try { ev.currentTarget.setPointerCapture(ev.pointerId); } catch (e) { /* sin captura */ }
+  try { (ev.currentTarget || ev.target).setPointerCapture(ev.pointerId); } catch (e) { /* sin captura */ }
   window.addEventListener('pointermove', moverArrastre);
   window.addEventListener('pointerup', finArrastre);
   window.addEventListener('pointercancel', finArrastre);
@@ -572,12 +700,16 @@ function moverArrastre(ev) {
   let ymm = yDePx(l, py);
   const radio = (l.yaxis.range[1] - l.yaxis.range[0]) / 2;
   ymm = Math.max(-radio, Math.min(radio, ymm));          // no se sale del encuadre
-  S.fuentes[arrastre.i].y = ymm / 1e3;
-  const el = asas[arrastre.i];
-  if (el) {
-    el.style.top = `${pxDeY(l, ymm)}px`;
-    el.title = `fuente ${arrastre.i + 1}: y = ${ymm.toFixed(2)} mm`;
+
+  if (arrastre.arreglo) {
+    S.fy = ymm;                                          // el foco sigue al puntero
+    $('fy') && ($('fy').value = String(Math.round(ymm)));
+    sincronizarEtiquetas();
+  } else {
+    S.fuentes[arrastre.i].y = ymm / 1e3;
   }
+  // las asas se reubican todas: en arreglo el que se mueve es el foco, no una sola asa
+  pintarAsas();
   pedir();                                               // recomputa con malla reducida
 }
 
@@ -585,6 +717,7 @@ function finArrastre() {
   if (!arrastre) return;
   const el = asas[arrastre.i];
   if (el) el.classList.remove('activa');
+  $('mapa').classList.remove('arrastrando');
   window.removeEventListener('pointermove', moverArrastre);
   window.removeEventListener('pointerup', finArrastre);
   window.removeEventListener('pointercancel', finArrastre);
@@ -592,6 +725,28 @@ function finArrastre() {
   pintarFuentes();
   enviar();                                              // vuelve a la malla elegida
 }
+
+/* Arrastrar desde cualquier punto del mapa (no sólo desde el asa): se toma la fuente más cercana en
+ * y, y si no hay ninguna cerca se usa la primera. Antes el mapa sólo respondía en las asas de 12 px,
+ * que es lo que hacía que "no se pudiera mover nada". */
+$('mapa').addEventListener('pointerdown', (ev) => {
+  if (!S.mover || arrastre) return;
+  const l = $('mapa')._fullLayout;
+  if (!l || !l.yaxis) return;
+  const caja = $('mapa').getBoundingClientRect();
+  const ymm = yDePx(l, ev.clientY - caja.top);
+  if (S.modo === 'manual' && S.fuentes && S.fuentes.length) {
+    let mejor = 0;
+    let dist = Infinity;
+    S.fuentes.forEach((f, i) => {
+      const d = Math.abs(f.y * 1e3 - ymm);
+      if (d < dist) { dist = d; mejor = i; }
+    });
+    iniciarArrastre(ev, mejor);
+  } else {
+    iniciarArrastre(ev, 0);
+  }
+});
 
 /* ---------------------------------------------------------------- agregar con doble clic */
 $('mapa').addEventListener('dblclick', (ev) => {
@@ -671,6 +826,28 @@ function aplicar(cfg) {
 }
 
 $('btnExportarVista').addEventListener('click', () => window.exportarVista());
+
+/* ------------------------------------------------------------- mover con el mouse vs zoom */
+function setInteraccion(mover, relayout = true) {
+  S.mover = mover;
+  $('btnMover').classList.toggle('activo', mover);
+  $('btnZoom').classList.toggle('activo', !mover);
+  $('mapa').classList.toggle('modo-mover', mover);
+  $('hintMover').textContent = mover
+    ? 'Arrastrá sobre el mapa para mover la fuente más cercana (o el foco, si estás en modo '
+      + 'arreglo). Doble clic agrega una fuente en esa altura.'
+    : 'Arrastre = zoom de Plotly (y doble clic para volver al encuadre). Elegí «mover con el mouse» '
+      + 'para arrastrar fuentes.';
+  // `relayout` sólo si la gráfica ya existe: al cargar la página todavía no hay nada dibujado, y
+  // llamarlo igual abortaba el script con "No DOM element with id 'mapa' exists" — dejaba la vista
+  // de campo vacía, sin un solo error visible en pantalla.
+  if (relayout && $('mapa')._fullLayout) {
+    Plotly.relayout('mapa', { dragmode: mover ? false : 'zoom' });
+  }
+}
+$('btnMover').addEventListener('click', () => setInteraccion(true));
+$('btnZoom').addEventListener('click', () => setInteraccion(false));
+setInteraccion(true, false);
 
 /* ------------------------------------------------------- referencia para comparar dos corridas */
 $('btnRefFijar').addEventListener('click', () => {
@@ -798,3 +975,6 @@ if (previa) {
   enviar();
 }
 setInterval(recordar, 3000);
+
+// los 20 tooltips son estáticos (viven en el HTML), así que alcanza con activarlos una vez al cargar
+window.activarTips();

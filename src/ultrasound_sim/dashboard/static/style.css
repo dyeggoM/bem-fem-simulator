@@ -1,6 +1,8 @@
 :root {
   --bg:#0d1117; --panel:#161b22; --panel2:#1b2129; --linea:#242c37; --texto:#d7dde5;
-  --dim:#79848f; --acento:#58a6ff; --ok:#3fb950; --warn:#d29922; --no:#f85149;
+  /* --dim era #79848f: sobre el fondo #0d1117 da 4.6:1, que pasa el mínimo pero se lee mal en texto
+     chico. #8f9aa6 sube a 6.4:1 sin volverse blanco (el gris tiene que seguir siendo secundario). */
+  --dim:#8f9aa6; --acento:#58a6ff; --ok:#3fb950; --warn:#d29922; --no:#f85149;
 }
 * { box-sizing:border-box; }
 html, body { height:100%; }
@@ -203,3 +205,77 @@ body.vista-volumen #estado { display:none !important; }
 .crit-tol { color: #8b95a1; white-space: nowrap; }
 .crit-fecha { color: #6b7684; font-size: 9px; }
 .crit-fuente { color: #6b7684; max-width: 260px; }
+
+
+/* ---------- tooltip propio ----------
+   El `title` nativo del navegador se dibuja con los colores del sistema y en tema oscuro queda texto
+   gris sobre fondo oscuro: ilegible. Este globo lo dibuja la página, con contraste alto y tamaño
+   legible, y se posiciona solo. El texto sigue viviendo en el `title` del HTML (una sola fuente), que
+   `app.js` pasa a `data-tip` y borra para que no salgan los dos. */
+.globo-tip {
+  position: fixed; z-index: 9999; max-width: 380px; pointer-events: none;
+  background: #f2f5f9; color: #0d1117; border: 1px solid #8b95a1; border-radius: 7px;
+  padding: 10px 12px; font-size: 12px; line-height: 1.5; font-weight: 400;
+  letter-spacing: 0; text-transform: none; text-align: left;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.55);
+  opacity: 0; transform: translateY(4px); transition: opacity .12s ease, transform .12s ease;
+}
+.globo-tip.visible { opacity: 1; transform: translateY(0); }
+.tip { user-select: none; }
+
+
+/* ---------- spinner de corrida ----------
+   Mientras un barrido corre, el panel de resultados queda vacío y parece que no pasó nada (sobre todo
+   en los que tardan minutos). Este overlay se pone SOBRE el contenedor de resultados y tapa el gráfico
+   viejo: mostrar el de la corrida anterior sin avisar es peor que mostrar el spinner, porque parece
+   que ese es el resultado nuevo. */
+.cargando {
+  position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px; border-radius: 9px;
+  background: rgba(13, 17, 23, 0.82); backdrop-filter: blur(2px);
+  font-size: 12px; color: #d7dde5; text-align: center; padding: 16px;
+}
+.cargando[hidden] { display: none; }
+.cargando .aro {
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 3px solid rgba(88, 166, 255, 0.22); border-top-color: #58a6ff;
+  animation: girar 0.85s linear infinite;
+}
+@keyframes girar { to { transform: rotate(360deg); } }
+.cargando .detalle { color: #8b95a1; font-size: 11px; max-width: 420px; }
+.mapa-wrap, .corte { position: relative; }
+
+
+/* ---------- modo "mover con el mouse" ----------
+   Con `dragmode: false` Plotly no dibuja el cursor de zoom, así que el cursor lo pone la página: es
+   la señal de que el arrastre hace otra cosa. El `!important` es necesario porque Plotly escribe el
+   cursor inline en el canvas. */
+#mapa.modo-mover, #mapa.modo-mover .nsewdrag { cursor: grab !important; }
+#mapa.modo-mover.arrastrando, #mapa.modo-mover.arrastrando .nsewdrag { cursor: grabbing !important; }
+/* las asas del arreglo no deben confundirse con las de una fuente: en arreglo son más chicas */
+.arrastre .asa { transition: transform .08s ease; }
+
+
+/* ---------- tour guiado ----------
+   El resaltado es un recuadro con `box-shadow` enorme en vez de un overlay: así no hay que recortar
+   agujeros ni tocar el z-index de Plotly, y el elemento sigue visible y clickeable. */
+.tour-foco {
+  position: fixed; z-index: 9000; pointer-events: none; border-radius: 10px;
+  border: 2px solid #58a6ff;
+  box-shadow: 0 0 0 9999px rgba(5, 8, 12, 0.72), 0 0 18px rgba(88, 166, 255, 0.55);
+  transition: all .18s ease;
+}
+.tour-caja {
+  position: fixed; z-index: 9100; width: 380px; max-width: calc(100vw - 24px);
+  background: #161b22; border: 1px solid #2e3746; border-radius: 10px;
+  padding: 14px 16px 12px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  color: #d7dde5; font-size: 12.5px; line-height: 1.55;
+}
+.tour-caja.centrada { left: 50% !important; top: 50% !important; transform: translate(-50%, -50%); }
+.tour-paso { font-size: 10px; color: #58a6ff; letter-spacing: .06em; text-transform: uppercase; }
+.tour-titulo { margin: 3px 0 6px; font-size: 15px; color: #fff; font-weight: 600; }
+.tour-texto { margin: 0 0 12px; color: #a9b4c0; }
+.tour-botones { display: flex; align-items: center; gap: 7px; }
+.tour-flex { flex: 1 1 auto; }
+.tour-caja .btn.mini[disabled] { opacity: .35; cursor: default; }
+body.tour-abierto .app { filter: none; }
