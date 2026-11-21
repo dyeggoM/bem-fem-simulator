@@ -16,6 +16,10 @@ const S = {
   grid: 120,
   fuentes: null,          // null = el servidor arma el arreglo
   ultimo: null,
+  // Comparación de dos configuraciones: el uso central del dashboard es "muevo un transductor y
+  // quiero ver QUÉ cambió". Restar mapas en dB responde eso; mirar dos mapas de a uno, no.
+  referencia: null,       // {p2_db, x_mm, y_mm, meta} congelado con "fijar referencia"
+  diferencia: false,      // mostrar la diferencia en vez del campo
 };
 
 const $ = (id) => document.getElementById(id);
@@ -211,6 +215,7 @@ async function enviar() {
 
 function pintar(r) {
   const m = r.metrics;
+  S.ultimo = r;    // queda disponible para "fijar referencia" 
   $('mPico').textContent = `${fmt(m.peak_x_mm, 1)} · ${fmt(m.peak_y_mm, 1)} mm`;
   $('mFwhm').textContent = m.fwhm_lateral_mm ? `${fmt(m.fwhm_lateral_mm)} mm` : '—';
   $('mFwhmAx').textContent = m.fwhm_axial_mm ? `${fmt(m.fwhm_axial_mm)} mm` : '—';
@@ -246,10 +251,30 @@ function pintar(r) {
         return out;
       })();
 
+  // Si hay referencia congelada y la grilla coincide, se dibuja la DIFERENCIA de niveles. Si la
+  // grilla cambió (otra frecuencia, otra malla) no se resta nada: se avisa y se muestra el campo,
+  // porque restar dos grillas distintas daría un mapa con forma de error de interpolación.
+  const ref = S.referencia;
+  const mismaGrilla = ref && ref.p2_db.length === r.p2_db.length
+    && ref.p2_db[0].length === r.p2_db[0].length
+    && ref.x_mm.length === r.x_mm.length && ref.y_mm.length === r.y_mm.length;
+  const verDif = S.diferencia && Boolean(ref);
+  if (verDif && !mismaGrilla) {
+    $('estado').textContent =
+      'la referencia tiene otra grilla (cambió la frecuencia o el tamaño de malla): no se resta. '
+      + 'Fijá de nuevo la referencia con la grilla actual.';
+  }
+  const zMapa = (verDif && mismaGrilla)
+    ? r.p2_db.map((fila, i) => fila.map((v, j) => v - ref.p2_db[i][j]))
+    : r.p2_db;
+
   const trazas = [{
-    type: 'heatmap', x: r.x_mm, y: r.y_mm, z: r.p2_db,
-    colorscale: 'Inferno', zmin: -40, zmax: 0, zhoverformat: '.1f',
-    colorbar: { title: { text: 'dB', side: 'top' }, thickness: 11, len: 0.8,
+    type: 'heatmap', x: r.x_mm, y: r.y_mm, z: zMapa,
+    colorscale: (verDif && mismaGrilla) ? 'RdBu' : 'Inferno',
+    zmin: (verDif && mismaGrilla) ? -20 : -40, zmax: (verDif && mismaGrilla) ? 20 : 0,
+    zhoverformat: '.1f',
+    colorbar: { title: { text: (verDif && mismaGrilla) ? 'Δ dB' : 'dB', side: 'top' },
+                thickness: 11, len: 0.8,
                 tickfont: { size: 9, color: '#8b95a1' }, outlinewidth: 0 },
     hovertemplate: 'x %{x:.1f} mm<br>y %{y:.1f} mm<br>%{z:.1f} dB<extra></extra>',
   }, {
@@ -278,8 +303,12 @@ function pintar(r) {
 
   Plotly.react('mapa', trazas, {
     ...BASE, margin: { l: 54, r: 8, t: 26, b: 40 },
-    title: { text: `${r.meta.material} · ${fmt(r.meta.frequency_khz, 0)} kHz`, font: { size: 12 },
-             x: 0.01, y: 0.98, xanchor: 'left' },
+    title: {
+      text: (verDif && mismaGrilla)
+        ? `diferencia contra la referencia (${ref.meta.material} · ${fmt(ref.meta.frequency_khz, 0)} kHz)`
+        : `${r.meta.material} · ${fmt(r.meta.frequency_khz, 0)} kHz`,
+      font: { size: 12 }, x: 0.01, y: 0.98, xanchor: 'left',
+    },
     // Sin `scaleanchor`: con rangos fijos, Plotly no puede satisfacer el aspecto 1:1 dentro del
     // panel y aborta con "Something went wrong with axis scaling".
     xaxis: { ...EJE, title: 'x [mm]', range: xrango },
@@ -319,6 +348,15 @@ function pintar(r) {
   }));
   const axial = r.p2_db[biy];                                  // varía x
   const lateral = r.p2_db.map((fila) => fila[bix]);            // varía y
+  // Con referencia se superpone el perfil de la referencia en punteado: en los cortes se ve el
+  // corrimiento del foco y cuánto sube o baja el lóbulo, que es lo que no se lee en el mapa.
+  const axialRef = (ref && mismaGrilla) ? ref.p2_db[biy] : null;
+  const lateralRef = (ref && mismaGrilla) ? ref.p2_db.map((fila) => fila[bix]) : null;
+  const trazaRef = (x, y, nombre) => (y ? [{
+    type: 'scatter', mode: 'lines', x, y, name: nombre,
+    line: { color: '#8b95a1', width: 1.1, dash: 'dot' },
+    hovertemplate: '%{x:.1f} mm<br>%{y:.1f} dB (ref.)<extra></extra>',
+  }] : []);
 
   // Rango automático por corte: en escala fija −40..0 dB un perfil axial que varía 5 dB se ve plano.
   const rango = (valores) => {
@@ -329,9 +367,10 @@ function pintar(r) {
                             line: { color: '#4a5566', width: 1, dash: 'dot' } });
 
   Plotly.react('axial', [{
-    type: 'scatter', mode: 'lines', x: r.x_mm, y: axial, line: { color: '#58a6ff', width: 1.6 },
+    type: 'scatter', mode: 'lines', x: r.x_mm, y: axial, name: 'actual',
+    line: { color: '#58a6ff', width: 1.6 },
     hovertemplate: 'x %{x:.1f} mm<br>%{y:.1f} dB<extra></extra>',
-  }], {
+  }, ...trazaRef(r.x_mm, axialRef, 'referencia')], {
     ...BASE, margin: { l: 46, r: 12, t: 24, b: 34 },
     title: { text: 'corte axial (y = pico)', font: { size: 11 }, x: 0.01, y: 0.95, xanchor: 'left' },
     xaxis: { ...EJE, title: 'x [mm]' }, yaxis: { ...EJE, title: 'dB', range: rango(axial) },
@@ -339,9 +378,10 @@ function pintar(r) {
   }, CONFIG);
 
   Plotly.react('lateral', [{
-    type: 'scatter', mode: 'lines', x: r.y_mm, y: lateral, line: { color: '#3fb950', width: 1.6 },
+    type: 'scatter', mode: 'lines', x: r.y_mm, y: lateral, name: 'actual',
+    line: { color: '#3fb950', width: 1.6 },
     hovertemplate: 'y %{x:.1f} mm<br>%{y:.1f} dB<extra></extra>',
-  }], {
+  }, ...trazaRef(r.y_mm, lateralRef, 'referencia')], {
     ...BASE, margin: { l: 46, r: 12, t: 24, b: 34 },
     title: { text: 'corte lateral en el pico', font: { size: 11 }, x: 0.01, y: 0.95, xanchor: 'left' },
     xaxis: { ...EJE, title: 'y [mm]' }, yaxis: { ...EJE, title: 'dB', range: rango(lateral) },
@@ -631,6 +671,34 @@ function aplicar(cfg) {
 }
 
 $('btnExportarVista').addEventListener('click', () => window.exportarVista());
+
+/* ------------------------------------------------------- referencia para comparar dos corridas */
+$('btnRefFijar').addEventListener('click', () => {
+  if (!S.ultimo) { $('refEstado').textContent = 'todavía no hay un campo calculado'; return; }
+  const r = S.ultimo;
+  S.referencia = { p2_db: r.p2_db, x_mm: r.x_mm, y_mm: r.y_mm, meta: r.meta };
+  S.diferencia = true;
+  $('chkRefVer').checked = true;
+  $('refEstado').textContent = `referencia: ${r.meta.material} · `
+    + `${fmt(r.meta.frequency_khz, 0)} kHz · pico ${fmt(r.metrics.peak_x_mm, 1)} mm`;
+  pedir();
+});
+$('btnRefSoltar').addEventListener('click', () => {
+  S.referencia = null;
+  S.diferencia = false;
+  $('chkRefVer').checked = false;
+  $('refEstado').textContent = 'sin referencia';
+  pedir();
+});
+$('chkRefVer').addEventListener('change', (e) => {
+  if (!S.referencia) {
+    e.target.checked = false;
+    $('refEstado').textContent = 'primero fijá una referencia';
+    return;
+  }
+  S.diferencia = e.target.checked;
+  pedir();
+});
 $('btnGuardar').addEventListener('click', () => {
   const texto = JSON.stringify(instantanea(), null, 2);
   const url = URL.createObjectURL(new Blob([texto], { type: 'application/json' }));

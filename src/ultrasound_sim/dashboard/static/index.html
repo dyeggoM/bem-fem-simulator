@@ -101,6 +101,20 @@
     </section>
 
     <section>
+      <label>Comparar con una referencia
+        <span class="tip" title="Congelá el campo actual como referencia, cambiá lo que quieras (mover una fuente, cambiar la frecuencia, la apertura) y mirá la DIFERENCIA en dB en vez de dos mapas de a uno. Es para lo que se usa el dashboard: ver qué cambió al mover el transductor, no sólo cómo quedó. Si cambiás el tamaño de malla o la frecuencia el vector de coordenadas no coincide y no se resta: se avisa en la línea de estado.">?</span>
+      </label>
+      <div class="fila-botones">
+        <button class="btn mini" id="btnRefFijar">fijar referencia</button>
+        <button class="btn mini" id="btnRefSoltar">soltar</button>
+      </div>
+      <label class="hist-fila" style="padding-left:0">
+        <input type="checkbox" id="chkRefVer"> ver la diferencia en el mapa
+      </label>
+      <p class="hint" id="refEstado">sin referencia</p>
+    </section>
+
+    <section>
       <label>Resolución de malla</label>
       <select id="res">
         <option value="80">80 × 80 (rápido)</option>
