@@ -1742,3 +1742,24 @@ caso da razón **1.13×** y error absoluto **7.2e-3 Pa** sobre una incidente de 
 tabla quede verde. Un material que la formulación no sabe representar se marca, se explica y se
 desactiva lo que corresponde — y el arreglo de fondo sigue siendo el mismo: formular el sólido en
 campo dispersado, donde el caso transparente da exactamente cero **sin** necesidad de restringir nada.
+
+**La tabla completa, y de dónde sale cada error.** Con `ka = 1`, dominio 4a, `h = a/4.5`:
+
+- acero (contraste 30.7): **4.29 %** con restricción · 19.52 % sin ella
+- aluminio (11.4): **3.99 %**
+- tungsteno (66.9): **4.71 %**
+- hueso (4.6): **13.16 %** con restricción · 54.61 % sin ella
+- tejido casi fluido (1.08, `c_s = 30`): **5264 %** con restricción · 23.19 % sin ella
+- tejido (`c_s = 200`): 1049 % con restricción · 111 % sin ella
+- grasa (`c_s = 100`, contraste 0.92): 589 % con restricción · **353 % sin ella**
+
+**La grasa agrega un tercer mecanismo, distinto de los otros dos.** Con `c_s = 100` la longitud de
+onda de corte es `λ_s = c_s/f = 1.0 mm`, y el elemento mide 0.53 mm: **1.9 elementos por λ_s**. La
+malla se elige con la longitud de onda del **fluido** (15 mm), y un sólido blando necesita su propia
+malla más fina. Por eso a la grasa no le alcanza con apagar la restricción: el interior del sólido
+está sub-resuelto.
+
+Se agregó la métrica `elementos_por_lambda_corte` a la salida, y la UI avisa cuando baja de 4. Medido:
+acero **53.6**, hueso **31.8** (o sea que el 13 % del hueso **no** es falta de resolución de corte, es
+el modelo), tejido casi fluido **0.5**. Tres mecanismos distintos, tres diagnósticos distintos, y
+ninguno se arregla subiendo el `ppw` del fluido.

@@ -153,3 +153,27 @@ def test_un_campo_dispersado_debil_no_se_sella_por_su_error_relativo():
           f"· sello {r['sello']['estado']}")
     assert r["sello"]["estado"] == "sin_referencia"
     assert m["error_absoluto"] < 0.05          # menos del 5 % de la incidente (1 Pa)
+
+def test_la_resolucion_de_la_onda_de_corte_se_reporta():
+    """La malla se elige con la longitud de onda del FLUIDO, pero un sólido blando tiene `λ_s = c_s/f`
+    corta. Medido: acero 53.6 elementos por `λ_s`, hueso 31.8, tejido casi fluido 0.5.
+
+    Importa distinguirlo: el 13 % del hueso **no** es falta de resolución de corte (31.8 elementos por
+    λ_s), es el modelo de la restricción. Y a la grasa (`c_s = 100`, 1.9 elementos por λ_s) no le
+    alcanza con apagar la restricción.
+    """
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        rapida = elastic_sphere.resolver(
+            {"modo": "rapida", "ka": 1.0, "material": "acero", "puntos_angulo": 12}
+        )["metrica"]
+        blanda = elastic_sphere.resolver(
+            {"modo": "rapida", "ka": 1.0, "material": "tejido (casi fluido)", "puntos_angulo": 12}
+        )["metrica"]
+    print(f"\n  acero: {rapida['elementos_por_lambda_corte']:.1f} elems por λ_s · "
+          f"tejido: {blanda['elementos_por_lambda_corte']:.1f}")
+    assert rapida["elementos_por_lambda_corte"] > 20
+    assert blanda["elementos_por_lambda_corte"] < 1
+    assert blanda["lambda_corte_mm"] < blanda["elemento_mm"]

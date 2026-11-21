@@ -183,6 +183,13 @@ function esfPintar(r) {
   // Los materiales de bajo contraste tienen un error de MODELO conocido (D47), no de malla: el
   // cuerpo se mueve parcialmente con el fluido y la condición de traslación media nula deja de ser
   // exacta. Se dice acá en vez de subir el umbral del criterio hasta que entre.
+  if (m.elementos_por_lambda_corte < 4) {
+    esf$('esfSello').textContent +=
+      ` ATENCIÓN: la malla resuelve la onda de corte con sólo `
+      + `${m.elementos_por_lambda_corte.toFixed(1)} elementos por longitud de onda (λ_s = `
+      + `${m.lambda_corte_mm.toFixed(2)} mm, elemento ${m.elemento_mm.toFixed(3)} mm). El tamaño se`
+      + ` elige con la longitud de onda del FLUIDO; un sólido blando necesita malla propia más fina.`;
+  }
   if (m.contraste_impedancia < 2.5) {
     esf$('esfSello').textContent +=
       ` Contraste ${m.contraste_impedancia.toFixed(2)}× el agua: acá el cuerpo se mueve en parte CON`

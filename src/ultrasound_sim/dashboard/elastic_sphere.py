@@ -184,6 +184,15 @@ def resolver(datos: dict, trabajo=None) -> dict[str, Any]:
     # campo dispersado es muy débil
     error_abs = float(np.abs(fem[util] - exacto[util]).max())
 
+    # Resolución de la onda de CORTE: la malla se elige con la longitud de onda del fluido, pero un
+    # sólido blando (c_s chico) tiene λ_s = c_s/f corta y puede quedar sin resolver. Medido con grasa
+    # (c_s = 100): λ_s = 1.0 mm contra un elemento de 0.53 mm, o sea 1.9 elementos por λ, y el error
+    # sin restricción se queda en 353 % aunque el contraste sea casi 1. No es el mismo problema que
+    # el de la restricción y hay que decirlo aparte.
+    elemento = radio / modo["h_rel"]
+    lambda_s = solido.c_s / f
+    elementos_por_corte = lambda_s / elemento
+
     paso(0.9, "campo en el plano de propagación")
     mapa = _mapa_plano(mall, res["p_s"], modo["b_rel"] * radio, radio)
 
@@ -200,6 +209,8 @@ def resolver(datos: dict, trabajo=None) -> dict[str, Any]:
             "error_relativo": error, "error_absoluto": error_abs, "razon_amplitudes": razon,
             "ka": float(coef["ka"]), "contraste_impedancia": contraste,
             "restriccion_automatica": automatico,
+            "elementos_por_lambda_corte": float(elementos_por_corte),
+            "lambda_corte_mm": lambda_s * 1e3, "elemento_mm": elemento * 1e3,
             "radio_mm": radio * 1e3, "frecuencia_hz": f, "material": nombre_material,
             "n_puntos": int(util.sum()), "nodos": mall.n_nodes,
             "elementos_solidos": int(len(mall.tets_solid)),
