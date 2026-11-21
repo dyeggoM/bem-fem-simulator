@@ -51,7 +51,14 @@ Resumen de lo que está *cerrado con número medido*, no de lo que está escrito
   muestra el **campo dispersado** en el plano de propagación y sella contra Anderson
   (*2.94 % a ka = 1*, 9 261 nodos, 1.2 s). Se muestra el dispersado y no el total porque en el total
   manda la incidente y la perturbación desaparece en la escala de dB.
-  **Faran (1951) — EN CURSO, sin código en el repo (D44).** La serie de la esfera elástica (dos
+  **Faran (1951) — ENTREGADO (D45).** `analytic/faran.py`: la serie de la esfera **elástica**
+  sumergida (dos potenciales P/S, tres condiciones de borde, sistema 3×3 por orden), validada sin
+  tabla de referencia: condición unitaria a **1e-16**, teorema óptico al **1.0e-3 %**, límite de
+  fluido cayendo como `c_s²` (**1.62e-3 → 4.04e-4 → 1.01e-4**) y aproximación monótona al rígido
+  contra `sphere.py` (aluminio 5.2e-3 · acero 2.3e-3 · tungsteno 1.2e-3). 14 tests.
+  Lo que falta: el **solver FEM elástico 3D** (fase 6b) contra el cual compararla.
+
+  **Faran (1951) — la derivación, guardada (D44).** La serie de la esfera elástica (dos
   potenciales P/S, tres condiciones de borde en `r = a`, sistema 3×3 por orden) quedó a mitad de
   derivación: `u_r = Φ_r + n(n+1)Ψ/r²` y `u_θ = (Φ_θ + Ψ_rθ)/r` **verificados con sympy**, y las
   expresiones de `σ_rr`/`σ_rθ` derivadas pero sin armar. Se borró el módulo a medio escribir a

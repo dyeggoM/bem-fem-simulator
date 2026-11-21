@@ -1429,3 +1429,49 @@ formulación.
 **Nota de entorno.** La derivación usa `sympy`, que se instaló en el `.venv` para esto. **No** es
 dependencia de ejecución: `analytic/faran.py` cuando exista sólo necesitará `scipy.special`. Si en
 algún momento se agrega a `pyproject.toml`, va en las de desarrollo.
+
+## D45 — Faran entregado: la esfera elástica, validada sin tabla de referencia
+
+**Qué se entregó.** `analytic/faran.py`, la serie de ondas parciales de la esfera **elástica**
+sumergida: dos potenciales adentro (P y S), tres condiciones en `r = a` y sistema 3×3 por orden `n`.
+Es la contraparte de Anderson (esfera fluida, `sphere.py`).
+
+**Cómo se valida, ya que no hay tabla a mano.** Cinco chequeos, y los cinco son independientes de la
+tabla que no hay:
+
+- **Condición unitaria por coeficiente**, `Re Cₙ = −|Cₙ|²`: se cumple a **1e-16–1e-19**, o sea
+  precisión de máquina. Es el chequeo más fuerte porque es una relación cuadrática entre la parte
+  real y el módulo de cada coeficiente: no se cumple de casualidad.
+- **Teorema óptico**, `σ_ext = σ_sca`: desvío de **1.0e-3 %** (acero, hueso y aluminio), que es la
+  cuadratura de `σ_sca`, no la serie.
+- **Límite de fluido**: con `ρ` y `c_p` iguales al agua y `c_s` bajando, `|C₀|` cae
+  **1.62e-3 → 4.04e-4 → 1.01e-4** para `c_s` 100/50/25, o sea como `c_s²`.
+- **Aproximación al rígido**: contra la esfera rígida de `sphere.py` (otro camino, otra derivación),
+  aluminio (Z/Z₀ = 11.4) **5.2e-3**, acero (30.7) **2.3e-3**, tungsteno (66.9) **1.2e-3** — monótona
+  con la impedancia, como tiene que ser. A `ka = 0.2` el acero queda a **3.5e-5** del rígido.
+- **Residuos** de las tres condiciones de borde: **1e-15 / 1e-17 / 1e-18**.
+
+**Los tres errores propios que hubo que encontrar, porque los tres dan resultados plausibles.**
+
+1. **`n = 0` en las recurrencias de Bessel.** `jₙ′ = jₙ₋₁ − (n+1)jₙ/x` pide `j₋₁` cuando `n = 0`, y
+   `scipy` devuelve `inf`: el NaN se propagaba a todo el sistema y salía `sigma = nan`. Van aparte
+   (`j₀′ = −j₁`, `h₀′ = −h₁`).
+2. **Un `k₀` de más en la continuidad de desplazamiento.** La fila 1 decía
+   `k₀/(ρ₀ω²)·∂h/∂r` cuando `∂h/∂r` **ya** trae el factor `k₀`: duplicado, el sistema entero salía
+   como si cualquier esfera fuera rígida. El síntoma que lo delató fue el caso de control —un sólido
+   con la misma `ρ` y `c_p` que el agua **tiene** que dar `C ≈ 0` y daba `0.2125`, el valor rígido—;
+   el desajuste de tensiones era exactamente `k₀ = 419`. Que la condición unitaria y el teorema
+   óptico se cumplieran igual es lo importante: **los dos son propiedades estructurales del sistema y
+   los dos pasaban con la física mal**. No reemplazan a un caso límite con respuesta conocida.
+3. **Un residuo normalizado contra sí mismo.** Para `σ_rθ` usé `|Σσ_rθ|/Σ|σ_rθ|`, que da ~1 aunque el
+   residuo sea 1e-17 (los términos no se cancelan: cada uno ya es cero). Se normaliza contra la
+   presión y la tensión normal, que son las que el sistema iguala.
+
+**Lo que NO sirve como validación**, y quedó escrito antes de programar: comparar contra `sphere.py`
+en el límite `μ → 0` exacto. Es físicamente correcto pero numéricamente singular (`k_β → ∞`). El
+límite de fluido se testea con `c_s` chico pero finito, donde la convergencia se ve.
+
+**Lo que todavía no hay.** Esto es la **referencia**, no una simulación: no hay solver FEM elástico 3D
+que comparar contra ella (la fase 6b del plan). La serie sirve desde ya para dos cosas: dar la
+respuesta exacta cuando esté el solver, y verificar los límites del propio solver (rígido y fluido)
+antes de mirar un caso con contraste real.
