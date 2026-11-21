@@ -1382,3 +1382,50 @@ de alcanzar.
 editó (mismo objeto `ESC` en el cliente) y si no una losa por defecto; y el gráfico de sensibilidad
 tiene una guarda para no pisar el del barrido de frecuencia: sin ella, el último que corre borra al
 otro, que es un bug de UI que no da error, sólo muestra el gráfico equivocado.
+
+## D44 — Faran (1951): la derivación arrancada, y dónde se paró a propósito
+
+**Estado: no entregado.** Se empezó la serie de la esfera elástica y se **borró** el módulo a medio
+escribir en vez de dejarlo en el repo. Un coeficiente mal derivado no falla ruidosamente: da un campo
+que parece razonable y no coincide con nada, y descubrirlo después cuesta más que escribirlo bien de
+entrada. Esta ADR guarda lo que sí quedó verificado, para que la próxima sesión continúe en vez de
+reempezar.
+
+**Lo que quedó verificado con sympy** (no a mano). Descomposición
+`u = ∇Φ + ∇×(∇×(Ψ r̂))`, con `Φ = f(r)P(θ)` y `Ψ = g(r)Q(θ)`:
+
+    u_r = Φ_r + n(n+1)·Ψ/r²
+    u_θ = (Φ_θ + Ψ_rθ)/r
+
+Las dos salieron de sympy calculando el rotacional-rotacional en esféricas con simetría axial. El
+chequeo vale: a mano había puesto en duda el segundo término y estaba equivocado en la duda, no en la
+fórmula. Con `Ψ = 0` queda `u = ∇Φ` (`u_r = Φ_r`, `u_θ = Φ_θ/r`), que es el caso puramente
+longitudinal.
+
+**Lo que quedó derivado pero sin armar.** Las expresiones de `σ_rr` y `σ_rθ` en función de
+`f, f′, f″, P, P″` y `g, g′, g″, Q, Q″` (con `ε` en esféricas y `σ = λ·tr(ε)I + 2μ·ε`) salieron de
+sympy, pero están en la forma cruda: falta sustituir la ecuación de Legendre
+(`P″ + cotθ·P′ = −n(n+1)P`), quedarse con `f = jₙ(k_α r)`, `g = jₙ(k_β r)` y armar el sistema **3×3**
+por orden `n` para `(Aₙ, Bₙ, Cₙ)` con las tres condiciones en `r = a`:
+
+    1. u_r(sólido) = u_r(fluido),  con u_r(fluido) = (1/(ρ₀ω²))·∂p/∂r
+    2. σ_rr = −p
+    3. σ_rθ = 0
+
+**Cómo se valida cuando esté** — y esto sí está decidido, porque el problema de Faran es que no hay
+tabla de referencia a mano:
+
+1. **Teorema óptico**, que no necesita referencia: para un dispersor sin pérdidas,
+   `σ_ext = σ_sca`, con `σ_ext = (4π/k₀²)·Im f(0)` y `σ_sca = ∫|f|²dΩ`. Es conservación de energía: si
+   el sistema de coeficientes está mal, no cierra. Es el chequeo más fuerte disponible sin tabla.
+2. **Residuos de las tres condiciones** en `r = a` después de resolver: tienen que bajar a ~1e-12.
+3. **Contraste bajo**: con la esfera casi igual al fluido, `Cₙ → 0`.
+
+**Lo que NO sirve como validación, y por qué.** Comparar contra `sphere.py` en el límite `μ → 0`
+—que es el límite *físico* correcto, el sólido se vuelve fluido— es **numéricamente singular**:
+`k_β = ω/c_s → ∞` y `jₙ(k_β a)` oscila sin límite. La comparación mediría el ruido del límite, no la
+formulación.
+
+**Nota de entorno.** La derivación usa `sympy`, que se instaló en el `.venv` para esto. **No** es
+dependencia de ejecución: `analytic/faran.py` cuando exista sólo necesitará `scipy.special`. Si en
+algún momento se agrega a `pyproject.toml`, va en las de desarrollo.

@@ -51,9 +51,15 @@ Resumen de lo que está *cerrado con número medido*, no de lo que está escrito
   muestra el **campo dispersado** en el plano de propagación y sella contra Anderson
   (*2.94 % a ka = 1*, 9 261 nodos, 1.2 s). Se muestra el dispersado y no el total porque en el total
   manda la incidente y la perturbación desaparece en la escala de dB.
-  Queda **Faran (1951)** para la esfera elástica: es el paso siguiente y ya tiene su referencia, pero
-  la serie es bastante más larga (dos potenciales P/S y tres condiciones de borde) y conviene
-  escribirla con su derivación, no de memoria.
+  **Faran (1951) — EN CURSO, sin código en el repo (D44).** La serie de la esfera elástica (dos
+  potenciales P/S, tres condiciones de borde en `r = a`, sistema 3×3 por orden) quedó a mitad de
+  derivación: `u_r = Φ_r + n(n+1)Ψ/r²` y `u_θ = (Φ_θ + Ψ_rθ)/r` **verificados con sympy**, y las
+  expresiones de `σ_rr`/`σ_rθ` derivadas pero sin armar. Se borró el módulo a medio escribir a
+  propósito: un coeficiente mal derivado no falla ruidosamente. La validación ya está decidida —el
+  **teorema óptico** (`σ_ext = σ_sca`), que no necesita tabla de referencia, más los residuos de las
+  tres condiciones y el límite de contraste bajo—. Lo que NO sirve como validación es comparar
+  contra `sphere.py` con `μ → 0`: ese límite es físicamente correcto pero numéricamente singular
+  (`k_β → ∞`).
 - **Tensor elástico de la cápsula ótica — no hay dato citable.** Peterson y Dechow (2003) dan
   propiedades direccionales de cortical externa del temporal, no de la cápsula. Se sigue con isótropo
   `VERIFY` y los parámetros expuestos en la UI.
