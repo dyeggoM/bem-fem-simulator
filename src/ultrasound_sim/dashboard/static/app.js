@@ -64,6 +64,38 @@ function pedir() {
 }
 
 /* ---------------------------------------------------------------------------------------------
+ * Configuración compartida entre las vistas.
+ *
+ * La idea del tablero es un solo problema: las mismas fuentes, la misma frecuencia, el mismo medio, y
+ * los métodos resolviéndolo. Antes cada pestaña arrancaba con su propia frecuencia (campo 250 kHz,
+ * escena y 3D 100 kHz) y comparar dos vistas obligaba a igualarlas a mano.
+ *
+ * `syncFrecuencia` copia el valor a los controles de las otras vistas y a su estado interno. NO
+ * relanza las corridas: cada vista resuelve cuando se la abre o cuando el usuario aprieta su botón,
+ * así que cambiar la frecuencia en campo no lanza tres solves.
+ * ------------------------------------------------------------------------------------------- */
+
+window.syncFrecuencia = function syncFrecuencia(khz, origen) {
+  const valor = Math.round(Number(khz));
+  if (!Number.isFinite(valor) || valor <= 0) return;
+  const mapa = [
+    ['campo', 'freq', 'freqVal'],
+    ['escena', 'escFreq', 'escFreqVal'],
+    ['volumen', 'volFreq', 'volFreqVal'],
+  ];
+  for (const [vista, idControl, idEtiqueta] of mapa) {
+    if (vista === origen) continue;
+    const control = document.getElementById(idControl);
+    if (control) control.value = String(valor);
+    const etiqueta = document.getElementById(idEtiqueta);
+    if (etiqueta) etiqueta.textContent = `${valor} kHz`;
+    if (vista === 'campo') S.freq = valor;
+    if (vista === 'escena' && typeof ESC !== 'undefined') ESC.freq = valor;
+    if (vista === 'volumen' && typeof VOL !== 'undefined') VOL.freq = valor;
+  }
+};
+
+/* ---------------------------------------------------------------------------------------------
  * Barra de acciones fija al pie del panel.
  *
  * Las vistas tienen muchas secciones de configuración y el botón que hace correr la simulación
@@ -711,6 +743,9 @@ const enlazar = (id, clave, escala = 1) => {
   });
 };
 enlazar('freq', 'freq');
+$('freq').addEventListener('input', () => {
+  if (typeof window.syncFrecuencia === 'function') window.syncFrecuencia(S.freq, 'campo');
+});
 enlazar('nEl', 'n');
 enlazar('ap', 'd');
 enlazar('fx', 'fx');

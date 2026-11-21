@@ -347,3 +347,33 @@ body.tour-abierto .app { filter: none; }
   border-left: 2px solid var(--warn);
 }
 .aviso-ux[hidden] { display: none; }
+
+
+/* ---------- vistas "para el futuro" ----------
+   Están fuera del flujo de trabajo actual: el objetivo es un problema de fuentes que BEM y FEM
+   resuelvan igual, y estas pestañas son otro problema. Se dejan a la vista y deshabilitadas para que
+   no parezcan rotas ni desaparecidas: el rótulo dice por qué. */
+.proximamente { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin: -4px 0 14px; }
+.proximamente span { flex: 0 0 100%; font-size: 9.5px; color: var(--dim);
+  text-transform: uppercase; letter-spacing: .05em; margin-bottom: 1px; }
+.vista-btn.mini {
+  font-size: 10px; padding: 4px 7px; border: 1px dashed #3a4450; border-radius: 5px;
+  background: transparent; color: #9aa5b1; cursor: not-allowed; opacity: .9;
+  white-space: nowrap; flex: 0 0 auto; text-align: center;
+}
+
+
+/* Una vista que existe en el código pero todavía no se sostiene se muestra deshabilitada y con la
+   etiqueta a la vista. Es preferible a esconderla (parece que no existe) o a mostrarla (parece que
+   funciona). */
+.vista-btn.en-desarrollo {
+  opacity: .62; cursor: not-allowed;
+  /* la etiqueta "en desarrollo" no entra en una línea: se deja envolver en vez de recortarla con
+     puntos suspensivos (se veía "FEM · fuentes …" y no se entendía por qué estaba apagado) */
+  white-space: normal; line-height: 1.25;
+}
+.vista-btn.en-desarrollo .etiqueta-dev {
+  display: inline-block; margin-left: 4px; padding: 1px 4px; border-radius: 3px; font-size: 8.5px;
+  text-transform: uppercase; letter-spacing: .04em; background: rgba(210, 153, 34, .16);
+  color: #d29922; vertical-align: middle;
+}

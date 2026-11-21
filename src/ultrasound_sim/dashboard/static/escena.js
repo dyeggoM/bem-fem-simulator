@@ -320,6 +320,7 @@ document.querySelectorAll('.vista-btn').forEach((b) => {
 
 esc$('escFreq').addEventListener('input', (e) => {
   ESC.freq = parseInt(e.target.value, 10);
+  if (typeof window.syncFrecuencia === 'function') window.syncFrecuencia(ESC.freq, 'escena');
   esc$('escFreqVal').textContent = `${ESC.freq} kHz`;
 });
 esc$('escPpw').addEventListener('input', (e) => {

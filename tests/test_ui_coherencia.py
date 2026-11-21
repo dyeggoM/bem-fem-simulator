@@ -24,7 +24,9 @@ def html() -> str:
 def test_cada_boton_de_vista_tiene_su_panel(html):
     """Un `data-vista` sin `vista<X>Main` hace que el click no muestre nada: el usuario ve la pestaña
     anterior y cree que la app se colgó (pasó con la vista de criterios)."""
-    vistas = re.findall(r'data-vista="([a-z0-9_]+)"', html)
+    # los botones deshabilitados (FEM en desarrollo, y las de «para el futuro») no tienen panel: no
+    # se pueden abrir. Se excluyen del chequeo.
+    vistas = re.findall(r'data-vista="([a-z0-9_]+)"(?![^>]*\bdisabled)', html)
     ids = set(re.findall(r'id="([A-Za-z0-9_]+)"', html))
     assert vistas, "no se encontró ningún botón de vista"
     faltan = []
@@ -151,6 +153,28 @@ def test_los_estaticos_no_se_cachean():
     fuente = (Path(__file__).resolve().parents[1] / "src" / "ultrasound_sim" / "dashboard"
               / "server.py").read_text(encoding="utf-8")
     assert "no-store" in fuente
+
+
+def test_el_nav_muestra_el_problema_y_deja_lo_demas_para_el_futuro():
+    """D54: el tablero pasa a un solo problema (BEM de fuentes, con FEM en desarrollo) y las otras
+    cuatro vistas quedan marcadas «para el futuro». La que no está validada se muestra DESHABILITADA y
+    con la etiqueta, no escondida ni habilitada."""
+    html = (ESTATICOS / "index.html").read_text(encoding="utf-8")
+    assert 'data-vista="fem"' in html and "en-desarrollo" in html
+    assert 'class="proximamente"' in html
+    for vista in ("cochlea", "barridos", "esfera", "criterios"):
+        assert f'data-vista="{vista}" disabled' in html, f"{vista} debería estar deshabilitada"
+    # el botón de FEM tiene que decir por qué
+    assert "etiqueta-dev" in html
+
+
+def test_la_frecuencia_se_sincroniza_entre_vistas():
+    """Campo arrancaba en 250 kHz y escena/3D en 100 kHz: comparar obligaba a igualarlas a mano."""
+    js = (ESTATICOS / "app.js").read_text(encoding="utf-8")
+    assert "syncFrecuencia" in js
+    for archivo in ("escena.js", "volumen.js"):
+        fuente = (ESTATICOS / archivo).read_text(encoding="utf-8")
+        assert "syncFrecuencia" in fuente, f"{archivo} no propaga la frecuencia"
 
 
 def test_las_fuentes_movidasNo_se_descartan_al_volver_al_arreglo():
