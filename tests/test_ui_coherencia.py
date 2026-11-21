@@ -168,6 +168,19 @@ def test_el_nav_muestra_el_problema_y_deja_lo_demas_para_el_futuro():
     assert "etiqueta-dev" in html
 
 
+def test_la_tabla_de_fuentes_scrollea_sola_y_muestra_cuantas_hay():
+    """Con 32 fuentes la tabla media 911 px, mas alta que la ventana: habia que arrastrar todo el panel
+    para llegar a la fuente 30. Ahora tiene scroll propio y encabezado fijo, y un contador que dice
+    cuantas hay y cuanto miden de apertura."""
+    html = (ESTATICOS / "index.html").read_text(encoding="utf-8")
+    css = (ESTATICOS / "style.css").read_text(encoding="utf-8")
+    js = (ESTATICOS / "app.js").read_text(encoding="utf-8")
+    assert 'class="tabla-scroll"' in html
+    assert 'id="srcCuenta"' in html
+    assert ".tabla-scroll" in css and "position: sticky" in css
+    assert "$('srcCuenta')" in js and "apertura" in js
+
+
 def test_la_frecuencia_se_sincroniza_entre_vistas():
     """Campo arrancaba en 250 kHz y escena/3D en 100 kHz: comparar obligaba a igualarlas a mano."""
     js = (ESTATICOS / "app.js").read_text(encoding="utf-8")

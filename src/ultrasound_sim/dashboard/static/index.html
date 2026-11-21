@@ -91,11 +91,14 @@
     <section id="ctrlManual" hidden>
       <p class="hint">Cada fila es una apertura sobre el baffle. Posición y ancho en mm,
       fase en radianes (0 = todas en fase).</p>
-      <table class="fuentes">
-        <colgroup><col class="c-y"><col class="c-ancho"><col class="c-amp"><col class="c-fase"><col class="c-del"></colgroup>
-        <thead><tr><th>y</th><th>ancho</th><th>amp</th><th>fase</th><th></th></tr></thead>
-        <tbody id="srcBody"></tbody>
-      </table>
+      <p class="cuenta-fuentes" id="srcCuenta">— fuentes</p>
+      <div class="tabla-scroll">
+        <table class="fuentes">
+          <colgroup><col class="c-y"><col class="c-ancho"><col class="c-amp"><col class="c-fase"><col class="c-del"></colgroup>
+          <thead><tr><th>y</th><th>ancho</th><th>amp</th><th>fase</th><th></th></tr></thead>
+          <tbody id="srcBody"></tbody>
+        </table>
+      </div>
       <div class="fila">
         <button class="btn mini" id="btnAdd">+ fuente</button>
         <button class="btn mini" id="btnArray">← desde arreglo</button>

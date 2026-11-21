@@ -654,6 +654,20 @@ function pintarFuentes() {
   const cuerpo = $('srcBody');
   cuerpo.innerHTML = '';
   (S.fuentes || []).forEach((f, i) => cuerpo.appendChild(filaFuente(f, i)));
+  // Contador: con 32 fuentes la tabla scrollea y el número es lo único que dice cuántas hay.
+  const cuenta = $('srcCuenta');
+  if (cuenta) {
+    const fs = S.fuentes || [];
+    if (!fs.length) {
+      cuenta.innerHTML = 'sin fuentes';
+    } else {
+      const ys = fs.map((f) => f.y);
+      const apertura = (Math.max(...ys) + fs[fs.length - 1].width / 2)
+        - (Math.min(...ys) - fs[0].width / 2);
+      cuenta.innerHTML = `<b>${fs.length}</b> fuente${fs.length === 1 ? '' : 's'} · `
+        + `apertura ${(apertura * 1e3).toFixed(1)} mm`;
+    }
+  }
 }
 
 function generarDesdeArreglo() {
