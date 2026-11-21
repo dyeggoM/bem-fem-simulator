@@ -60,6 +60,18 @@ asas sólo existían en modo «fuentes»; arrastrar en modo arreglo no hacía na
 - **Los estáticos se sirven con `no-store`.** Con `no-cache` y sin ETag, el navegador podía seguir
   usando el JS viejo y un arreglo de UI "no surtía efecto".
 
+## Mover fuentes y volver al arreglo
+
+Si movés fuentes en «fuentes» y volvés a la pestaña «arreglo», **las posiciones se conservan**: el
+campo se sigue calculando con esas fuentes y las asas y los marcadores se dibujan donde se está
+calculando. Un aviso amarillo sobre el mapa lo dice, y aclara que sólo «← desde arreglo» vuelve al
+arreglo de parámetros (que espacia los elementos por igual y por eso descarta lo movido).
+
+Antes no era así y era una pérdida silenciosa por tres lados: tocar la cantidad de elementos o la
+apertura **borraba** las fuentes movidas, la pestaña decidía qué se calculaba (en «arreglo» se
+ignoraba lo movido), y las asas seguían dibujándose en las posiciones del arreglo aunque el campo
+viniera de las fuentes.
+
 ## Flujos de trabajo
 
 **Comparar dos configuraciones.** En `campo`: *fijar referencia* congela el campo actual; cambiá lo

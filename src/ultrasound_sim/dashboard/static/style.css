@@ -337,3 +337,13 @@ body.tour-abierto .app { filter: none; }
 /* El mapa del dispersor es radial: con un contenedor cuadrado el cilindro sale circular sin usar
    `scaleanchor` (que rompe con divs angostos, D27). `aspect-ratio` no afecta a Plotly, sólo al div. */
 #mapaDisp { aspect-ratio: 1 / 1; }
+
+
+/* Aviso de UX dentro del área de la vista: dice qué pasó con las fuentes movidas sin tapar el mapa y
+   sin que lo pise la línea de estado (esa la reescribe cada corrida). */
+.aviso-ux {
+  margin: 0; padding: 7px 10px; border-radius: 6px; font-size: 11px; line-height: 1.45;
+  color: #e3d3a1; background: rgba(210, 153, 34, 0.10);
+  border-left: 2px solid var(--warn);
+}
+.aviso-ux[hidden] { display: none; }
