@@ -1966,3 +1966,44 @@ en solitario para tener el veredicto.
 dipolar y separarla del resto del campo. Con la tabla de arriba, la hipótesis a testear es que la
 traslación sale bien y el error está en el resto del campo (que es lo que el contraste moderado
 amplifica). Eso decide si hay que refinar el sólido, el fluido, o cambiar de formulación.
+
+## D50 — La traslación dipolar valida `3/(2g+1)` al 1-2 %, y la restricción la anula
+
+**El test.** En el límite de Rayleigh (`k₀a ≪ 1`) la amplitud de oscilación del cuerpo tiene forma
+cerrada: `|u_cm|/|u_i| = 3/(2g+1)` con `g = ρ_sólido/ρ_fluido` (Bruus 2012, ecs. 22 y 26). Es una
+predicción **analítica, exacta en ese límite e independiente de la malla** — no hay nada que ajustar.
+Se corre a `k₀a = 0.1` (`a = 0.239 mm`, dominio 4a, `h = a/4.5`) y se extrae el desplazamiento de
+cuerpo rígido proyectando sobre el modo de traslación **con la matriz de masa**
+(`a_d = t_dᵀMu / t_dᵀMt_d`), no promediando nodos: la malla no está uniformemente repartida.
+
+| material | g | `3/(2g+1)` | total+restricción | total | dispersada |
+|---|---|---|---|---|---|
+| acero | 7.80 | 0.1807 | **0.0000** | 0.1772 | 0.1772 |
+| aluminio | 2.70 | 0.4688 | **0.0000** | 0.4627 | 0.4627 |
+| hueso | 1.95 | 0.6122 | **0.0001** | 0.6064 | 0.6064 |
+| tejido `c_s=30` | 1.05 | 0.9677 | **10.09** | 0.9670 | 0.9670 |
+
+**Tres lecturas, las tres importantes.**
+
+1. **Las dos formulaciones correctas dan la traslación al 1-2 %.** El acoplamiento fluido-sólido y la
+   masa añadida están bien. El error del 19-44 % a `ka = 1` **no viene de acá**.
+
+2. **La restricción de traslación media nula no "aproxima" la traslación: la pone en cero.** Donde la
+   física pide 0.18 (acero), 0.47 (aluminio) o 0.61 (hueso), devuelve 0.0000 / 0.0000 / 0.0001. Es la
+   confirmación cuantitativa de D48: no es una condición de gauge inofensiva, es suprimir un grado de
+   libertad que oscila de verdad. Y en el caso casi transparente **amplifica**: 10.09 contra 0.9677,
+   un factor 10 de dispersión falsa.
+
+3. **La formulación dispersada reproduce la traslación exactamente** (idéntica a la total sin
+   restricción, hasta el dígito que se imprime). El operador de contraste no introduce sesgo en la
+   respuesta dipolar, que es justo lo que se le pedía.
+
+**Consecuencia para el siguiente paso.** Como la traslación está bien, el 19-44 % a `ka = 1` es un
+problema de **resolución del resto del campo**: la estructura angular/radial del dispersado para un
+objeto de tamaño comparable a la longitud de onda. Eso se ataca refinando (y midiendo si converge), no
+cambiando la formulación. Se lanza la convergencia en `h` para el acero con la dispersada.
+
+**Y una consecuencia para el sello.** El criterio `volumen_esfera_elastica` sigue apoyado en la
+formulación total+restricción, cuya traslación es 0 por construcción. A `ka = 0.1` eso se ve como un
+error del 100 % en la traslación y a `ka = 1` se disimula en el 4.29 %. Queda calificado: **el sello no
+distingue "acertó" de "canceló"**, y eso es una limitación del criterio, no del método.

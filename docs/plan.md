@@ -388,9 +388,15 @@ agrega a la librería con su criterio, después se enchufa.
   **Consecuencia honesta**: el 4.29 % está en parte **cancelado** con el error de discretización, no
   ganado. El default sigue en la total (`fijar_rigidos=True`) porque es la sellada, y el criterio queda
   calificado a metales.
-  *Siguiente paso*: contrastar la **traslación** de la formulación dispersada contra
-  `v/v_inc = 3/(2g+1)` (Bruus 2012) en `k₀a ≪ 1` antes de refinar nada — eso dice si el problema es el
-  acoplamiento con un contorno que se mueve o el resto del campo.
+  *Traslación contrastada (D50), y el resultado es limpio*: a `k₀a = 0.1` las dos formulaciones
+  correctas dan `|u_cm|/|u_i|` al **1-2 %** de `3/(2g+1)` (acero 0.1772 vs 0.1807; hueso 0.6064 vs
+  0.6122). El acoplamiento fluido-sólido y la masa añadida están bien ⇒ **el 19-44 % a `ka = 1` es
+  resolución del resto del campo, no de la física**. Y la restricción no "aproxima" la traslación: la
+  pone en **0.0000** donde la ley pide 0.18, y en el caso casi transparente la **amplifica 10×**
+  (10.09 contra 0.9677).
+  *Siguiente paso*: convergencia en `h` de la dispersada en acero a `ka = 1` para confirmar que el
+  19.49 % baja al refinar. Si no baja, el sospechoso es la estructura angular (elementos P1 rectos
+  sobre una esfera facetada), no la formulación.
   **Y no es una mejora opcional (D48)**: Sim-Datos confirmó que la premisa de la restricción es
   **falsa** — una onda plana sí ejerce fuerza armónica de primer orden sobre el cuerpo, y Faran
   **incluye** ese *rebound* traslacional (Feuillade y Clay 1999, JASA 106:553, §IV). La amplitud
