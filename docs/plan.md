@@ -470,7 +470,12 @@ agrega a la librería con su criterio, después se enchufa.
   coeficiente analítico de tres medios; (b) caso **transparente** (placa con las propiedades del agua)
   con reflexión **< 1e-6** relativa; (c) un STL cerrado de una esfera malla y da el mismo campo que la
   esfera analítica ya validada, dentro del error de esa malla; (d) un STL **abierto** falla con mensaje
-  explícito; (e) rotar la placa 90° mueve la transmisión como `cos θ` en la ventana de validez.
+  explícito; (e) rotar la placa 90° mueve la transmisión como `cos θ` en la ventana de validez;
+  (f) la cadena piel + hueso modelada a **500 kHz** cae dentro de la **transmisión craneal medida de
+  31 ± 7 % parietal** (Riis, Webb y Kubanek 2022) — es el único punto experimental citable en la banda y
+  el que decide si el acople multicapa sirve.
+  *Materiales*: `docs/materiales-cadena.md`, con cita por valor y **NC** donde no hay fuente. La mayoría
+  son parámetros de modelado publicados, no mediciones de cada tejido, y la UI tiene que decirlo.
 
 - **U10 — Arreglos de fuentes desde archivo. PENDIENTE.** `data/transducers.toml` existe y la UI **no lo
   usa**: cargar un arreglo planeado obliga a tipear 32 filas.
