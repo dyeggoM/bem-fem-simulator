@@ -27,7 +27,7 @@ import numpy as np
 from .. import cochlea, materials as mats
 from . import bem_field
 from . import field as campo
-from . import cochlea_field, scatterer, scene
+from . import cochlea_field, jobs, scatterer, scene, sweeps
 
 ESTATICOS = Path(__file__).resolve().parent / "static"
 MATERIALES = {
@@ -228,6 +228,26 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(calcular_coclea(consulta))
             except (ValueError, KeyError) as exc:
                 self._error(str(exc))
+        elif partes.path == "/api/jobs":
+            self._json({"jobs": jobs.COLA.listar()})
+        elif partes.path.startswith("/api/jobs/"):
+            job_id = partes.path[len("/api/jobs/"):].strip("/")
+            estado = jobs.COLA.estado(job_id)
+            if estado is None:
+                self._error(f"job desconocido: {job_id}", HTTPStatus.NOT_FOUND)
+            else:
+                self._json(estado)
+        elif partes.path == "/api/sweeps":
+            self._json({
+                "barridos": [{
+                    "id": "sensibilidad",
+                    "nombre": "sensibilidad de la cóclea (OAT)",
+                    "puntos": sweeps.total_de_puntos(),
+                    "estimado_s": sweeps.estimar_demora_s(),
+                    "referencia": "D30: espesor 53.11 %, c_p 16.06 %, atenuación 9.60 %, "
+                                  "c_s 8.22 %, ρ 1.03 %, Z_r 0.28 %",
+                }],
+            })
         elif partes.path == "/api/field":
             consulta = {k: v[0] for k, v in parse_qs(partes.query).items()}
             for clave in ("nx", "ny", "n_elements"):
@@ -242,9 +262,19 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         ruta = urlparse(self.path).path
+        if ruta.startswith("/api/jobs/") and ruta.endswith("/cancel"):
+            job_id = ruta[len("/api/jobs/"):-len("/cancel")].strip("/")
+            estado = jobs.COLA.cancelar(job_id)
+            if estado is None:
+                self._error(f"job desconocido: {job_id}", HTTPStatus.NOT_FOUND)
+            else:
+                self._json(estado)
+            return
+
         if ruta not in ("/api/field", "/api/cochlea", "/api/scene/solve", "/api/scene/cost",
                         "/api/scatterer/solve", "/api/scatterer/cost",
-                        "/api/cochlea/field", "/api/cochlea/field/cost"):
+                        "/api/cochlea/field", "/api/cochlea/field/cost",
+                        "/api/jobs/sensibilidad"):
             self._error("no encontrado", HTTPStatus.NOT_FOUND)
             return
         largo = int(self.headers.get("Content-Length") or 0)
@@ -272,6 +302,9 @@ class Handler(BaseHTTPRequestHandler):
                 respuesta = cochlea_field.estimar_cochlea(cuerpo)
             elif ruta == "/api/cochlea/field":
                 respuesta = cochlea_field.resolver_cochlea(cuerpo)
+            elif ruta == "/api/jobs/sensibilidad":
+                trabajo = sweeps.enviar_barrido(jobs.COLA)
+                respuesta = {"ok": True, "job": trabajo.a_dict()}
             else:
                 respuesta = calcular(cuerpo)
             self._json(respuesta)

@@ -428,6 +428,64 @@ def test_api_cochlea_field_emite_json_sin_complejos(servidor):
     assert cuerpo["detalle"]["window_impedance"]["im"] == 0.0
 
 
+# ------------------------------------------------------------------ barridos y cola (U5)
+
+
+def test_api_sweeps_lista_el_barrido_y_su_estimacion(servidor):
+    _estado, cuerpo = _get(servidor + "/api/sweeps")
+    datos = json.loads(cuerpo)
+    barrido = datos["barridos"][0]
+    assert barrido["id"] == "sensibilidad"
+    assert barrido["puntos"] > 10
+    assert barrido["estimado_s"] > 0
+    assert "D30" in barrido["referencia"]
+
+
+def test_api_jobs_lanza_y_se_sigue_por_id(servidor):
+    """El ciclo completo por HTTP: encolar, consultar estado, y que el id desconocido dé 404."""
+    datos = json.dumps({}).encode("utf-8")
+    req = urllib.request.Request(
+        servidor + "/api/jobs/sensibilidad", data=datos,
+        headers={"content-type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=30) as r:
+        lanzado = json.loads(r.read())
+    job_id = lanzado["job"]["id"]
+    assert lanzado["ok"] is True
+    assert lanzado["job"]["estado"] in ("en_cola", "corriendo")
+
+    with urllib.request.urlopen(f"{servidor}/api/jobs/{job_id}", timeout=30) as r:
+        estado = json.loads(r.read())
+    assert estado["id"] == job_id
+    assert 0.0 <= estado["progreso"] <= 1.0
+
+    # se cancela para no dejar 90 s de barrido colgados en el suite
+    req = urllib.request.Request(f"{servidor}/api/jobs/{job_id}/cancel", data=b"{}",
+                                 headers={"content-type": "application/json"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        cancelado = json.loads(r.read())
+    assert cancelado["estado"] in ("cancelado", "corriendo")
+
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        urllib.request.urlopen(f"{servidor}/api/jobs/noexiste", timeout=10)
+    assert exc.value.code == 404
+
+
+def test_api_jobs_lista_todos(servidor):
+    _estado, cuerpo = _get(servidor + "/api/jobs")
+    assert "jobs" in json.loads(cuerpo)
+
+
+def test_la_pagina_expone_la_vista_de_barridos():
+    html = (ESTATICOS / "index.html").read_text(encoding="utf-8")
+    for pieza in ('data-vista="barridos"', 'id="vistaBarridos"', 'id="barProgreso"',
+                  'id="barRanking"', 'id="btnBarrido"', 'barridos.js'):
+        assert pieza in html, f"falta {pieza} en index.html"
+    js = (ESTATICOS / "barridos.js").read_text(encoding="utf-8")
+    for pieza in ("/api/jobs/", "/api/sweeps", "function barPintar", "comparacion"):
+        assert pieza in js, f"falta {pieza} en barridos.js"
+
+
 def test_la_pagina_expone_la_vista_de_cochlea():
     html = (ESTATICOS / "index.html").read_text(encoding="utf-8")
     for pieza in ('data-vista="cochlea"', 'id="vistaCochlea"', 'id="mapaCochlea"',

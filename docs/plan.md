@@ -280,11 +280,15 @@ agrega a la librería con su criterio, después se enchufa.
   Rayleigh-Sommerfeld, R/T estratificado 2.91 %/2.11 %— con el conteo de nodos y el tiempo a la vista.
   *Bloqueante*: acá sí hace falta cola de trabajos (`POST` devuelve job id, el front consulta estado y
   progreso, hay cancelar) y un tope duro de elementos con mensaje claro en vez de colgar la máquina.
-- **U5 — Barridos y comparación.** Barrido de frecuencia, de espesor o de número de elementos sobre
-  la escena actual, en cola, con progreso, CSV y superposición de curvas de varias corridas.
-  *Aceptación*: repetir el barrido de 15 configuraciones de D25 desde la UI y que el CSV coincida con
-  `out/focusing_study.csv` dentro de la tolerancia de malla; y el barrido de sensibilidad de D30
-  (85 puntos) con los mismos pesos.
+- **U5 — Barridos con cola, progreso y cancelación. ENTREGADA (sensibilidad).** `dashboard/jobs.py`
+  (cola FIFO, un worker, cancelación cooperativa, retención acotada) + `dashboard/sweeps.py` (barrido
+  OAT de la cóclea) + pestaña "barridos" con barra de progreso, cancelar y ranking en vivo.
+  *Aceptación cumplida*: el barrido de 31 puntos reproduce el ranking de D30 **exacto** — espesor
+  *53.11 %*, c_p *16.06 %*, atenuación *9.60 %*, c_s *8.22 %*, ρ *1.03 %*, Z_r *0.28 %* (peor desvío
+  *1.8 %*), en *89 s* con `t_interior` base 0.53187. Los α de las tres leyes se piden a
+  `attenuation.py` (3.777 / 6.243 / 15.312 Np/m a 100 kHz), no se escriben a mano.
+  Falta de esta fase: barrido de frecuencia (necesita la definición de Q, ver D37), el de las 15
+  configuraciones de D25 y la exportación a CSV desde la UI.
 - **U6 — Trazabilidad.** Cada resultado lleva su "sello": qué criterio, contra qué número de
   referencia y con cuánto margen. Un resultado sin sello se marca como *no verificado*.
   *Aceptación*: la UI rechaza mostrar un número como validado si el test que lo respalda no corrió

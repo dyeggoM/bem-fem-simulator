@@ -1078,3 +1078,43 @@ rompía el mapa): en D27 el `div` colapsaba a 2 px de alto y Plotly fallaba; con
 (271 px medidos) el anclaje funciona y el disco sale circular, que con dos circunferencias
 concéntricas no es cosmético. Si en algún layout vuelve a colapsar, el síntoma va a ser
 "Something went wrong with axis scaling" y la salida es sacar el anclaje, no tocar el solver.
+
+## D37 — U5: la cola de trabajos, el barrido que reproduce D30, y el Q que no se mide
+
+**Qué se entregó.** Una cola de trabajos en proceso (`dashboard/jobs.py`) con un solo worker,
+progreso, cancelación cooperativa y retención acotada a 20 jobs; el barrido one-at-a-time de la
+cóclea como trabajo de esa cola (`dashboard/sweeps.py`); y una pestaña "barridos" que lanza, sigue el
+progreso, cancela y dibuja el ranking contra la referencia.
+
+**Aceptación cumplida, y de la forma más exigente**: el barrido de la UI reproduce el ranking de D30
+*casi dígito a dígito* —espesor 53.11 % (D30 53.11), c_p 16.06 (16.06), atenuación 9.60 (9.60), c_s
+8.22 (8.22), ρ 1.03 (1.03), Z_r 0.28 (0.28)— con peor desvío 1.8 % y `t_interior` base 0.53187, en
+89 s. La única diferencia de fondo con el script es la grilla 2D espesor × atenuación, que no cambia
+el ranking.
+
+**Tres cosas que se arreglaron mirando el resultado, no el código.**
+
+- **Los puntos tienen que ser los del script.** Con 7 espesores (extremos 1 y 7 mm) el rango salía
+  52.53 % en vez de 53.11: `t_interior` no es monótona en el espesor (D24/D29) y con 13 puntos
+  aparece un extremo interior que con 7 se pierde. Y Z_r estaba en (0.6, 1.0, 1.4) en vez de
+  (0.5, 1.0, 2.0): 0.17 % contra 0.28 %. Los puntos son parte del resultado.
+- **Sin comparación no se puede declarar éxito.** El primer sello decía "reproduce D30, peor desvío
+  0.0 %" con la tabla vacía: `Math.max(...[], 0)` da 0. Ahora, si no hay comparación, lo dice.
+- **Un job cancelado no es un job fallido.** El worker levanta al ver la bandera y el `except`
+  genérico lo marcaba como `error`. La cola ahora distingue: si la bandera estaba puesta, `cancelado`.
+  Igual con la retención: podaba sólo al enviar, así que una ráfaga de jobs en cola dejaba el
+  diccionario por encima del tope para siempre; ahora poda también al terminar.
+
+**Por qué no se mide Q todavía.** Es la métrica con la que D29 mostró que la membrana rompe la
+resonancia de la cavidad (287 → <5), y era el compromiso de esta fase. No se hace porque falta la
+**definición**, no el código: no hay en el repo la función que la calculó, y "Q" puede ser el ancho de
+−3 dB en `|p|` o en `|p|²`, sobre el pico de `t_interior` dentro de qué banda. Peor: un Q de 287
+implica un ancho relativo de 0.35 %, así que un barrido de 13 puntos en ±8 % **no lo puede
+resolver** — haría falta refinamiento adaptativo y del orden de 100 solves. Inventar el número
+habría sido lo más fácil y lo más inútil. Queda como el primer trabajo de cuando se fije la
+definición (probablemente con Diego: es una decisión de métrica, no de código).
+
+**Decisión de diseño de la cola.** Un solo worker: cada solve ya usa varios núcleos vía BLAS, así
+que dos barridos en paralelo no aceleran nada y ensucian los tiempos. La cancelación es cooperativa
+—se consulta entre pasos— porque interrumpir dentro de SuperLU no es posible sin threads anidados, y
+no vale la pena para esperar 2 s.

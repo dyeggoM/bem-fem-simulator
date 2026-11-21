@@ -21,6 +21,7 @@
       <button class="vista-btn" data-vista="escena">escena FEM</button>
       <button class="vista-btn" data-vista="dispersor">dispersor BEM</button>
       <button class="vista-btn" data-vista="cochlea">cóclea</button>
+      <button class="vista-btn" data-vista="barridos">barridos</button>
     </nav>
 
     <div id="vistaCampo">
@@ -336,6 +337,31 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
       <p class="pie" id="cocFieldEstado">sin resolver</p>
     </div><!-- /vistaCochlea -->
 
+    <div id="vistaBarridos" hidden>
+      <section>
+        <label>Barridos en cola</label>
+        <p class="hint">Las corridas largas van a una cola con progreso y cancelación: un barrido
+        son decenas de solves y no puede dejar el navegador colgado.</p>
+      </section>
+
+      <section>
+        <label>Sensibilidad de la cóclea <span class="mini">(one-at-a-time)</span></label>
+        <p class="hint" id="barInfo">—</p>
+        <div class="fila-botones">
+          <button class="btn" id="btnBarrido">lanzar barrido</button>
+          <button class="btn mini" id="btnCancelar" disabled>cancelar</button>
+        </div>
+        <div class="progreso"><div class="progreso-barra" id="barProgreso"></div></div>
+        <p class="pie" id="barEstado">sin lanzar</p>
+      </section>
+
+      <section>
+        <label>Ranking medido</label>
+        <div id="barRanking" class="ranking"></div>
+        <p class="hint" id="barSello"></p>
+      </section>
+    </div><!-- /vistaBarridos -->
+
     <p class="aviso" id="aviso" hidden></p>
     <p class="pie" id="estado">listo</p>
   </aside>
@@ -358,6 +384,15 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
     <div class="cortes">
       <div id="axialEscena" class="corte"></div>
       <div id="lateralEscena" class="corte"></div>
+    </div>
+  </main>
+
+  <main class="vista" id="vistaBarridosMain" hidden>
+    <div class="mapa-wrap">
+      <div id="graficoBarrido" class="mapa"></div>
+    </div>
+    <div class="cortes">
+      <div id="barrasBarrido" class="corte ancho"></div>
     </div>
   </main>
 
@@ -384,5 +419,6 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
 <script src="/static/escena.js"></script>
 <script src="/static/dispersor.js"></script>
 <script src="/static/cochlea.js"></script>
+<script src="/static/barridos.js"></script>
 </body>
 </html>
