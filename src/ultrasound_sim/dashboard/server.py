@@ -278,6 +278,7 @@ class Handler(BaseHTTPRequestHandler):
                         "/api/scatterer/solve", "/api/scatterer/cost",
                         "/api/cochlea/field", "/api/cochlea/field/cost",
                         "/api/jobs/sensibilidad", "/api/jobs/q_coclea",
+                        "/api/jobs/barrido_escena",
                         "/api/volume3d/cost", "/api/volume3d/solve"):
             self._error("no encontrado", HTTPStatus.NOT_FOUND)
             return
@@ -310,6 +311,19 @@ class Handler(BaseHTTPRequestHandler):
                 respuesta = volume3d.estimar_volumen(cuerpo)
             elif ruta == "/api/volume3d/solve":
                 respuesta = volume3d.resolver_volumen(cuerpo)
+            elif ruta == "/api/jobs/barrido_escena":
+                escena = cuerpo.get("escena") or {}
+                if not isinstance(escena, dict):
+                    raise ValueError("'escena' tiene que ser un objeto")
+                trabajo = jobs.COLA.enviar(
+                    "barrido_escena", "barrido de frecuencia (escena 2D)",
+                    sweeps.barrido_escena,
+                    escena=escena,
+                    desde_hz=float(cuerpo.get("desde_hz", 100e3)),
+                    hasta_hz=float(cuerpo.get("hasta_hz", 400e3)),
+                    puntos=int(cuerpo.get("puntos", 30)),
+                )
+                respuesta = {"ok": True, "job": trabajo.a_dict()}
             elif ruta == "/api/jobs/q_coclea":
                 desde = float(cuerpo.get("desde_hz", 85e3))
                 hasta = float(cuerpo.get("hasta_hz", 115e3))

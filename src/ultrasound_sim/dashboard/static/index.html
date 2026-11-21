@@ -384,6 +384,26 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
       </section>
 
       <section>
+        <label>Barrido de frecuencia <span class="mini">(escena 2D)</span>
+          <span class="tip" title="Barre la escena de la pestaña 'escena FEM' en frecuencia y mide R y T en cada punto. Criterio físico: una losa de espesor t transmite al máximo en las resonancias de media onda f_n = n·c_losa/(2t); la UI marca las predichas para que se vea si el modelo las encuentra.">?</span>
+        </label>
+        <p class="hint" id="barEscInfo">usa la escena de la pestaña «escena FEM»</p>
+        <label>desde <b id="barEscDesdeVal">100 kHz</b></label>
+        <input type="range" id="barEscDesde" min="20" max="400" step="10" value="100">
+        <label>hasta <b id="barEscHastaVal">400 kHz</b></label>
+        <input type="range" id="barEscHasta" min="30" max="800" step="10" value="400">
+        <label>puntos <b id="barEscPuntosVal">30</b></label>
+        <input type="range" id="barEscPuntos" min="5" max="61" step="2" value="30">
+        <div class="fila-botones">
+          <button class="btn" id="btnBarridoEscena">barrer frecuencia</button>
+          <button class="btn mini" id="btnCancelarEscena" disabled>cancelar</button>
+        </div>
+        <div class="progreso"><div class="progreso-barra" id="barEscProgreso"></div></div>
+        <p class="pie" id="barEscEstado">sin lanzar</p>
+        <p class="hint" id="barEscSello"></p>
+      </section>
+
+      <section>
         <label>Ranking medido</label>
         <div id="barRanking" class="ranking"></div>
         <p class="hint" id="barSello"></p>

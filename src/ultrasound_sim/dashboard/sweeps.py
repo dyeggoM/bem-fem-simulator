@@ -80,6 +80,13 @@ def alpha_de_ley(nombre: str) -> float:
     return 0.0 if ley is None else float(ley.alpha(FRECUENCIA_HZ))
 
 
+#: Materiales con su `c` para predecir las resonancias de la losa.
+MATERIALES_COCLEA = {
+    "agua": mats.WATER, "tejido": mats.SOFT_TISSUE, "hueso": mats.BONE_CORTICAL,
+    "perilinfa": mats.PERILYMPH, "endolinfa": mats.ENDOLYMPH,
+}
+
+
 def _hueso(c_p: float, c_s: float, rho: float) -> mats.ElasticSolid:
     return mats.ElasticSolid(
         name=f"hueso_cp{c_p:.0f}_cs{c_s:.0f}_rho{rho:.0f}",
@@ -225,6 +232,111 @@ def barrido_frecuencia(trabajo, **datos: Any) -> dict[str, Any]:
             f"con {puntos} puntos el paso relativo es "
             f"{100 * abs(frecuencias[1] - frecuencias[0]) / frecuencias[int(np.argmax(arreglo))]:.2f} % "
             f"del pico; un Q mayor que ~1/paso no se resuelve, hay que refinar la banda"
+        ),
+    }
+
+
+# --------------------------------------------------------------------------- barrido de la escena 2D
+#
+# La escena 2D resuelve en ~10–80 ms, así que un barrido de 40 frecuencias son un par de segundos:
+# entra en un job por consistencia, no por necesidad.
+#
+# Criterio físico verificable: una losa de espesor t en un medio tiene MÁXIMOS DE TRANSMISIÓN en las
+# resonancias de media onda, f_n = n·c_losa/(2t). Con hueso como fluido (c = 3500 m/s) y t = 10 mm
+# eso da 175, 350, 525 kHz… Si el barrido no los encuentra, hay un error de espesor, de c o de fase.
+
+def _frecuencias(desde: float, hasta: float, puntos: int) -> np.ndarray:
+    if not (20.0e3 <= desde < hasta <= 1.0e6):
+        raise ValueError(f"banda inválida: {desde:g}–{hasta:g} Hz")
+    if not (3 <= puntos <= 121):
+        raise ValueError(f"puntos fuera de rango [3, 121]: {puntos}")
+    return np.linspace(desde, hasta, puntos)
+
+
+def _picos(valores: np.ndarray, frecuencias: np.ndarray) -> list[dict[str, float]]:
+    """Máximos locales (interpolados parabólicamente) con su frecuencia."""
+    picos: list[dict[str, float]] = []
+    for i in range(1, valores.size - 1):
+        if not (valores[i] > valores[i - 1] and valores[i] >= valores[i + 1]):
+            continue
+        a, b, c = valores[i - 1], valores[i], valores[i + 1]
+        denom = a - 2.0 * b + c
+        delta = 0.5 * (a - c) / denom if denom != 0.0 else 0.0
+        f_pico = frecuencias[i] + delta * (frecuencias[i + 1] - frecuencias[i])
+        picos.append({"f_hz": float(f_pico), "valor": float(b - 0.25 * (a - c) * delta)})
+    return picos
+
+
+def barrido_escena(trabajo, **datos: Any) -> dict[str, Any]:
+    """R y T de la escena 2D en función de la frecuencia, con los picos de transmisión."""
+    from . import scene as escena_mod
+
+    base = datos.get("escena") or {}
+    if not isinstance(base, dict):
+        raise ValueError("'escena' tiene que ser el objeto de la escena 2D")
+    desde = float(datos.get("desde_hz", 100.0e3))
+    hasta = float(datos.get("hasta_hz", 400.0e3))
+    puntos = int(datos.get("puntos", 30))
+    frecuencias = _frecuencias(desde, hasta, puntos)
+
+    filas: list[dict[str, Any]] = []
+    for i, f in enumerate(frecuencias):
+        if trabajo.cancelado():
+            raise RuntimeError("cancelado por el usuario")
+        trabajo.avanzar((i + 0.5) / puntos, f"f = {f / 1e3:.0f} kHz")
+        try:
+            r = escena_mod.resolver_escena(dict(base, frecuencia_hz=float(f)))
+        except ValueError as exc:
+            filas.append({"f_hz": float(f), "R": None, "T": None, "error": str(exc)})
+            continue
+        m = r["metricas"]
+        filas.append({
+            "f_hz": float(f),
+            "R": m.get("R"),
+            "T": m.get("T"),
+            "R_analitico": m.get("R_analitico"),
+            "T_analitico": m.get("T_analitico"),
+            "error_R_abs": m.get("error_R_abs"),
+            "error_T_abs": m.get("error_T_abs"),
+            "elementos": r["grilla"]["n_elementos"],
+        })
+        trabajo.avanzar((i + 1) / puntos, f"f = {f / 1e3:.0f} kHz: T = {m.get('T') or 0:.3f}")
+
+    validas = [fila for fila in filas if fila["T"] is not None]
+    if not validas:
+        raise ValueError("ninguna frecuencia del barrido dio R y T (¿banda fuera de rango?)")
+
+    fs = np.array([fila["f_hz"] for fila in validas])
+    ts = np.array([float(fila["T"]) for fila in validas])
+    picos = _picos(ts, fs)
+
+    # Si la escena es una losa en un medio, los picos deberían caer en n·c/(2t)
+    capas = base.get("capas") or []
+    prediccion: dict[str, Any] | None = None
+    if len(capas) == 3:
+        material_medio = str(capas[1].get("material", ""))
+        espesor = float(capas[1].get("espesor_m", 0.0))
+        if material_medio in MATERIALES_COCLEA and espesor > 0:
+            c_losa = MATERIALES_COCLEA[material_medio].c
+            f1 = c_losa / (2.0 * espesor)
+            prediccion = {
+                "material": material_medio, "c_m_s": c_losa, "espesor_mm": espesor * 1e3,
+                "resonancias_hz": [n * f1 for n in range(1, 6) if n * f1 <= fs[-1] * 1.05],
+                "formula": "f_n = n·c_losa/(2·t) — resonancias de media onda de la losa",
+            }
+
+    errores = [abs(fila["error_T_abs"]) for fila in validas if fila["error_T_abs"] is not None]
+    return {
+        "ok": True,
+        "banda_hz": [desde, hasta],
+        "puntos": len(filas),
+        "filas": filas,
+        "picos": picos,
+        "prediccion": prediccion,
+        "max_error_T": max(errores) if errores else None,
+        "sello": validacion.sello_conjunto(
+            # el peor error de T del barrido contra la matriz de transferencia
+            {"escena_rt_t": max(errores) if errores else None}
         ),
     }
 

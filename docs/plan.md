@@ -317,8 +317,13 @@ agrega a la librería con su criterio, después se enchufa.
   *53.11 %*, c_p *16.06 %*, atenuación *9.60 %*, c_s *8.22 %*, ρ *1.03 %*, Z_r *0.28 %* (peor desvío
   *1.8 %*), en *89 s* con `t_interior` base 0.53187. Los α de las tres leyes se piden a
   `attenuation.py` (3.777 / 6.243 / 15.312 Np/m a 100 kHz), no se escriben a mano.
-  Falta de esta fase: barrido de frecuencia (necesita la definición de Q, ver D37), el de las 15
-  configuraciones de D25 y la exportación a CSV desde la UI.
+  **Barrido de frecuencia de la escena 2D — ENTREGADA (D43).** Barre la escena de la pestaña "escena
+  FEM" en frecuencia desde la cola, mide R y T por punto y marca las **resonancias de media onda
+  predichas** `f_n = n·c_losa/(2t)`. Medido con una losa de hueso de 10 mm: picos en *176.7 y
+  353.8 kHz* contra *175 y 350* predichos (≤1 %), con *T = 0.999* y *R = 0.031* coincidiendo en la
+  resonancia. El sello marca "fuera" a ppw 12 porque el error de T llega a *5.90 %* arriba de 350 kHz
+  (a ppw 20 baja a *2.08 %*): es la malla, no el barrido, y el barrido lo dice en vez de promediar.
+  Falta de esta fase: el barrido de las 15 configuraciones de D25 y la exportación a CSV desde la UI.
 - **U6 — Trazabilidad. ENTREGADA.** `dashboard/validacion.py` con un registro de *10 criterios*, cada
   uno con su descripción, referencia, tolerancia, unidad y **fuente** (fase o ADR). Cada endpoint
   devuelve `sello` ya evaluado —`validado` / `fuera` / `sin_referencia`— y la UI sólo lo pinta. El

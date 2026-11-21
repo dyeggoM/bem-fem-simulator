@@ -137,6 +137,10 @@ function barPintar(r, segundos) {
     showlegend: false,
   });
 
+  // La curva de sensibilidad va al gráfico de barras sólo si NO se corrió el barrido de frecuencia
+  // (ese usa el gráfico principal). Sin esta guarda, el último que corre pisa al otro.
+  if (BARESC.jobId) return;
+
   // curva de cada parámetro: t_interior normalizado contra el valor del parámetro
   const grupos = {};
   for (const fila of r.filas) {
@@ -168,3 +172,151 @@ window.barIniciar = barIniciar;
 
 bar$('btnBarrido').addEventListener('click', barLanzar);
 bar$('btnCancelar').addEventListener('click', barCancelar);
+
+/* --------------------------------------------------- barrido de frecuencia de la escena 2D */
+
+const BARESC = { desde: 100, hasta: 400, puntos: 30, jobId: null, temporizador: null };
+
+function barescEscena() {
+  // usa la escena de la pestaña "escena FEM" si el usuario la tocó; si no, una losa por defecto
+  if (typeof ESC !== 'undefined' && ESC && ESC.capas) {
+    return {
+      frecuencia_hz: ESC.freq * 1e3,
+      ppw: ESC.ppw,
+      alto_m: ESC.alto * 1e-3,
+      capas: ESC.capas.map((c) => ({ material: c.material, espesor_m: c.espesor_mm * 1e-3 })),
+    };
+  }
+  return {
+    frecuencia_hz: 100e3, ppw: 12, alto_m: 20e-3,
+    capas: [{ material: 'agua', espesor_m: 20e-3 },
+            { material: 'hueso', espesor_m: 10e-3 },
+            { material: 'agua', espesor_m: 20e-3 }],
+  };
+}
+
+async function barescLanzar() {
+  if (BARESC.desde >= BARESC.hasta) {
+    bar$('barEscEstado').textContent = 'la banda necesita desde < hasta';
+    return;
+  }
+  bar$('btnBarridoEscena').disabled = true;
+  bar$('btnCancelarEscena').disabled = false;
+  bar$('barEscProgreso').style.width = '0%';
+  bar$('barEscEstado').textContent = 'encolando…';
+  const escena = barescEscena();
+  bar$('barEscInfo').textContent =
+    `${escena.capas.length} capas · ppw ${escena.ppw} · ` +
+    escena.capas.map((c) => `${c.material} ${(c.espesor_m * 1e3).toFixed(0)} mm`).join(' / ');
+  try {
+    const r = await fetch('/api/jobs/barrido_escena', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ escena, desde_hz: BARESC.desde * 1e3,
+                             hasta_hz: BARESC.hasta * 1e3, puntos: BARESC.puntos }),
+    }).then((x) => x.json());
+    if (!r.ok) throw new Error(r.error || 'no se pudo encolar');
+    BARESC.jobId = r.job.id;
+    barescSeguir();
+  } catch (e) {
+    bar$('barEscEstado').textContent = `no se pudo lanzar: ${e.message}`;
+    bar$('btnBarridoEscena').disabled = false;
+    bar$('btnCancelarEscena').disabled = true;
+  }
+}
+
+function barescSeguir() {
+  clearInterval(BARESC.temporizador);
+  BARESC.temporizador = setInterval(async () => {
+    try {
+      const j = await (await fetch(`/api/jobs/${BARESC.jobId}`)).json();
+      bar$('barEscProgreso').style.width = `${Math.round(100 * j.progreso)}%`;
+      bar$('barEscEstado').textContent = `${j.estado} · ${Math.round(100 * j.progreso)} % · ${j.mensaje}`;
+      if (j.estado === 'listo') {
+        clearInterval(BARESC.temporizador);
+        barescPintar(j.resultado);
+        bar$('btnBarridoEscena').disabled = false;
+        bar$('btnCancelarEscena').disabled = true;
+      } else if (j.estado === 'error' || j.estado === 'cancelado') {
+        clearInterval(BARESC.temporizador);
+        bar$('barEscEstado').textContent = j.estado === 'error' ? `error: ${j.error}` : 'cancelado';
+        bar$('btnBarridoEscena').disabled = false;
+        bar$('btnCancelarEscena').disabled = true;
+      }
+    } catch (e) {
+      clearInterval(BARESC.temporizador);
+      bar$('barEscEstado').textContent = `se cortó el seguimiento: ${e.message}`;
+      bar$('btnBarridoEscena').disabled = false;
+      bar$('btnCancelarEscena').disabled = true;
+    }
+  }, 600);
+}
+
+function barescPintar(r) {
+  const validas = r.filas.filter((f) => f.T !== null);
+  const f_khz = validas.map((f) => f.f_hz / 1e3);
+  const trazas = [
+    { type: 'scatter', mode: 'lines+markers', name: 'T (FEM)', x: f_khz,
+      y: validas.map((f) => f.T), line: { color: '#58a6ff', width: 1.6 },
+      hovertemplate: '%{x:.0f} kHz<br>T = %{y:.3f}<extra></extra>' },
+    { type: 'scatter', mode: 'lines', name: 'T (matriz de transferencia)', x: f_khz,
+      y: validas.map((f) => f.T_analitico), line: { color: '#8b95a1', width: 1, dash: 'dot' } },
+    { type: 'scatter', mode: 'lines', name: 'R (FEM)', x: f_khz,
+      y: validas.map((f) => f.R), line: { color: '#f0883e', width: 1.4 } },
+  ];
+  const formas = [];
+  if (r.prediccion) {
+    for (const f of r.prediccion.resonancias_hz) {
+      formas.push({ type: 'line', x0: f / 1e3, x1: f / 1e3, yref: 'paper', y0: 0, y1: 1,
+                    line: { color: '#3fb950', width: 1, dash: 'dash' } });
+    }
+  }
+  Plotly.react('graficoBarrido', trazas, {
+    ...BAR_CONFIG,
+    margin: { l: 52, r: 8, t: 26, b: 40 },
+    title: { text: 'R y T vs frecuencia (verde: resonancias de media onda predichas)',
+             font: { size: 10, color: '#8b95a1' } },
+    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { color: '#8b95a1', size: 9 },
+    legend: { orientation: 'h', y: 1.16, font: { size: 9 } },
+    xaxis: { title: { text: 'f (kHz)' }, gridcolor: '#21262d' },
+    yaxis: { title: { text: 'R, T' }, gridcolor: '#21262d', range: [0, 1.05] },
+    shapes: formas,
+  });
+
+  const picos = r.picos.map((p) => `${barFmt(p.f_hz / 1e3, 1)} kHz`).join(', ') || 'ninguno';
+  let texto = `picos de transmisión: ${picos}.`;
+  if (r.prediccion) {
+    const pred = r.prediccion.resonancias_hz.map((f) => barFmt(f / 1e3, 1)).join(', ');
+    texto += ` predichas para ${r.prediccion.espesor_mm} mm de ${r.prediccion.material} ` +
+             `(c = ${r.prediccion.c_m_s} m/s): ${pred} kHz.`;
+  }
+  if (r.max_error_T !== null) {
+    texto += ` peor error de T del barrido: ${barFmt(100 * r.max_error_T, 2)} %.`;
+  }
+  bar$('barEscSello').textContent = texto;
+  if (r.sello) {
+    const el = bar$('barEscSello');
+    el.textContent += ' ' + r.sello.texto;
+    el.className = `hint sello-${r.sello.estado}`;
+  }
+}
+
+bar$('barEscDesde').addEventListener('input', (e) => {
+  BARESC.desde = parseInt(e.target.value, 10);
+  bar$('barEscDesdeVal').textContent = `${BARESC.desde} kHz`;
+});
+bar$('barEscHasta').addEventListener('input', (e) => {
+  BARESC.hasta = parseInt(e.target.value, 10);
+  bar$('barEscHastaVal').textContent = `${BARESC.hasta} kHz`;
+});
+bar$('barEscPuntos').addEventListener('input', (e) => {
+  BARESC.puntos = parseInt(e.target.value, 10);
+  bar$('barEscPuntosVal').textContent = String(BARESC.puntos);
+});
+bar$('btnBarridoEscena').addEventListener('click', barescLanzar);
+bar$('btnCancelarEscena').addEventListener('click', async () => {
+  if (!BARESC.jobId) return;
+  bar$('btnCancelarEscena').disabled = true;
+  await fetch(`/api/jobs/${BARESC.jobId}/cancel`, { method: 'POST' });
+});

@@ -1352,3 +1352,33 @@ imagen tienen que coincidir en lo que afirman, y cuando no, manda el número.
 **Costo y tope.** 1.2 s con 9 261 nodos en una caja de 30 mm (2 λ). La malla tiene que resolver la
 esfera: con `ppw = 6` y `ka = 0.2` no cae ningún elemento adentro y el pedido se **rechaza** con un
 mensaje que dice qué subir, en vez de resolver una caja homogénea y devolver un error del 100 %.
+
+## D43 — Barrido de frecuencia de la escena: la resonancia de media onda como criterio
+
+**Qué se entregó.** Un barrido en frecuencia de la escena 2D como trabajo de la cola
+(`sweeps.barrido_escena`), con banda y cantidad de puntos editables, que devuelve R y T por punto y
+dibuja las **resonancias predichas** para que se vea si el modelo las encuentra.
+
+**El criterio, que es físico y no una comparación consigo mismo.** Una losa de espesor `t` en un
+medio transmite al máximo en las resonancias de media onda:
+
+    f_n = n·c_losa / (2t)
+
+Con hueso como fluido (c = 3500 m/s) y t = 10 mm: **175 y 350 kHz**. Medido en 100–400 kHz con 41
+puntos: picos en **176.7 y 353.8 kHz** (≤ 1 % de la predicción, y el corrimiento es el paso del
+barrido de 7.5 kHz). En la resonancia coinciden las tres cosas que tienen que coincidir: `T` sube a
+**0.999**, `R` baja a **0.031** en la misma frecuencia, y la matriz de transferencia reproduce el
+mismo pico. Un barrido que se equivocara de espesor, de velocidad o de fase se vería acá.
+
+**El sello marca "fuera" a ppw 12, y está bien.** El error de T del barrido llega a **5.90 %** por
+encima de 350 kHz, contra el 2 % de la Fase 1. La causa es la malla, no el barrido: con `ppw` fijo,
+a 400 kHz la losa de 10 mm tiene menos elementos por longitud de onda. Subiendo a `ppw = 20` el peor
+error baja a **2.08 %**. Es el caso opuesto al de D39 (donde refinar *empeoraba* el balance de la
+cóclea): acá el consejo "subí ppw" sí es cierto, y por eso el barrido **informa el peor error en vez
+de un promedio** — un promedio de R y T sobre la banda escondería justo el punto donde la malla deja
+de alcanzar.
+
+**Detalle de presentación.** El barrido usa la escena de la pestaña "escena FEM" si el usuario la
+editó (mismo objeto `ESC` en el cliente) y si no una losa por defecto; y el gráfico de sensibilidad
+tiene una guarda para no pisar el del barrido de frecuencia: sin ella, el último que corre borra al
+otro, que es un bug de UI que no da error, sólo muestra el gráfico equivocado.
