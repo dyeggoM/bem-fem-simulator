@@ -181,6 +181,23 @@ def test_la_vista_de_cadena_tiene_panel_main_y_script():
     assert "vista-cadena" in (ESTATICOS / "style.css").read_text(encoding="utf-8")
 
 
+def test_se_puede_cargar_el_arreglo_y_el_transductor_desde_el_panel():
+    """U10: cargar un arreglo planeado y el catálogo de transductores dejan de ser 32 filas a mano."""
+    html = (ESTATICOS / "index.html").read_text(encoding="utf-8")
+    js = (ESTATICOS / "arreglos.js").read_text(encoding="utf-8")
+    app = (ESTATICOS / "app.js").read_text(encoding="utf-8")
+    assert 'id="selTransductor"' in html
+    assert 'id="btnCargarArreglo"' in html and 'id="btnExportarArreglo"' in html
+    assert 'id="archivoArreglo"' in html and 'accept=".csv,.json' in html
+    assert '<script src="/static/arreglos.js">' in html
+    # el puente con el estado privado de app.js
+    assert "window.campoAplicarFuentes" in app
+    assert "window.campoLeerFuentes" in app
+    assert "window.campoAplicarTransductor" in app
+    # y que un archivo rechazado NO toque lo que está en pantalla
+    assert "no se toca lo que está en pantalla" in js
+
+
 def test_la_estructura_se_arrastra_en_el_mapa():
     """El control de posicionamiento de la estructura es parte del pedido: tiene que haber un shape
     arrastrable, el listener del relayout registrado después del react (antes el div no era de Plotly y

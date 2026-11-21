@@ -89,6 +89,21 @@
       <button class="btn" id="btnManual">pasar a fuentes editables →</button>
     </section>
 
+    <section>
+      <label>Transductor del catálogo</label>
+      <select id="selTransductor">
+        <option value="">— elegir —</option>
+      </select>
+      <p class="hint" id="transductorInfo">Cargá el catálogo de <code>data/transducers.toml</code>:
+      frecuencia, elementos, paso y foco. Los que no tienen datasheet llegan con <b>VERIFY</b>.</p>
+      <div class="fila-botones">
+        <button class="btn mini" id="btnCargarArreglo">cargar arreglo (CSV/JSON)</button>
+        <button class="btn mini" id="btnExportarArreglo">exportar</button>
+      </div>
+      <input type="file" id="archivoArreglo" accept=".csv,.json,text/csv,application/json" hidden>
+      <p class="hint" id="arregloAviso"></p>
+    </section>
+
     <section id="ctrlManual" hidden>
       <p class="hint">Cada fila es una apertura sobre el baffle. Posición y ancho en mm,
       fase en radianes (0 = todas en fase).</p>
@@ -827,6 +842,7 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
 
 </div>
 <script src="/static/app.js"></script>
+<script src="/static/arreglos.js"></script>
 <script src="/static/cadena.js"></script>
 <script src="/static/escena.js"></script>
 <script src="/static/dispersor.js"></script>

@@ -64,6 +64,51 @@ function pedir() {
 }
 
 /* ---------------------------------------------------------------------------------------------
+ * Entradas y salidas del arreglo de fuentes (U10).
+ *
+ * `arreglos.js` necesita poder leer y reemplazar las fuentes del explorador, y aplicar un transductor
+ * del catálogo. `S` es privado de este archivo, así que se expone sólo esto: lo mínimo para que cargar
+ * un archivo deje de ser copiar 32 filas a mano.
+ * ------------------------------------------------------------------------------------------- */
+
+window.campoAplicarFuentes = function campoAplicarFuentes(fuentes) {
+  if (!Array.isArray(fuentes) || !fuentes.length) throw new Error('el arreglo no tiene fuentes');
+  S.fuentes = fuentes.map((f) => ({
+    y: Number(f.y), width: Number(f.width), amp: Number(f.amp), phase: Number(f.phase),
+  }));
+  S.fuentesMovidas = true;
+  S.regenerarAlVolver = false;
+  const tab = document.querySelector('.tab[data-modo="manual"]');
+  if (tab) tab.click();
+  pintarFuentes();
+  pedir();
+};
+
+window.campoLeerFuentes = function campoLeerFuentes() {
+  return (S.fuentes || []).map((f) => ({
+    y_mm: f.y * 1e3, ancho_mm: f.width * 1e3, amp: f.amp, fase_rad: f.phase,
+  }));
+};
+
+window.campoAplicarTransductor = function campoAplicarTransductor(spec) {
+  const set = (id, val, etiqueta) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value = String(val);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    const lbl = document.getElementById(etiqueta);
+    if (lbl) lbl.textContent = String(val);
+  };
+  const kHz = Math.round(spec.frequency_hz / 1e3);
+  set('freq', kHz, 'freqVal');
+  if (typeof window.syncFrecuencia === 'function') window.syncFrecuencia(kHz, 'campo');
+  set('nEl', spec.n_elements, 'nVal');
+  set('ap', Math.round(spec.width_mm), 'apVal');
+  if (spec.focus_distance_m) set('fx', Math.round(spec.focus_distance_m * 1e3), 'fxVal');
+  set('fy', 0, 'fyVal');
+};
+
+/* ---------------------------------------------------------------------------------------------
  * Configuración compartida entre las vistas.
  *
  * La idea del tablero es un solo problema: las mismas fuentes, la misma frecuencia, el mismo medio, y
