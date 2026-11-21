@@ -438,6 +438,16 @@ def resolver_volumen(datos: dict[str, Any]) -> dict[str, Any]:
             "interfaces_mm": (np.cumsum(espesores)[:-1] * 1e3).tolist(),
             "pico": pico,
         },
+        # Nube completa para la isosuperficie 3D: la vista dibujaba sólo dos rebanadas porque el
+        # bundle de Plotly era `cartesian` (sin gl3d). Con el bundle completo se puede mostrar el
+        # volumen. Se manda el módulo normalizado y los nodos en mm: ~9 000 nodos son ~400 KB de JSON.
+        "nube": {
+            "x_mm": np.round(malla.nodes[:, 0] * 1e3, 4).tolist(),
+            "y_mm": np.round(malla.nodes[:, 1] * 1e3, 4).tolist(),
+            "z_mm": np.round(malla.nodes[:, 2] * 1e3, 4).tolist(),
+            "abs": (np.abs(campo) / (np.abs(campo).max() or 1.0)).tolist(),
+            "max_abs": float(np.abs(campo).max()),
+        },
         "metricas": metricas,
         "tiempos": {
             "malla_s": round(t_solve - t_inicio, 3),

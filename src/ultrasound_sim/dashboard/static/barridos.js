@@ -77,9 +77,11 @@ function barSeguir() {
       const j = await barGet(`/api/jobs/${BAR.jobId}`);
       bar$('barProgreso').style.width = `${Math.round(100 * j.progreso)}%`;
       bar$('barEstado').textContent = `${j.estado} · ${Math.round(100 * j.progreso)} % · ${j.mensaje}`;
+      window.cargando('graficoBarrido', `barriendo · ${Math.round(100 * j.progreso)} %`, j.mensaje);
       if (j.estado === 'listo') {
         clearInterval(BAR.temporizador);
         BAR.resultado = j.resultado;
+        window.terminarCargando('graficoBarrido');
         barPintar(j.resultado, j.segundos);
         // 30 puntos de escena son ~30 solves: guardarlo para no repetirlos al volver a la pestaña
         window.vistaGuardar('barridos', { resultado: j.resultado, segundos: j.segundos });
@@ -87,6 +89,7 @@ function barSeguir() {
         bar$('btnCancelar').disabled = true;
       } else if (j.estado === 'error' || j.estado === 'cancelado') {
         clearInterval(BAR.temporizador);
+        window.terminarCargando('graficoBarrido');
         bar$('barEstado').textContent = j.estado === 'error'
           ? `error: ${j.error}` : 'cancelado';
         bar$('btnBarrido').disabled = false;
@@ -183,6 +186,8 @@ async function barApertura() {
   };
   bar$('btnBarApertura').disabled = true;
   bar$('btnBarAperturaCancelar').disabled = false;
+  // el spinner va antes del fetch: encolar tarda y sin esto parece que el click no hizo nada
+  window.cargando('graficoApertura', 'encolando el barrido de apertura…', '');
   bar$('barApProgreso').style.width = '0%';
   bar$('barApEstado').textContent = 'encolando…';
   bar$('barApResumen').textContent = '';
@@ -220,13 +225,17 @@ function barAperturaSeguir() {
       const j = await barGet(`/api/jobs/${BAR.apJob}`);
       bar$('barApProgreso').style.width = `${Math.round(100 * j.progreso)}%`;
       bar$('barApEstado').textContent = `${j.estado} · ${Math.round(100 * j.progreso)} % · ${j.mensaje}`;
+      window.cargando('graficoApertura', `barriendo apertura · ${Math.round(100 * j.progreso)} %`,
+        j.mensaje);
       if (j.estado === 'listo') {
         clearInterval(BAR.apTimer);
+        window.terminarCargando('graficoApertura');
         barPintarApertura(j.resultado);
         bar$('btnBarApertura').disabled = false;
         bar$('btnBarAperturaCancelar').disabled = true;
       } else if (j.estado === 'error' || j.estado === 'cancelado') {
         clearInterval(BAR.apTimer);
+        window.terminarCargando('graficoApertura');
         bar$('barApEstado').textContent = j.estado === 'error' ? `error: ${j.error}` : 'cancelado';
         bar$('btnBarApertura').disabled = false;
         bar$('btnBarAperturaCancelar').disabled = true;

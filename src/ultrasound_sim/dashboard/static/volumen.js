@@ -89,6 +89,7 @@ async function volResolver() {
     VOL.resuelto = r;
     volPintar(r);
     volDibujar(r);
+    volDibujar3D(r);
     window.vistaGuardar('volumen', r);   // el solve 3D es el más caro: no repetirlo al volver
     vol$('volEstado').textContent =
       `resuelto: ${r.malla.n_nodos} nodos, ${r.malla.n_elementos} tets · ` +
@@ -221,6 +222,47 @@ function volModo() {
   vol$('volEsferaBox').hidden = VOL.fuente !== 'esfera';
 }
 
+/* Isosuperficie 3D: la superficie donde |p| alcanza una fracción del máximo.
+ *
+ * Antes la vista mostraba sólo dos rebanadas porque el bundle de Plotly era `plotly-cartesian`, que no
+ * incluye gl3d: no era una decisión estética, era una limitación del bundle. Con el bundle completo
+ * (4.5 MB, incluye isosurface) se puede ver el volumen, que es lo que uno espera de una pestaña "3D". */
+function volDibujar3D(r) {
+  const caja = vol$('volumen3d');
+  const nube = r.nube;
+  if (!caja || !nube) return;
+  // el slider está en dB; la traza necesita el nivel lineal
+  const nivelDb = parseFloat(vol$('volIso').value || '-20');
+  const nivel = Math.pow(10, nivelDb / 20);
+  vol$('volIsoVal').textContent = `${nivelDb} dB`;
+  Plotly.react('volumen3d', [{
+    type: 'isosurface',
+    x: nube.x_mm, y: nube.y_mm, z: nube.z_mm, value: nube.abs,
+    isomin: nivel, isomax: 1.001,
+    surface: { count: 2, fill: 1.0, show: true },
+    caps: { x: { show: false }, y: { show: false }, z: { show: false } },
+    colorscale: 'Viridis',
+    colorbar: { title: { text: '|p|/máx', side: 'right' }, thickness: 10, len: 0.7 },
+    hovertemplate: 'x %{x:.2f} · y %{y:.2f} · z %{z:.2f} mm<extra></extra>',
+  }], {
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    font: { color: '#8b95a1', size: 9 },
+    margin: { l: 0, r: 0, t: 26, b: 0 },
+    title: {
+      text: `isosuperficie |p| = ${nivelDb} dB del máximo (${nivel.toFixed(3)}·máx, `
+        + `${nube.x_mm.length.toLocaleString('es')} nodos)`,
+      font: { size: 10, color: '#8b95a1' },
+    },
+    scene: {
+      xaxis: { title: 'x (mm)', color: '#8b95a1' },
+      yaxis: { title: 'y (mm)', color: '#8b95a1' },
+      zaxis: { title: 'z (mm)', color: '#8b95a1' },
+      aspectmode: 'data',
+      bgcolor: 'rgba(0,0,0,0)',
+    },
+  }, { displayModeBar: 'hover', displaylogo: false, responsive: true });
+}
+
 function volIniciar() {
   volPintarCapas();
   volModo();
@@ -232,6 +274,7 @@ function volIniciar() {
       VOL.resuelto = previo.resultado;
       volPintar(previo.resultado);
       volDibujar(previo.resultado);
+      volDibujar3D(previo.resultado);
       vol$('volEstado').textContent =
         'restaurado de ' + new Date(previo.fecha).toLocaleString('es');
     } catch (e) {
@@ -243,6 +286,9 @@ function volIniciar() {
 }
 window.volIniciar = volIniciar;
 
+vol$('volIso').addEventListener('input', () => {
+  if (VOL.resuelto) volDibujar3D(VOL.resuelto);
+});
 vol$('volFuente').addEventListener('change', (e) => {
   VOL.fuente = e.target.value;
   volModo();
