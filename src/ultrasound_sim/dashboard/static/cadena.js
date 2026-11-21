@@ -20,6 +20,9 @@
     capas: [],           // [{medio, espesor_mm}]
     freq: 500,
     ppw: 14,
+    // estructura: `alto` 0 = capas infinitas (interfaz plana). Con alto > 0 es una pieza finita que se
+    // arrastra sobre el mapa; ahí la onda rodea la pieza y difracta en los bordes.
+    estructura: { alto: 0, x: 12, y: 0 },
     resultado: null,
     resolviendo: false,
   };
@@ -104,6 +107,9 @@
       ppw: CAD.ppw,
       nx: 160,
       ny: 100,
+      estructura_alto_mm: CAD.estructura.alto,
+      estructura_x_mm: CAD.estructura.x,
+      estructura_y_mm: CAD.estructura.y,
     };
     try {
       const alta = await fetch('/api/jobs/cadena', {
@@ -127,6 +133,7 @@
       if (window.vistaGuardar) {
         window.vistaGuardar(CLAVE, {
           corrida: CAD.resultado, capas: CAD.capas, freq: CAD.freq, ppw: CAD.ppw,
+          estructura: CAD.estructura,
         });
       }
     } catch (err) {
@@ -153,6 +160,34 @@
       <div class="chip"><span>λ en agua</span><b>${m.lambda_agua_mm} mm</b></div>`;
 
     const g = r.grilla;
+    const e = r.estructura || { x_mm: 0, y_mm: 0, ancho_mm: 0, alto_mm: null, finita: false };
+    // índice del shape de la estructura en el layout, para reconocerlo en `plotly_relayout`
+    CAD.iEstructura = e.finita ? (r.capas || []).length * 2 : -1;
+
+    // Con la estructura finita, las líneas de interfaz se recortan a su alto: si atraviesan todo el
+    // dominio parece una capa infinita y no se entiende que la pieza se puede rodear.
+    const yTop = e.finita ? e.y_mm + (e.alto_mm || 0) / 2 : g.y_mm[g.y_mm.length - 1];
+    const yBot = e.finita ? e.y_mm - (e.alto_mm || 0) / 2 : g.y_mm[0];
+
+    const shapes = [
+      ...(r.capas || []).flatMap((c) => [c.desde_mm, c.hasta_mm].map((x) => ({
+        type: 'line', x0: x, x1: x, y0: yBot, y1: yTop,
+        line: { color: '#ffffff', width: 2, dash: 'solid' },
+      }))),
+    ];
+    if (e.finita) {
+      // El rectángulo se dibuja con relleno oscuro y borde azul: con relleno translúcido se confundía
+      // con el mapa de presión (el sólido no tiene gdl de presión y salía negro, igual que un mínimo
+      // del colormap) y no se leía como objeto.
+      shapes.push({
+        type: 'rect', name: 'estructura',
+        x0: e.x_mm, x1: e.x_mm + e.ancho_mm,
+        y0: e.y_mm - (e.alto_mm || 0) / 2, y1: e.y_mm + (e.alto_mm || 0) / 2,
+        line: { color: '#58a6ff', width: 2.5, dash: 'dash' },
+        fillcolor: 'rgba(13,17,23,.62)', layer: 'above',
+      });
+    }
+
     Plotly.react('mapaCadena', [{
       type: 'heatmap', x: g.x_mm, y: g.y_mm, z: g.db, zmin: -40, zmax: 0,
       colorscale: 'Viridis', colorbar: { title: 'dB', thickness: 12 },
@@ -167,17 +202,45 @@
       yaxis: { title: 'y [mm]', range: [Math.min(...g.y_mm), Math.max(...g.y_mm)] },
       // las interfaces de capa tienen que verse: si no, el patrón de interferencia se confunde con
       // las capas y no se sabe dónde empieza qué
-      shapes: (r.capas || []).flatMap((c) => [c.desde_mm, c.hasta_mm].map((x) => ({
-        type: 'line', x0: x, x1: x, y0: g.y_mm[0], y1: g.y_mm[g.y_mm.length - 1],
-        line: { color: '#ffffff', width: 2, dash: 'solid' },
-      }))),
+      shapes,
       // las etiquetas van un poco adentro del borde: en y = ymax quedaban en el margen y no se leían
       annotations: (r.capas || []).map((c) => ({
         x: (c.desde_mm + c.hasta_mm) / 2, y: Math.max(...g.y_mm) * 0.92, text: c.etiqueta,
         showarrow: false, yanchor: 'top', font: { size: 10, color: '#ffffff' },
         bgcolor: 'rgba(13,17,23,.55)', borderpad: 1,
       })),
-    }, { displayModeBar: false, responsive: true });
+    }, {
+      displayModeBar: false, responsive: true,
+      // con esto el rectángulo de la estructura se puede arrastrar directamente en el mapa
+      edits: { shapePosition: e.finita },
+    });
+
+    // Arrastrar el rectángulo emite `plotly_relayout` con claves `shapes[N].x0/x1/y0/y1` (N cambia con
+    // la cantidad de capas: es el índice del rect, después de las 2 líneas por interfaz). Se registra
+    // acá, después del react, y se quita el anterior para no acumular handlers.
+    const gdMapa = $('mapaCadena');
+    // sin esto no hay ninguna señal de que el rectángulo se puede arrastrar: se lee como un obstáculo
+    if (gdMapa) gdMapa.style.cursor = e.finita ? 'grab' : 'default';
+    if (gdMapa && typeof gdMapa.on === 'function') {
+      if (gdMapa.__cadHandler) gdMapa.removeListener('plotly_relayout', gdMapa.__cadHandler);
+      gdMapa.__cadHandler = (ev) => {
+        const tocaShapes = Object.keys(ev).some((k) => k === 'shapes' || k.startsWith('shapes['));
+        if (!tocaShapes || CAD.iEstructura < 0) return;
+        const sh = (gdMapa.layout.shapes || [])[CAD.iEstructura];
+        if (!sh || sh.name !== 'estructura') return;
+        // `estructura_x_mm` es el borde izquierdo (el backend apila las capas desde ahí) y el alto no
+        // cambia: arrastrar mueve, no redimensiona
+        const nx = Math.round(sh.x0 * 10) / 10;
+        const ny = Math.round(((sh.y0 + sh.y1) / 2) * 10) / 10;
+        if (nx === CAD.estructura.x && ny === CAD.estructura.y) return;
+        CAD.estructura.x = nx;
+        CAD.estructura.y = ny;
+        if (window.cadSincronizarEstructura) window.cadSincronizarEstructura();
+        estado(`estructura en x = ${nx.toFixed(1)} mm, y = ${ny.toFixed(1)} mm · resolviendo…`);
+        resolver();
+      };
+      gdMapa.on('plotly_relayout', gdMapa.__cadHandler);
+    }
 
     Plotly.react('axialCadena', [{
       x: r.corte_axial.x_mm, y: r.corte_axial.abs_p, type: 'scatter', mode: 'lines',
@@ -197,7 +260,8 @@
     }], {
       margin: { l: 46, r: 10, t: 28, b: 38 }, height: 210,
       title: {
-        text: haySolido ? 'capas · ámbar = sólido elástico (con cizalla)' : 'capas · todas fluidas',
+        text: (haySolido ? 'capas · ámbar = sólido elástico (con cizalla)' : 'capas · todas fluidas')
+          + (r.estructura && r.estructura.finita ? ` · pieza finita de ${r.estructura.alto_mm} mm` : ''),
         font: { size: 11 },
       },
       xaxis: { title: 'x [mm]', range: [0, Math.max(...g.x_mm)] },
@@ -241,7 +305,9 @@
       CAD.capas = guardado.resultado.capas;
       CAD.freq = guardado.resultado.freq || 500;
       CAD.ppw = guardado.resultado.ppw || 14;
+      if (guardado.resultado.estructura) CAD.estructura = guardado.resultado.estructura;
       pintarCapas();
+      if (window.cadSincronizarEstructura) window.cadSincronizarEstructura();
       $('cadFreq').value = CAD.freq; $('cadFreqVal').textContent = CAD.freq + ' kHz';
       $('cadPpw').value = CAD.ppw; $('cadPpwVal').textContent = CAD.ppw;
       CAD.resultado = previo;
@@ -280,6 +346,34 @@
       $('cadPpwVal').textContent = CAD.ppw;
     });
     $('cadenaResolver').addEventListener('click', resolver);
+
+    // ---- estructura: alto, x, y y arrastre en el mapa ----------------------
+    function sincronizarControlesEstructura() {
+      $('cadAlto').value = CAD.estructura.alto;
+      $('cadAltoVal').textContent = CAD.estructura.alto ? CAD.estructura.alto + ' mm' : 'todo el dominio';
+      $('cadX').value = CAD.estructura.x;
+      $('cadXVal').textContent = CAD.estructura.x.toFixed(1);
+      $('cadY').value = CAD.estructura.y;
+      $('cadYVal').textContent = CAD.estructura.y.toFixed(1);
+    }
+    window.cadSincronizarEstructura = sincronizarControlesEstructura;
+
+    $('cadAlto').addEventListener('input', (e) => {
+      CAD.estructura.alto = parseInt(e.target.value, 10);
+      sincronizarControlesEstructura();
+    });
+    $('cadX').addEventListener('input', (e) => {
+      CAD.estructura.x = parseFloat(e.target.value);
+      $('cadXVal').textContent = CAD.estructura.x.toFixed(1);
+    });
+    $('cadY').addEventListener('input', (e) => {
+      CAD.estructura.y = parseFloat(e.target.value);
+      $('cadYVal').textContent = CAD.estructura.y.toFixed(1);
+    });
+    sincronizarControlesEstructura();
+
+    // El listener del arrastre se registra en `pintar()`: acá el div todavía no es un gráfico de Plotly
+    // y no tiene `.on`, así que quedaba sin registrar y el arrastre no recalculaba nada.
 
     window.cadenaPintar = () => { if (CAD.resultado) pintar(CAD.resultado); };
   }

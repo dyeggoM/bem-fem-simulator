@@ -181,6 +181,21 @@ def test_la_vista_de_cadena_tiene_panel_main_y_script():
     assert "vista-cadena" in (ESTATICOS / "style.css").read_text(encoding="utf-8")
 
 
+def test_la_estructura_se_arrastra_en_el_mapa():
+    """El control de posicionamiento de la estructura es parte del pedido: tiene que haber un shape
+    arrastrable, el listener del relayout registrado después del react (antes el div no era de Plotly y
+    el handler no se registraba) y una señal visual de que se puede arrastrar."""
+    js = (ESTATICOS / "cadena.js").read_text(encoding="utf-8")
+    assert "edits: { shapePosition: e.finita }" in js
+    assert "name: 'estructura'" in js
+    assert "plotly_relayout" in js
+    # registrado en pintar(), no en init()
+    assert "gdMapa.__cadHandler" in js
+    assert "style.cursor" in js and "grab" in js
+    # las líneas de interfaz se recortan al alto de la pieza
+    assert "const yTop = e.finita" in js
+
+
 def test_la_cadena_guarda_su_corrida_con_la_clave_pelada():
     """`vistaGuardar` antepone 'usim.vista.' y envuelve en {fecha, resultado}: pasarle la clave con el
     prefijo ya puesto guardaba en 'usim.vista.usim.vista.cadena' y la restauración leía otro nivel, así
