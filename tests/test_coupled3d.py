@@ -23,6 +23,7 @@ import numpy as np
 import pytest
 
 from ultrasound_sim import materials as mats
+from ultrasound_sim.analytic import faran
 from ultrasound_sim.fem import coupled3d, elastic3d
 from ultrasound_sim.meshing3d import box_tet_mesh
 from ultrasound_sim.meshing3d_sphere import sphere_shell_tet_mesh
@@ -164,7 +165,8 @@ def test_sin_contraste_no_dispersa(malla_esfera):
     casi_agua = mats.ElasticSolid(
         name="casi agua", rho=AGUA.rho, c_p=float(AGUA.c), c_s=30.0, provenance="límite"
     )
-    r = coupled3d.resolver(malla_esfera, AGUA, casi_agua, F, abc_order=2)
+    # con el cuerpo transparente hay que APAGAR la restricción de rígidos (ver el otro test)
+    r = coupled3d.resolver(malla_esfera, AGUA, casi_agua, F, abc_order=2, fijar_rigidos=False)
     dispersion = np.abs(r["p_s"]).max()
     print(f"\n  |p_s| máximo con contraste nulo: {dispersion:.3e} (incidente = 1 Pa)")
     # 3 % de la incidente en esta malla (h = a/3): es el error de discretización del contraste nulo,
@@ -198,3 +200,75 @@ def test_el_desplazamiento_del_solido_es_del_orden_del_de_una_presion_de_1_pa(ma
     escala = 1.0 / (AGUA.rho * float(AGUA.c) * 2 * np.pi * F)
     print(f"\n  |u|max {np.abs(r['u']).max():.3e} m · escala p/(ρcω) {escala:.3e} m")
     assert 1e-3 * escala < np.abs(r["u"]).max() < 1e3 * escala
+
+# --------------------------------------------------------------------------- contra Faran
+
+
+def test_contra_faran_con_los_rigidos_restringidos(malla_esfera):
+    """La comparación con Faran con los modos rígidos restringidos.
+
+    Por qué hace falta la restricción: el sólido libre tiene seis modos de cuerpo rígido **sin
+    rigidez elástica**. En una onda plana la fuerza neta exacta sobre un cuerpo real es cero, y la
+    ecuación de movimiento da entonces desplazamiento medio nulo; pero la malla no cancela esa fuerza
+    exactamente y el residuo excita la traslación sin freno. Medido: el desplazamiento normal en la
+    interfaz salía 20× el exacto y la amplitud dispersada 16 % baja.
+
+    Con la restricción el error cae de 18.15 % a **9.70 %**, que es el piso del dominio: el mismo
+    malla resuelta sólo en fluido con el desplazamiento *exacto* de Faran en la interfaz da 9.73 %.
+    Es decir, el sólido deja de aportar error y lo que queda es malla + ABC.
+    """
+    a = _radio()
+    coef = faran.coeficientes(F, AGUA, ACERO, a)
+    pts = _puntos(a)
+    exacto = faran.campo_dispersado(coef, pts, a)
+    util = np.abs(exacto) > 1e-3 * np.abs(exacto).max()
+
+    r = coupled3d.resolver(malla_esfera, AGUA, ACERO, F, abc_order=2, fijar_rigidos=True)
+    fem = coupled3d._interpolar(malla_esfera, r["p_s"], pts)
+    error = np.abs(fem[util] - exacto[util]).max() / np.abs(exacto[util]).max()
+    razon = np.abs(fem).max() / np.abs(exacto).max()
+    print(f"\n  error contra Faran: {100*error:.2f} % · razón de amplitudes {razon:.3f}")
+    assert error < 0.13
+    assert abs(razon - 1.0) < 0.08
+
+
+def test_la_fuerza_neta_que_la_malla_no_cancela_es_chica(malla_esfera):
+    """El multiplicador de la restricción **es** la fuerza y el torque netos que la malla no supo
+    cancelar. Se devuelve para poder medirlo en vez de que quede escondido en un desplazamiento
+    espurio."""
+    r = coupled3d.resolver(malla_esfera, AGUA, ACERO, F, abc_order=2, fijar_rigidos=True)
+    residuo = r["residuo_rigido"]
+    assert residuo is not None and residuo.size == 6
+    print(f"\n  |residuo rígido| = {np.abs(residuo).max():.2e}")
+    assert np.abs(residuo).max() < 1e-5
+
+
+def test_sin_la_restriccion_el_error_es_peor_y_se_ve(malla_esfera):
+    """Sin restricción el error es ~2× peor. Se deja medido: si algún cambio de formulación lo
+    arregla, este test avisa (y habría que quitar la restricción, que no es gratis)."""
+    a = _radio()
+    coef = faran.coeficientes(F, AGUA, ACERO, a)
+    pts = _puntos(a)
+    exacto = faran.campo_dispersado(coef, pts, a)
+    util = np.abs(exacto) > 1e-3 * np.abs(exacto).max()
+    r = coupled3d.resolver(malla_esfera, AGUA, ACERO, F, abc_order=2, fijar_rigidos=False)
+    fem = coupled3d._interpolar(malla_esfera, r["p_s"], pts)
+    error = np.abs(fem[util] - exacto[util]).max() / np.abs(exacto[util]).max()
+    print(f"\n  error SIN restricción: {100*error:.2f} % (con restricción: ~9.7 %)")
+    assert error < 0.25
+
+
+def test_la_restriccion_no_se_usa_cuando_el_cuerpo_es_transparente(malla_esfera):
+    """Con la esfera indistinguible del medio, el cuerpo **sí** tiene desplazamiento medio distinto de
+    cero (la onda incidente pasa de largo y ejerce fuerza neta), así que restringir los rígidos mete
+    una dispersión falsa de 1.6 Pa sobre una incidente de 1 Pa. Es la contraprueba de que la
+    restricción es una condición física con dominio de validez, no un truco que siempre ayuda."""
+    casi_agua = mats.ElasticSolid(
+        name="casi agua", rho=AGUA.rho, c_p=float(AGUA.c), c_s=30.0, provenance="límite"
+    )
+    sin = coupled3d.resolver(malla_esfera, AGUA, casi_agua, F, abc_order=2, fijar_rigidos=False)
+    con = coupled3d.resolver(malla_esfera, AGUA, casi_agua, F, abc_order=2, fijar_rigidos=True)
+    print(f"\n  |p_s| sin restricción {np.abs(sin['p_s']).max():.3e} · con restricción "
+          f"{np.abs(con['p_s']).max():.3e}")
+    assert np.abs(sin["p_s"]).max() < 5e-2
+    assert np.abs(con["p_s"]).max() > 0.5

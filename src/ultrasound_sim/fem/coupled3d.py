@@ -201,7 +201,14 @@ def resolver(
     frequency: float,
     onda: Any = None,
     abc_order: int = 1,
+    fijar_rigidos: bool = True,
 ) -> dict[str, Any]:
+    """Por defecto ``fijar_rigidos=True``: ver la explicación del bloque de la restricción.
+
+    Se puede apagar, y hay que apagarlo cuando el cuerpo es **transparente** (esfera indistinguible
+    del medio): ahí el desplazamiento medio no es cero y la restricción mete dispersión falsa
+    (medido: 1.6 Pa sobre una incidente de 1 Pa).
+    """
     """Resuelve el sistema acoplado para una onda plana incidente.
 
     Parámetros
@@ -215,6 +222,7 @@ def resolver(
     omega = datos["omega"]
     k_solid, m_solid, a_ff, c = datos["K"], datos["M"], datos["A_ff"], datos["C"]
     mapa, nodos_solidos, n_solid = datos["mapa"], datos["nodos_solidos"], datos["n_solid"]
+    nodos_fluido = datos["nodos_fluido"]
 
     caras = mesh.interface_faces
     normales = mesh.interface_normals()
@@ -244,14 +252,39 @@ def resolver(
     # bloques globales: [u (3N) ; p_s (N)]
     n = mesh.n_nodes
     cero = sp.csr_matrix((3 * n_solid, 3 * n_solid))
+    n_total = 3 * n_solid + nodos_fluido.size
     a_global = sp.bmat([
         [k_solid - omega**2 * m_solid, c.T],
         [omega**2 * c, a_ff],
     ], format="csc")
     b_global = np.concatenate([b_s, b_f])
+    multiplicadores = None
+
+    if fijar_rigidos:
+        # El sólido libre tiene seis modos de cuerpo rígido SIN rigidez elástica: la única que los
+        # contiene es la reacción del fluido, que es chica. Con una onda plana la fuerza neta exacta
+        # es CERO (por simetría del problema), pero la malla no la cancela exactamente, y ese residuo
+        # excita la traslación sin freno: medido, el desplazamiento normal en la interfaz salía 20×
+        # el exacto y la amplitud dispersada 16 % baja.
+        #
+        # Se impone la traslación media nula como restricción de Lagrange (válido para una onda plana
+        # sobre un cuerpo simétrico) y se DEVUELVEN los multiplicadores: son la fuerza y el torque
+        # netos que la malla no supo cancelar. Así el desbalance queda medido en vez de escondido
+        # dentro de un desplazamiento espurio.
+        modos = elastic3d.rigid_body_modes(mesh.nodes[nodos_solidos])
+        g = sp.csr_matrix(modos.T)                       # (6, 3N)
+        cero6 = sp.csr_matrix((6, 6))
+        a_global = sp.bmat([
+            [a_global, sp.vstack([g.T, sp.csr_matrix((nodos_fluido.size, 6))])],
+            [sp.hstack([g, sp.csr_matrix((6, nodos_fluido.size))]), cero6],
+        ], format="csc")
+        b_global = np.concatenate([b_global, np.zeros(6, dtype=complex)])
 
     lu = spla.splu(a_global)
-    x = lu.solve(b_global)
+    sol = lu.solve(b_global)
+    x = sol[:n_total]
+    if fijar_rigidos:
+        multiplicadores = sol[n_total:]
     u = x[: 3 * n_solid].reshape(n_solid, 3)
     p_s_reducido = x[3 * n_solid:]
 
@@ -264,6 +297,8 @@ def resolver(
     return {
         "u": desplazamiento, "p_s": p_s, "presion_total": p_s + onda.value(mesh.nodes),
         "frequency": frequency, "onda": onda, "datos": datos, "n_solid": n_solid,
+        # fuerza y torque netos que la malla no canceló (None si no se impuso la restricción)
+        "residuo_rigido": multiplicadores,
     }
 
 

@@ -1565,3 +1565,54 @@ la proyección de ``n`` sobre los grados de libertad del sólido en ``C``.
 
 Lo que **no** hay que hacer todavía: refinar. La convergencia medida es O(h) y el error no es de
 discretización; refinar una formulación con un desbalance dinámico sólo hace más caro el mismo error.
+
+### D46 — segundo apéndice: el 22 % **resuelto**, y el piso que queda (9.7 %)
+
+**La aislación que faltaba.** Se resolvió **sólo el fluido** con el desplazamiento impuesto en la
+interfaz, dos veces:
+
+- con el desplazamiento **exacto** de Faran: error **9.73 %**, razón de amplitudes 0.980.
+- con el desplazamiento que resuelve el **FEM acoplado**: error **21.52 %**, y el desplazamiento
+  normal del FEM es **20.3×** el exacto.
+
+O sea: el fluido y el ABC están bien (ese 9.73 % es el piso de la malla y el dominio, coherente con el
+10.35 % que da el camino validado de D41 en la misma malla). **Todo el error estaba en el sólido.**
+
+**La causa: los seis modos de cuerpo rígido.** El sólido libre no tiene rigidez elástica en esos
+modos; la única que los contiene es la reacción del fluido, que es chica. Para una onda plana sobre un
+cuerpo real la fuerza neta es **cero**, y la ecuación de movimiento `−ω²Mu = F` implica entonces
+**desplazamiento medio nulo**. Pero la malla no cancela esa fuerza exactamente, el residuo excita la
+traslación sin freno y esa traslación contamina todo el campo dispersado.
+
+**La prueba y el arreglo.** Primero con una penalización (experimento): el error bajó de 19.36 % a
+13.11 % y la razón de amplitudes pasó de 0.843 a **1.012**. Después, con la versión principiada —
+restricción de Lagrange de traslación media nula, que además **devuelve los multiplicadores** (la
+fuerza y el torque que la malla no canceló):
+
+- `h = a/3.5`: 19.36 % → **10.20 %**, razón 0.843 → 0.970
+- `h = a/4.5`: 18.15 % → **9.70 %**, razón 0.858 → 0.988
+- `h = a/5.5`: 17.68 % → **9.21 %**, razón 0.865 → **0.997**
+- residuo de fuerza: **4e-7 → 7.6e-8 N**
+
+El límite rígido no cambia (9.54 % → 9.60 %): ahí el sólido ya no se mueve y la restricción no tiene
+nada que atar.
+
+**La restricción tiene dominio de validez, y se midió dónde se rompe.** Con la esfera
+**indistinguible del medio**, apagarla es obligatorio: sin restricción la dispersión es 3.0e-2 (bien),
+con restricción es **1.6 Pa sobre una incidente de 1 Pa**. Es coherente: si el cuerpo es transparente,
+la onda pasa de largo y **sí** ejerce fuerza neta, así que el desplazamiento medio no es cero y
+forzarlo mete dispersión falsa. `fijar_rigidos` queda como opción explícita de `resolver`, con default
+`True` y el caso de excepción documentado y testeado.
+
+**Qué queda, y es honesto llamarlo piso.** El 9.2-10.7 % restante **no es del sólido**: es el mismo
+número que da el fluido solo con datos exactos (9.73 %). Descomposición de ese piso: superficie
+facetada (el poliedro inscripto tiene radio efectivo 0.96-0.99 a), ABC-2 sobre una esfera de radio
+2.5a (`k₀b = 2.5`, chico para el ABC) y elementos P1 en el fluido. Para bajarlo hay tres caminos
+medibles y en ese orden: agrandar el dominio manteniendo el tamaño de elemento (el ABC pesa menos),
+afinar la malla (el facetado pesa menos) y pasar a elementos de frontera curva (deal.II/FEniCSx,
+repos de `docs/referencias.md`).
+
+**Un barrido que no sirvió y por qué.** Se barrió `ka = 0.2 … 1.0` a radio variable: 41 % a `ka = 0.2`,
+15 % a `ka = 0.5`, 19 % a `ka = 1`. El 41 % de `ka = 0.2` **no dice nada del acoplamiento**: con
+`ka = 0.2` el dominio exterior queda en `k₀b = 0.5`, o sea media longitud de onda para el ABC. Es el
+mismo error de antes (mirar un número sin preguntar qué lo domina).

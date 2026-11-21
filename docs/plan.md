@@ -62,10 +62,19 @@ Resumen de lo que está *cerrado con número medido*, no de lo que está escrito
   energía de deformación uniforme exacta, masa `3ρV` exacta. El acoplamiento está bien por sus
   límites: sin contraste no dispersa y el límite rígido da *10.66 %* contra `sphere.py`, que es el
   *10.35 %* que da en el mismo dominio el Helmholtz ya validado (D41) — o sea, el dominio y el ABC.
-  **Lo que falta**: contra **Faran** con acero a `ka = 1` el error es **22 %** (amplitud 18 % baja,
-  forma y fase correctas), y la convergencia medida es O(h), que no es lo que deja una formulación
-  correcta. El siguiente paso es comparar el desplazamiento interior contra `Φ`/`Ψ` de Faran fuera
-  del eje, donde `Pₙ(1) = 1` esconde los órdenes `n ≥ 1`.
+  **Contra Faran: 9.2 % a `ka = 1`** (era 22 %), con razón de amplitudes *0.997*. El 22 % inicial se
+  debía a los **seis modos de cuerpo rígido** del sólido libre: no tienen rigidez elástica y su
+  excitación espuria por una fuerza neta que la malla no cancela contaminaba todo el campo. Se
+  arregló con una restricción de Lagrange de traslación media nula, cuyos multiplicadores **son** la
+  fuerza espuria y se devuelven como diagnóstico (*7.6e-8 N*). Convergencia al refinar: *10.20 %*
+  (h=a/3.5) → *9.70 %* (a/4.5) → *9.21 %* (a/5.5).
+  **El piso que queda no es del sólido**: el fluido solo, con el desplazamiento exacto de Faran
+  impuesto en la interfaz, da *9.73 %* — el mismo número. O sea que lo que resta es superficie
+  facetada + ABC-2 en un dominio de radio 2.5a (`k₀b = 2.5`) + P1 en el fluido.
+  **La restricción tiene dominio de validez medido**: con una esfera indistinguible del medio hay que
+  apagarla, porque ahí la onda incidente **sí** ejerce fuerza neta y el desplazamiento medio no es
+  cero (con restricción mete dispersión falsa de 1.6 Pa sobre 1 Pa). Está como opción explícita y
+  testeada en los dos sentidos.
 
   **Faran (1951) — la derivación, guardada (D44).** La serie de la esfera elástica (dos
   potenciales P/S, tres condiciones de borde en `r = a`, sistema 3×3 por orden) quedó a mitad de
