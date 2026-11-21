@@ -2263,3 +2263,43 @@ el problema está en cómo se arma el dato.
 
 **Estado**: `fuentes_fem.py` tiene el ensamblado radiante (mejor que el anterior, que reusaba el
 dispersor) y la UI sigue sin exponerlo. D54 abre con esto, no con una promesa.
+
+## D55 — STL entra de a una pieza; la cadena de capas se malla como geometría analítica
+
+**El pedido**: cargar archivos STL para montar las estructuras a simular, y acoplar espacios para que el
+ultrasonido atraviese piel, hueso y cóclea.
+
+**La parte que funciona.** `stl.py` lee binario y ASCII y **verifica antes de mallar**: que cada arista
+esté en exactamente dos triángulos y que el volumen por divergencia sea positivo. Un STL con un agujero
+o con las caras dadas vuelta no malla a ciegas — se rechaza con el motivo escrito. Sin eso, un STL roto
+produce un número y el número parece válido.
+
+`meshing_volume.mallar_stl` convierte una pieza cerrada en tetraedros: la placa de 1 cm da **1000.0 mm³
+exactos** con 702 tetraedros.
+
+**La parte que no.** Dos STL que se tocan no se pueden mallar juntos, y no es un detalle de
+implementación:
+
+- `occ.importShapes` no acepta STL (sólo STEP/IGES/BREP). Hay que `merge` + `classifySurfaces` +
+  `createGeometry`, y eso deja la geometría en el kernel **geo**, no en **occ**.
+- Con las dos piezas en el kernel geo, `occ.fragment` falla («Unknown OpenCASCADE entity»).
+- Sin fragment, las caras coincidentes están duplicadas y el mallador 3D se cae:
+  «PLC Error: A segment and a facet intersect».
+- Fusionar los nodos después de mallar la frontera (`removeDuplicateNodes` + `generate(3)`) rompe la
+  correspondencia con la geometría: «Could not recover boundary mesh: error 2».
+
+**La decisión**: para la cadena de capas —que es el caso piel → hueso → cóclea— se malla con
+`mallar_capas`, que construye cada capa como **caja analítica** y las fragmenta con occ. Ahí la interfaz
+es **una sola superficie** y la malla sale conforme por construcción: medido en piel 2 mm + hueso 5 mm +
+líquido 4 mm sobre 20×20 mm, **4400.0 mm³** de volumen total, **3028 nodos y 0 duplicados**, y cada capa
+cayendo en su rango de `x` (piel 0.21–1.79, hueso 2.17–6.88, líquido 7.17–10.83 mm).
+
+`mallar_stl` acepta entonces **una pieza por malla** y se niega a más con un mensaje que dice por qué y
+qué usar en su lugar. Es más útil una limitación explícita que una malla que parece buena y tiene la
+interfaz rota: el acople entre regiones depende de que los nodos de la interfaz sean **los mismos**, y
+una malla no conforme lo rompe en silencio.
+
+**Lo que falta para STL multicapa**: mallar cada pieza con interfaz compartida requiere o bien geometry
+kernel occ nativo desde el STL (no soportado por gmsh para STL) o bien acople con nodos no coincidentes
+(mortar). Lo segundo es lo correcto numéricamente y es un desarrollo propio, no un ajuste. Queda como el
+siguiente paso de U9.

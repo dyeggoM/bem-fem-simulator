@@ -452,6 +452,50 @@ agrega a la librería con su criterio, después se enchufa.
   *Lo que la UI sigue sin hacer*: no mide nada propia (todo viene del servidor), no elige formulación
   por el usuario y no promedia criterios.
 
+- **U9 — Estructuras propias: STL + acople multicapa. PENDIENTE.** Es el eje que falta para el objetivo
+  declarado (ultrasonido atravesando piel → hueso → cóclea). Hoy `coupled2d`/`coupled3d` acoplan
+  **fluido ↔ un sólido** con una malla etiquetada; no hay forma de meter una geometría propia ni de
+  posicionarla.
+  1. **Lector STL propio** (`stl.py`): binario y ASCII, sin dependencias, con control de que la malla
+     sea **cerrada** (cada arista en exactamente 2 triángulos) y de que las normales apunten hacia
+     afuera (volumen por divergencia > 0). Un STL abierto o invertido tiene que fallar con un mensaje
+     que diga cuál de las dos cosas es, no mallar a ciegas.
+  2. **STL → malla de volumen** (`meshing_volume.py`) con gmsh: un STL por región, `occ.fragment` para
+     las que comparten superficie, etiqueta de región por volumen físico.
+  3. **Acople multicapa**: N regiones sólidas contiguas + fluido, reusando la formulación de
+     `coupled2d`/`coupled3d` (D41, sin tocar la física).
+  4. **Posicionamiento desde el dashboard**: traslación y rotación de la estructura, y las fuentes
+     alrededor de ella, con la misma interacción de arrastre que ya tienen las fuentes.
+  *Aceptación*: (a) transmisión normal a través de una placa de hueso en agua dentro del **2 %** del
+  coeficiente analítico de tres medios; (b) caso **transparente** (placa con las propiedades del agua)
+  con reflexión **< 1e-6** relativa; (c) un STL cerrado de una esfera malla y da el mismo campo que la
+  esfera analítica ya validada, dentro del error de esa malla; (d) un STL **abierto** falla con mensaje
+  explícito; (e) rotar la placa 90° mueve la transmisión como `cos θ` en la ventana de validez;
+  (f) la cadena piel + hueso modelada a **500 kHz** cae dentro de la **transmisión craneal medida de
+  31 ± 7 % parietal** (Riis, Webb y Kubanek 2022) — es el único punto experimental citable en la banda y
+  el que decide si el acople multicapa sirve.
+  *Materiales*: `docs/materiales-cadena.md`, con cita por valor y **NC** donde no hay fuente. La mayoría
+  son parámetros de modelado publicados, no mediciones de cada tejido, y la UI tiene que decirlo.
+
+- **U10 — Arreglos de fuentes desde archivo. PENDIENTE.** `data/transducers.toml` existe y la UI **no lo
+  usa**: cargar un arreglo planeado obliga a tipear 32 filas.
+  1. Cargar el catálogo de transductores en la vista de campo (selector de equipo → `n`, `pitch`,
+     frecuencia, foco).
+  2. Cargar un arreglo propio desde CSV/JSON (posición, ancho, amplitud, fase por elemento), con
+     validación de unidades y de que los elementos no se solapen.
+  3. Exportar el arreglo editado con el mismo formato, para poder volver a cargarlo.
+  *Aceptación*: cargar un arreglo de 16 elementos desde archivo da **el mismo campo** que armarlo a
+  mano (diferencia relativa **< 1e-9**, es el mismo solve); un archivo con un elemento de ancho mayor
+  que el pitch falla con mensaje; y el catálogo trae los campos `source`/`verified` a la vista, con
+  `VERIFY` cuando no lo están.
+
+- **U11 — Que el dashboard guíe. PARCIAL.** El tour de 9 pasos explica la pantalla una vez. Lo que
+  falta es guía **por configuración**: cada vez que el usuario cambia algo que tiene consecuencias
+  (material, frecuencia, número de fuentes, geometría), decir en el momento qué implica y qué se
+  espera —por ejemplo «en hueso λ es 2.33× más corta: con este pitch vas a tener lóbulos de rejilla en
+  ±X°», que ya se calcula—. No es un manual: es el sistema diciendo qué está pasando con lo que el
+  usuario acaba de tocar.
+
 ### Orden y dependencias
 
 U1 → U2 → U3 → U5, con U4 en paralelo cuando la cola de trabajos esté (que la introduce U4 misma).
