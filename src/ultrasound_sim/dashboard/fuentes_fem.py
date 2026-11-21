@@ -221,6 +221,8 @@ def _interpolar(nodos, triangles, valores, xs, ys):
     tri = Triangulation(nodos[:, 0], nodos[:, 1], triangles)
     xx, yy = np.meshgrid(xs, ys)
     dentro = tri.get_trifinder()(xx, yy) >= 0
-    interp = LinearTriInterpolator(tri, valores)
-    out = np.asarray(interp(xx, yy), dtype=complex)
+    # parte real e imaginaria por separado: pasar un fasor complejo descarta la imaginaria
+    re = np.asarray(LinearTriInterpolator(tri, np.real(valores))(xx, yy), dtype=float)
+    im = np.asarray(LinearTriInterpolator(tri, np.imag(valores))(xx, yy), dtype=float)
+    out = re + 1j * im
     return np.where(dentro, out, 0.0)

@@ -168,6 +168,28 @@ def test_el_nav_muestra_el_problema_y_deja_lo_demas_para_el_futuro():
     assert "etiqueta-dev" in html
 
 
+def test_la_vista_de_cadena_tiene_panel_main_y_script():
+    """La cadena piel→cóclea es la vista donde se acoplan sólidos y fluidos: tiene que estar en el
+    conmutador, con su panel y su script, o el botón abre una pestaña vacía."""
+    html = (ESTATICOS / "index.html").read_text(encoding="utf-8")
+    js_escena = (ESTATICOS / "escena.js").read_text(encoding="utf-8")
+    assert 'data-vista="cadena"' in html
+    assert 'id="vistaCadena"' in html and 'id="vistaCadenaMain"' in html
+    assert "cadena: { panel: 'vistaCadena', main: 'vistaCadenaMain' }" in js_escena
+    assert '<script src="/static/cadena.js">' in html
+    # el aviso del explorador de campo ("el pico real está en…") no corresponde acá
+    assert "vista-cadena" in (ESTATICOS / "style.css").read_text(encoding="utf-8")
+
+
+def test_la_cadena_guarda_su_corrida_con_la_clave_pelada():
+    """`vistaGuardar` antepone 'usim.vista.' y envuelve en {fecha, resultado}: pasarle la clave con el
+    prefijo ya puesto guardaba en 'usim.vista.usim.vista.cadena' y la restauración leía otro nivel, así
+    que la vista volvía vacía sin ningún error."""
+    js = (ESTATICOS / "cadena.js").read_text(encoding="utf-8")
+    assert "const CLAVE = 'cadena';" in js
+    assert "usim.vista.cadena'" not in js
+
+
 def test_la_tabla_de_fuentes_scrollea_sola_y_muestra_cuantas_hay():
     """Con 32 fuentes la tabla media 911 px, mas alta que la ventana: habia que arrastrar todo el panel
     para llegar a la fuente 30. Ahora tiene scroll propio y encabezado fijo, y un contador que dice

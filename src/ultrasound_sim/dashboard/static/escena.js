@@ -240,6 +240,7 @@ function escDibujar(r) {
 /* Tres vistas, un solo conmutador: panel + main por nombre. Agregar una vista es agregarla acá. */
 const VISTAS = {
   campo: { panel: 'vistaCampo', main: 'mainCampo' },
+  cadena: { panel: 'vistaCadena', main: 'vistaCadenaMain' },
   escena: { panel: 'vistaEscena', main: 'vistaEscenaMain' },
   dispersor: { panel: 'vistaDispersor', main: 'vistaDispersorMain' },
   cochlea: { panel: 'vistaCochlea', main: 'vistaCochleaMain' },
@@ -268,13 +269,19 @@ function escCambiarVista(vista) {
   // el aviso naranja y la línea de estado son del explorador de campo ("32 fuentes · baffle…",
   // habla del foco de la apertura): en la vista de escena confunden. Se ocultan por CSS
   // (`body.vista-escena`), no por `hidden`: `app.js` los re-muestra cuando llega su respuesta.
+  document.body.classList.toggle('vista-cadena', vista === 'cadena');
   document.body.classList.toggle('vista-escena', vista === 'escena');
   document.body.classList.toggle('vista-dispersor', vista === 'dispersor');
   document.body.classList.toggle('vista-cochlea', vista === 'cochlea');
   document.body.classList.toggle('vista-barridos', vista === 'barridos');
   document.body.classList.toggle('vista-volumen', vista === 'volumen');
   document.body.classList.toggle('vista-esfera', vista === 'esfera');
-  if (vista === 'escena') {
+  if (vista === 'cadena') {
+    // Plotly necesita que el contenedor tenga tamaño antes de re-dibujar: al volver a la pestaña el
+    // div recién se hace visible y sin esto el mapa sale de 0 px
+    if (typeof window.cadenaPintar === 'function') window.cadenaPintar();
+    setTimeout(() => window.dispatchEvent(new Event('resize')), 30);
+  } else if (vista === 'escena') {
     // resultado de la sesión anterior: se repinta antes de estimar, así volver a la pestaña no
     // obliga a resolver de nuevo
     const previo = ESC.resuelto ? null : window.vistaCargar('escena');

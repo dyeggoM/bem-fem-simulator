@@ -387,3 +387,9 @@ body.tour-abierto .app { filter: none; }
 .tabla-scroll thead th { position: sticky; top: 0; z-index: 1; background: #161b22; }
 .cuenta-fuentes { font-size: 10px; color: var(--dim); margin: 0 0 4px; }
 .cuenta-fuentes b { color: var(--texto); font-weight: 600; }
+
+
+/* En la vista de cadena el aviso de fuentes y la línea de estado hablan del foco de una apertura
+   ("el pico real está en 75.8 mm…"): son del explorador de campo y acá confunden. */
+body.vista-cadena #avisoUX,
+body.vista-cadena #estado { display: none !important; }
