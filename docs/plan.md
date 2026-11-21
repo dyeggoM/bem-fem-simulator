@@ -431,6 +431,27 @@ agrega a la librería con su criterio, después se enchufa.
   para esa configuración —el sello sale de la corrida, no de una constante escrita a mano en el JS.
   Esta fase es la que evita que dentro de tres meses no sepamos qué era confiable.
 
+- **U8 — Banco de simulación. ENTREGADA.** Lo que convierte el explorador en una herramienta con la
+  que se trabaja horas sin perder el hilo. Cinco piezas, cada una con su decisión:
+  1. **Vista `criterios`**: el registro de validación del servidor (12 criterios con tolerancia,
+     unidad y fuente) cruzado con lo medido en la sesión. Un criterio sin corrida dice `sin medir`,
+     no un aprobado por omisión.
+  2. **Persistencia por vista** (`localStorage`, TTL 12 h): volver a una pestaña cara (esfera precisa
+     ~30 s, 3D, cóclea, barridos) ya no cuesta otro solve; se repinta con su fecha. Restaurar no
+     re-guarda, o el TTL nunca vencería.
+  3. **Exportación transversal**: un botón que baja PNG de cada gráfica visible y un JSON con sus
+     trazas, sin saber nada de cada vista. En la esfera, además, JSON completo, CSV de `|p_s|(θ)` y un
+     historial de corridas que se **superponen** para comparar.
+  4. **Comparar dos campos** en la vista de campo: referencia congelada y mapa de **diferencia en dB**
+     (±20 dB, escala divergente), con el perfil de la referencia punteado en los cortes.
+  5. **Barridos nuevos**: apertura (FWHM vs `pitch/λ`, D53) y `ka` de la esfera con "comparar", que
+     resuelve las dos formulaciones en una corrida y marca el cruce (D51).
+  *Aceptación cumplida*: las ocho vistas resuelven sin errores de consola y sellan; los barridos
+  nuevos traen número medido (0.28 λ → 1.7 % de desvío; `ka` 1.17–1.58 validado y fuera de ahí 6.8 %
+  y 9.2 %); y el informe de la sesión sale en Markdown con las corridas y sus fuentes.
+  *Lo que la UI sigue sin hacer*: no mide nada propia (todo viene del servidor), no elige formulación
+  por el usuario y no promedia criterios.
+
 ### Orden y dependencias
 
 U1 → U2 → U3 → U5, con U4 en paralelo cuando la cola de trabajos esté (que la introduce U4 misma).
