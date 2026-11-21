@@ -1,0 +1,59 @@
+# Guía del dashboard
+
+```bash
+PYTHONPATH=src .venv/bin/python -m ultrasound_sim.dashboard --port 8765   # http://127.0.0.1:8765
+```
+
+El servidor es local y no tiene autenticación: escucha en `127.0.0.1`. Las corridas largas van a una
+**cola con progreso y cancelación** (la cancelación es cooperativa: se atiende entre pasos, no dentro
+de un solve).
+
+## Las ocho vistas
+
+| vista | qué resuelve | costo | sello |
+|---|---|---|---|
+| **campo** | apertura 2D sobre baffle rígido o en espacio libre; fuentes arrastrables | 0.4–1.2 s por mapa | métricas de foco, sin criterio de validación |
+| **escena FEM** | capas planas 2D contra la matriz de transferencia | < 0.1 s | `escena_rt_*` |
+| **dispersor BEM** | cilindro rígido por BEM **y** FEM contra la serie de Bessel | ~2 s | `dispersor_bem_serie`, `dispersor_fem_serie` |
+| **cóclea** | corte transversal de la cápsula (sólido + fluido + membrana) | ~3 s | `cochlea_t_interior`, `cochlea_balance` |
+| **barridos** | sensibilidad de la cóclea, frecuencia de la escena, **apertura (FWHM vs pitch)** | 10 s – varios min | según el barrido |
+| **3D** | FEM de volumen: fuente puntual contra Green, esfera contra la serie | 2–30 s | `volumen_*` |
+| **esfera elástica** | sólido elástico real (ondas P y S) contra Faran, dos formulaciones | 2 s (rápida) / ~30 s (precisa) | `volumen_esfera_elastica` |
+| **criterios** | el registro completo de criterios y lo medido en la sesión | instantáneo | — |
+
+## Flujos de trabajo
+
+**Comparar dos configuraciones.** En `campo`: *fijar referencia* congela el campo actual; cambiá lo
+que quieras y el mapa pasa a mostrar la **diferencia en dB** (±20 dB, escala divergente), con el
+perfil de la referencia punteado en los cortes. Si cambiás frecuencia o malla, el vector de
+coordenadas deja de coincidir y **no se resta**: se avisa en la línea de estado.
+
+**Comparar dos formulaciones.** En `esfera elástica` hay un selector `total` / `dispersada` con el
+error medido de cada una, y el barrido en `ka` puede correr **las dos en una sola corrida** y marcar
+el `ka` donde cruzan.
+
+**No repetir un solve.** Cada vista cara guarda su último resultado en `localStorage` (12 h) y lo
+repinta al volver, diciendo de cuándo es. Restaurar no re-guarda: si lo hiciera, la fecha se renovaría
+en cada recarga y un resultado de ayer parecería de ahora.
+
+**Exportar.** `exportar vista` (arriba a la derecha) baja un PNG de cada gráfica visible y un JSON con
+sus trazas; no sabe nada de cada vista, lee lo que está en pantalla. En la esfera además hay JSON
+completo, CSV de `|p_s|(θ)` y un historial de corridas que se superponen en la gráfica.
+
+**Informe de la sesión.** En `criterios`: un Markdown con las corridas guardadas, sus métricas y su
+sello **con su fuente**, más la tabla de criterios. Un criterio sin corrida dice `sin medir`, que no
+es un aprobado.
+
+## Trampas conocidas (medidas, no supuestas)
+
+- **El modo rápido de la esfera no sirve para comparar formulaciones.** Con dominio 2.5a el error del
+  ABC domina y las dos formulaciones miden ese error, no su diferencia: con el rápido la dispersada
+  parecía mejor en `ka` bajo y con el preciso pasa lo contrario (D51).
+- **El máximo sobre la curva angular es frágil.** La esfera del FEM es facetada y eso corre los
+  lóbulos unos grados; el máximo lo castiga sin que la amplitud esté mal. Por eso cada punto trae
+  también la norma L2.
+- **El sello de la esfera elástica vale en una ventana (`ka` ≈ 1.1–1.6)** con la formulación total;
+  fuera de ahí da 6.8 % y 9.2 %, las dos fuera del criterio (D51).
+- **`error_R_pct` de la escena es el error de amplitud**; el fasor va aparte (`error_R_fasor_pct`) con
+  el desfase de referencia que se le sacó (D52). Si comparás fases a mano contra el analítico, tenés
+  que aplicar ese giro.

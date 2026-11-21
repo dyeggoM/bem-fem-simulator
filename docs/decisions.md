@@ -2130,3 +2130,42 @@ fasores, y se reportan **dos** números con nombre propio:
 usa `error_R_abs`, que siempre estuvo bien: el sello nunca estuvo mal. Lo que estaba mal era un número
 **al lado** del sello que lo contradecía. Un reporte que se contradice a sí mismo se deja de mirar, y
 ahí se pierde el valor de tener el registro.
+
+## D53 — El criterio de pitch `λ/4` medido en la UI: 0.28 λ para el 2 %
+
+**Qué se agregó.** Un barrido de apertura en la pestaña `barridos`: con el ancho de apertura fijo
+(60 mm), variar la cantidad de elementos es variar el **pitch**; cada punto es un campo de verdad y se
+compara el FWHM lateral contra una apertura cuasi-continua (`n = 400`) del mismo ancho. Es D25/D26
+llevado de script a instrumento.
+
+**Medido** (60 mm, foco 90 mm, 250 kHz, agua, grilla 120×120):
+
+| pitch | FWHM lateral | desvío vs continuo | grataje |
+|---|---|---|---|
+| 1.25 λ | 7.95 mm | **10.8 %** | 53.3° |
+| 0.45 λ | 7.34 mm | 2.3 % | — |
+| 0.28 λ | 7.30 mm | **1.7 %** | — |
+| 0.20 λ | 7.29 mm | 1.6 % | — |
+| 0.16 λ | 7.28 mm | 1.5 % | — |
+| continuo (n=400) | 7.18 mm | — | — |
+
+El pitch más grueso que cumple el 2 % cae en **0.28 λ**, o sea **1.1× el criterio `λ/4`** de D25/D26.
+Coincide, y con el matiz que corresponde: el criterio es un orden, no un borde exacto; entre 0.25 λ y
+0.28 λ el desvío está en 1.7–1.8 %.
+
+**Dos errores propios que el barrido delató, y los dos del tipo que "parece un resultado":**
+
+1. **No barría.** La primera versión pasaba `n` y `d` al payload de `calcular`, que espera `n_elements`
+   y `aperture_mm`. No fallaba: las ignoraba y devolvía **el mismo campo cinco veces** (FWHM 9.12 mm y
+   sidelobe −9.24 dB idénticos con 8 y con 64 elementos). Lo peor de ese modo de fallar es que el
+   gráfico sale prolijo y plano, y sin un test que exija que el número **cambie** no se nota.
+2. **La firma de la cola.** `jobs` llama `fn(trabajo, datos)` y el barrido esperaba `(datos, trabajo)`:
+   moría con `'Trabajo' object has no attribute 'get'`, que no dice nada sobre la causa.
+
+Ambos quedan fijados en `tests/test_barrido_apertura.py`: uno exige que el FWHM **cambie** con el
+pitch, el otro que el punto del 2 % caiga entre 0.15 λ y 0.60 λ (o sea, ni un orden de magnitud
+arriba ni abajo).
+
+**Por qué va en el repo.** El criterio de pitch estaba en `docs/` y en un script; ahora se puede
+reproducir desde la UI y el resultado trae su número al lado. Es la diferencia entre "D25 dice λ/4" y
+"con estos parámetros, 0.28 λ da 1.7 %".

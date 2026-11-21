@@ -94,7 +94,13 @@ modelo libre es tan fuerte como la delantera (D28).
   repinta al volver, diciendo de cuándo es.
 - **Barrido en `ka` de la esfera elástica**: grafica el error de cada formulación contra Faran con la
   tolerancia del criterio como línea, para ver **dónde** vale cada una y no sólo cuánto se equivoca
-  en un punto.
+  en un punto. Con "comparar" resuelve las dos en una corrida y marca el `ka` donde cruzan.
+- **Comparar dos campos**: se congela el campo actual como referencia, se cambia lo que sea (mover
+  una fuente, la frecuencia, el foco) y el mapa pasa a mostrar la **diferencia en dB** (escala
+  divergente ±20 dB), con el perfil de la referencia punteado en los cortes.
+- **Barrido de apertura**: FWHM lateral contra `pitch/λ` con la apertura continua como referencia.
+  Medido a 60 mm y 250 kHz: `1.25 λ → 10.8 %`, `0.28 λ → 1.7 %`, o sea el 2 % se cumple en
+  **1.1× el `λ/4`** de D25/D26.
 
 ## Limitaciones conocidas (medidas, no estimadas)
 

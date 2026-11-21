@@ -388,6 +388,10 @@ agrega a la librería con su criterio, después se enchufa.
   **Consecuencia honesta**: el 4.29 % está en parte **cancelado** con el error de discretización, no
   ganado. El default sigue en la total (`fijar_rigidos=True`) porque es la sellada, y el criterio queda
   calificado a metales.
+  *Barrido de apertura en la UI (U8, D53)*: FWHM lateral contra `pitch/λ` con la apertura continua
+  como referencia. Medido a 60 mm, foco 90 mm, 250 kHz: 1.25 λ → **10.8 %** de desvío (y grataje a
+  53°), 0.45 λ → 2.3 %, **0.28 λ → 1.7 %**, 0.16 λ → 1.5 %. El pitch más grueso que cumple el 2 % es
+  **1.1× el `λ/4` de D25/D26**: coincide con el criterio y le pone el número al lado.
   *Barrido en `ka` en la UI (U7b)*: la vista resuelve la esfera en varios `ka` y grafica el error de
   cada formulación contra Faran, con la tolerancia del criterio como línea. Primer resultado con el
   modo rápido (dominio 2.5a, 5 puntos): la **dispersada gana en `ka = 0.5`** (15.2 % contra 17.7 %) y
