@@ -963,3 +963,1227 @@ solo conjunto de validaciones.
 **Costo asumido.** La UI no va a poder mostrar nada que la librería no sepa calcular, y eso incluye
 huecos conocidos: dispersión penetrable 3D (D32), elasticidad 3D y geometría de CT. Van a aparecer
 en la UI como *no disponible*, no como un resultado aproximado.
+
+## D34 — U1: la escena 2D, y dos cosas que sólo se ven en el navegador
+
+**Qué se entregó.** Una pestaña "escena FEM" donde se arma un apilado de capas (material + espesor,
+del registro de 5 materiales con los dos fluidos cocleares), se estima el costo de malla **antes** de
+resolver, y se corre `helmholtz2d.solve` de verdad. Devuelve el campo en dB, los cortes axial y
+lateral, y R/T con su referencia analítica y el error. `grid_tri_mesh(xs, ys)` arma el reticulado con
+las interfaces exactamente en los nodos: la malla es conforme por construcción, así que no hay que
+pegar regiones ni adivinar de qué material es cada elemento.
+
+**Criterio de aceptación cumplido** (el de la Fase 1, 2 % en amplitud). Agua/hueso/agua a ppw 12:
+R 0.9018 contra 0.9037 (abs 0.0019), T 0.4323 contra 0.4281 (abs 0.0041), energía 1.0000, 11 ms.
+Agua/tejido/agua: R abs 0.0060, T abs 0.0009.
+
+**Hallazgo 1 — el criterio tiene que ser absoluto, no relativo.** Con agua/tejido R vale 0.012, y el
+error *relativo* de R sale 218 % mientras el error *absoluto* es 0.006: casi todo es piso de
+discretización (P1 a ppw 12 ya da ~0.6 % de error de amplitud). Juzgar por relativo habría rechazado
+una escena que cumple. Por eso la UI muestra `error_R_abs` / `error_T_abs` y el sello se arma con
+esos, no con los porcentajes.
+
+**Hallazgo 2 — `[hidden]` no oculta si el CSS pone `display:flex`.** Las dos vistas (`main.vista`)
+compartían el ancho y el mapa de la escena se quedaba en 0 px aunque Plotly ya tenía los datos
+(17×45). Se veía en el navegador como un panel vacío sin ningún error en consola. Arreglado con
+`[hidden] { display:none !important; }`. Es el mismo tipo de bug que D27 ya había encontrado con
+`scaleanchor`: el render no falla, simplemente no se ve.
+
+**Lo que parece un bug y es física.** Con agua/tejido en incidencia normal el mapa sale casi
+uniforme: R = 1.2 %, así que la onda estacionaria varía 2.4 % y en una escala de 40 dB no se ve. Por
+eso el caso por defecto es agua/hueso/agua (R = 0.90) y hay selector de rango (40/20/10 dB o lineal).
+Con el rango en 10 dB aparecen las franjas.
+
+**Límites declarados en la propia UI**: sólo incidencia normal (arriba y abajo las paredes son
+rígidas; una onda oblicua se reflejaría ahí, y el pedido con `angulo_deg != 0` se rechaza con esa
+razón en vez de devolver un campo que parece válido), sólo fluido acústico, y tope de 60 000
+elementos con mensaje que dice qué bajar.
+
+## D35 — U2: el dispersor en la UI, y tres formas de romperse que no se ven en los tests
+
+**Qué se entregó.** Una pestaña "dispersor BEM" donde el mismo cilindro rígido en agua se resuelve
+por tres caminos a la vez: BEM (exterior, ecuación seleccionable entre `standard`, Burton-Miller y
+CHIEF), FEM (corona `a <= r <= R` en campo dispersado con dato Neumann y ABC-2) y la **serie de
+Bessel** como referencia. Se ve el mapa del campo dispersado, las tres curvas `|p|` contra θ en
+`r = 1.5a` sobrepuestas, y las tres discrepancias. La receta está copiada de `cross_validate.py` —el
+script que ya tiene los números de D12— y no reinventada.
+
+**Aceptación cumplida** (Fase 4, 2 %): ka=1 → FEM−BEM *0.97 %*, FEM−serie *0.94 %*, BEM−serie
+*0.05 %*; ka=2 → *0.58 / 0.60 / 0.14 %*; ka=3 → *0.84 / 0.72 / 0.27 %*. Las tres ecuaciones dan el
+mismo campo: BM sube el condicionamiento de 2.37 a 12.78 y su error contra la serie de 0.05 % a
+0.24 %, que sigue siendo 8× más chico que el criterio — el precio conocido de regularizar para
+poder cruzar resonancias en un barrido.
+
+**Hallazgo 1 — `NaN` no es JSON.** El mapa tiene huecos (dentro del cilindro no hay campo) y el
+`json.dumps` de Python escribe el literal `NaN`, que **no es JSON válido**: el navegador rechaza el
+cuerpo entero con `Unexpected token 'N'` y la UI queda sin nada, sin un mensaje que explique por qué.
+Ahora los huecos se mandan como `None` (→ `null`) y el servidor serializa con `allow_nan=False`, así
+que un NaN futuro revienta en el servidor con un 500 y un mensaje en vez de morir en el navegador.
+
+**Hallazgo 2 — `flex-basis` le gana a `height`.** La gráfica de comparación quedó en *12 px* de alto.
+No era Plotly: `.corte.ancho { flex: 1 1 100% }` fija el `flex-basis` en 100 %, y en un contenedor
+flex de columna con alto automático ese 100 % resuelve a 0 y pisotea el `height: 190px` de la regla
+responsive. Se cambió a `flex: 1 1 auto` con `min-height`. Tercera variante del mismo tema en D27 y
+D34: **el render no falla, simplemente no se ve**, y el único detector es mirar el navegador.
+
+**Hallazgo 3 — un test con la premisa equivocada.** El primer test de "sanity física" pedía que el
+campo decayera al alejarse. Falla por física correcta: el mapa muestra `|p_total|`, que lejos tiende
+a la onda incidente (|p| → 1), porque el **total** es incidente + dispersado. Medido: esquina −2.9 dB
+contra −3.8 dB cerca. Se reemplazó por la condición de radiación sobre `p_scattered`
+(`|p_s(4a)| / |p_s(1.6a)| < 0.75`), que es lo que de verdad tiene que decaer.
+
+**Costo y su optimización.** El mapa son 4 812 puntos (70×70) evaluados con el BEM: 11.3 s con la
+cuadratura por defecto para las 64 curvas. Bajar `quad_order` a 4 para el mapa lo deja en *1.9 s* con
+*0.00 %* de diferencia contra `quad_order=12` — los puntos del mapa están lejos de la superficie y el
+integrando es suave. La cuadratura alta se reserva para las 64 curvas de comparación, donde 0.05 %
+importa.
+
+## D36 — U3: la cóclea en la UI, y dos cuentas que no cerraban
+
+**Qué se entregó.** Una pestaña "cóclea" con el corte transversal completo (cápsula elástica,
+perilinfa, membrana basilar, ventana redonda) resuelto por el mismo `solve_cross_section` de la
+Fase 5, más de lo que tenía el panel de D31: el **mapa del campo interior** (|p| interpolado sobre
+el disco a partir de los nodos de fluido), un corte por el centro, y el balance de energía. Los tres
+sliders (espesor, `c_s`, α) siguen con sus pesos medidos en el tooltip (53 %, 8 %, 10 %), y se
+sumaron dos interruptores: membrana y ventana.
+
+**Aceptación cumplida**: `t_interior = 0.53187` contra 0.53187 de D30 (**desvío 0.00 %**), armónico
+`n = 0` 0.17913, membrana absorbiendo 72.9 %, balance de energía 0.09 %. Sin membrana el mismo
+corte da `t_interior` 0.97218 y absorción exactamente 0: el interruptor cambia la física.
+
+**Hallazgo 1 — inventé un balance que no existe.** Sumé `power_scattered_fraction` +
+`power_membrane_fraction` + `power_window_real_fraction` esperando 1 y me dio **1.85**. No estaba
+mal el código: estaba mal la cuenta. `power_scattered_fraction` (1.12 en el caso base) es
+`P_disp/P_inc` medido en otro radio y con otra normalización, y no se suma con la absorción. La
+identidad que sí documenta `CrossSectionSolution` es **`P_total + P_membrana = 0`** cuando la
+membrana es el único sumidero: da 0.00085, o sea cierra al **0.09 %**. La UI reporta esa y no la
+inventada. Lección: cuando un "balance" no cierra, primero se lee la definición de cada término, no
+se busca el bug en el solver.
+
+**Hallazgo 2 — segundo tipo de objeto que revienta el JSON.** Después de `NaN` (D35) apareció
+`window_impedance`, que es `complex`: `json.dumps` lanza `Object of type complex is not JSON
+serializable` y el navegador no recibe nada. Ahora hay un saneador (`_json_limpio`) que convierte
+complejos a `{re, im}`, numpy a tipos nativos y no finitos a `null`. Los dos casos comparten causa
+—serializar un resultado científico tal cual— así que el saneo es un solo paso antes de responder,
+y el test fija `json.dumps(..., allow_nan=False)` como contrato.
+
+**Lo que se decidió no hacer.** `Q` (ancho de banda de la resonancia de la cavidad) es la métrica
+que D29 usó para mostrar que la membrana rompe la resonancia (287 → <5), pero medirla exige un
+barrido de frecuencia: ~9 solves de 4.3 s, con la malla reconstruida en cada punto. Eso es un
+trabajo en cola (U5), no un botón de esta pantalla, así que la UI dice "necesita barrido de
+frecuencia (U5)" en vez de mostrar un número que no midió.
+
+**Nota sobre el aspecto circular.** Acá sí se usa `scaleanchor` (a diferencia de D27, donde
+rompía el mapa): en D27 el `div` colapsaba a 2 px de alto y Plotly fallaba; con el alto resuelto
+(271 px medidos) el anclaje funciona y el disco sale circular, que con dos circunferencias
+concéntricas no es cosmético. Si en algún layout vuelve a colapsar, el síntoma va a ser
+"Something went wrong with axis scaling" y la salida es sacar el anclaje, no tocar el solver.
+
+## D37 — U5: la cola de trabajos, el barrido que reproduce D30, y el Q que no se mide
+
+**Qué se entregó.** Una cola de trabajos en proceso (`dashboard/jobs.py`) con un solo worker,
+progreso, cancelación cooperativa y retención acotada a 20 jobs; el barrido one-at-a-time de la
+cóclea como trabajo de esa cola (`dashboard/sweeps.py`); y una pestaña "barridos" que lanza, sigue el
+progreso, cancela y dibuja el ranking contra la referencia.
+
+**Aceptación cumplida, y de la forma más exigente**: el barrido de la UI reproduce el ranking de D30
+*casi dígito a dígito* —espesor 53.11 % (D30 53.11), c_p 16.06 (16.06), atenuación 9.60 (9.60), c_s
+8.22 (8.22), ρ 1.03 (1.03), Z_r 0.28 (0.28)— con peor desvío 1.8 % y `t_interior` base 0.53187, en
+89 s. La única diferencia de fondo con el script es la grilla 2D espesor × atenuación, que no cambia
+el ranking.
+
+**Tres cosas que se arreglaron mirando el resultado, no el código.**
+
+- **Los puntos tienen que ser los del script.** Con 7 espesores (extremos 1 y 7 mm) el rango salía
+  52.53 % en vez de 53.11: `t_interior` no es monótona en el espesor (D24/D29) y con 13 puntos
+  aparece un extremo interior que con 7 se pierde. Y Z_r estaba en (0.6, 1.0, 1.4) en vez de
+  (0.5, 1.0, 2.0): 0.17 % contra 0.28 %. Los puntos son parte del resultado.
+- **Sin comparación no se puede declarar éxito.** El primer sello decía "reproduce D30, peor desvío
+  0.0 %" con la tabla vacía: `Math.max(...[], 0)` da 0. Ahora, si no hay comparación, lo dice.
+- **Un job cancelado no es un job fallido.** El worker levanta al ver la bandera y el `except`
+  genérico lo marcaba como `error`. La cola ahora distingue: si la bandera estaba puesta, `cancelado`.
+  Igual con la retención: podaba sólo al enviar, así que una ráfaga de jobs en cola dejaba el
+  diccionario por encima del tope para siempre; ahora poda también al terminar.
+
+**Por qué no se mide Q todavía.** Es la métrica con la que D29 mostró que la membrana rompe la
+resonancia de la cavidad (287 → <5), y era el compromiso de esta fase. No se hace porque falta la
+**definición**, no el código: no hay en el repo la función que la calculó, y "Q" puede ser el ancho de
+−3 dB en `|p|` o en `|p|²`, sobre el pico de `t_interior` dentro de qué banda. Peor: un Q de 287
+implica un ancho relativo de 0.35 %, así que un barrido de 13 puntos en ±8 % **no lo puede
+resolver** — haría falta refinamiento adaptativo y del orden de 100 solves. Inventar el número
+habría sido lo más fácil y lo más inútil. Queda como el primer trabajo de cuando se fije la
+definición (probablemente con Diego: es una decisión de métrica, no de código).
+
+**Decisión de diseño de la cola.** Un solo worker: cada solve ya usa varios núcleos vía BLAS, así
+que dos barridos en paralelo no aceleran nada y ensucian los tiempos. La cancelación es cooperativa
+—se consulta entre pasos— porque interrumpir dentro de SuperLU no es posible sin threads anidados, y
+no vale la pena para esperar 2 s.
+
+## D38 — U4: el 3D en la UI, y las tres cosas que mentían en pantalla
+
+**Qué se entregó.** Una pestaña "3D" con dos modos. *Puntual*: monopolo en una caja de agua con ABC
+en las seis caras, comparado contra el Green 3D en un anillo — error **7.0 %** y amplitud **0.969**
+(9 261 nodos, 1.0 s). *Plano*: capas apiladas con ABC sólo en *x*, R y T contra la matriz de
+transferencia — **R 0.9032 vs 0.9037** (abs 0.0005), **T 0.4343 vs 0.4281** (abs 0.0061), energía
+1.0044. Rebanadas *x-y* y *x-z*. Tope de 90 000 nodos y el techo de D32 declarado antes de apretar.
+
+**Hallazgo 1 — la fuente estaba pegada a la ABC (48 % de error que no bajaba al refinar).** La caja
+arrancaba en `x = 0` y la fuente se elige como "el nodo más cercano al origen": caía sobre la cara.
+El error era 48.7 % a 1.5 λ y 49.0 % a 2.5 λ — constante, que es la firma de un problema de *puesta
+en escena*, no de discretización. Centrando la caja: **7.0 %**. Queda un test que verifica que el
+nodo de la fuente no pertenece a ninguna cara de la frontera, porque el síntoma (error que no
+converge) no dice nada por sí solo.
+
+**Hallazgo 2 — la rebanada salía transpeusta.** Plotly lee `z[fila][columna]` como `[y][x]` y la
+matriz sale `[x][y]`: sin `.T` los ejes quedan cruzados. No se ve como un error, se ve como un
+patrón raro.
+
+**Hallazgo 3 — una esfera que se veía como un lóbulo.** El campo *era* radialmente simétrico (el
+Green cierra al 7 % en todo el anillo), pero el `div` es 740 × 270 px y Plotly estiraba 30 mm × 30 mm
+dentro de eso: la circunferencia se veía como un elipse horizontal. Con `scaleanchor` + `constrain:
+'domain'` el área de trazado queda cuadrada y la simetría se ve. Es la cuarta variante del mismo
+tema (D27, D34, D35): **el render no falla, miente**. Acá costó dos vueltas porque el primer
+diagnóstico (mirando el mapa) fue "el solver no da una onda esférica" y era falso.
+
+**Nota de física que la UI dice explícitamente.** En el modo *plano* el campo es uniforme en *y/z*:
+en incidencia normal un apilado 3D es un problema 1D. No es un defecto del render; es la física. El
+modo puntual es el que muestra algo realmente 3D, y por eso es el que abre por defecto.
+
+## D39 — U6: el sello vive en el servidor, y tres criterios que no son lo que parecían
+
+**Qué se entregó.** `dashboard/validacion.py`: un registro de 10 criterios, cada uno con
+descripción, referencia, tolerancia, unidad y **fuente** (fase o ADR). Los cinco endpoints de
+simulación devuelven `sello` ya evaluado, con tres estados —`validado`, `fuera`, `sin_referencia`— y
+la UI se limita a pintarlo. `GET /api/validacion` publica el catálogo completo para que la UI pueda
+listar qué se valida y contra qué, sin inventar nada.
+
+**Lo que se eliminó.** Hasta U5 cada vista tenía su propio umbral en JavaScript: `0.02` en la escena,
+`0.53187` en la cóclea, `10.0` en el 3D, `2.0` en el dispersor. Cuatro copias del mismo tipo de
+decisión, en el lugar donde nadie las audita y sin decir de dónde salió el número. Ahora hay un test
+que falla si cualquiera de esos valores reaparece en el JS.
+
+**Decisión 1 — `sin_referencia` es un estado, no un hueco.** El error clásico de este tipo de código
+es que un `None` termine contando como "cumple" (nadie compara contra nada, entonces nada falla). El
+registro tiene un tercer estado explícito y un test que verifica que **no** es `validado`. Caso real:
+la cóclea con espesor 3 mm no tiene referencia de `t_interior` (D30 sólo cubre 2 mm), y la UI dice
+"SIN REFERENCIA" en lugar de mostrar 0.45708 como si estuviera validado.
+
+**Decisión 2 — el resumen no promedia.** Con varios criterios por corrida, el conjunto se queda con
+el peor estado: un error grande no puede compensarse con uno chico. Promediar criterios de validación
+es cómo se aprueba un simulador que no sirve.
+
+**Hallazgo — el balance de energía de la cóclea empeora al refinar.** Con la membrana y espesor
+4 mm, el cierre `P_total + P_membrana` da **1.42 %** a ppw 20, **2.76 %** a ppw 24 y **4.07 %** a
+ppw 28. Al principio iba a escribir en el sello "subí ppw" (lo que dice el reflejo); medirlo antes
+mostró que ese consejo era **falso** y que refinar empeora. El sello ahora reporta el estado sin
+prescribir la solución, y el fenómeno queda como pregunta abierta: no es discretización (crece con
+la malla), así que apunta a la medición del flujo —el radio y los anillos de la integral de potencia—
+para esa geometría. Es el tipo de cosa que el sello destapó justamente porque ahora hay un lugar
+único donde se declara el criterio.
+
+**Consecuencia de diseño.** Un criterio nuevo no se agrega sin la corrida que lo respalde: el
+registro es datos, y cada entrada nombra su ADR. Eso deja el repo en un estado donde "¿qué está
+validado y contra qué?" se responde leyendo un archivo, no buscando en cinco JS.
+
+## D40 — Consulta a Sim-Datos sobre los puntos abiertos: qué hay, qué no, y qué pasa a ser campo del usuario
+
+Se consultó a `sim-datos` (2026-11-20) por los cuatro puntos abiertos. La respuesta ordena el trabajo:
+**un punto tenía referencia analítica clásica y tres no tienen dato citable**, y esos tres pasan a ser
+campos editables con tooltip en vez de valores que el código inventaría.
+
+### 1. Q de la cavidad coclear — NO hay dato citable; la definición sí quedó fijada
+
+No existe un Q medido de la resonancia de la cápsula ótica humana, ni en 0.1–1 kHz ni a
+100 kHz–1 MHz. Lo que está documentado **no es esto**:
+
+- `Q_ERB = CF/ERB ≈ 12.7 ± 1` a 1 kHz (Shera, Guinan y Oxenham, *PNAS* 2002) es **selectividad de los
+  filtros cocleares**, no una resonancia global de la cápsula, y su método aplica desde 1 kHz.
+- `Q_10dB` (pico/ancho 10 dB abajo) se usa para respuestas de membrana basilar y depende del nivel
+  sonoro y del estado fisiológico.
+
+Definición **operativa** adoptada (es la que implementa `sweeps._campana_decaimiento`):
+
+    Q = f_pico / (f₂ − f₁)   con   |H|²(f) = |H|²_max / 2,  o sea   |H| = |H|_max / √2
+
+Son los mismos cruces con `20·log₁₀|H|` o con `10·log₁₀|H|²`; **no es "media amplitud"**. En un campo
+estacionario `|p|²` no representa por sí solo la intensidad neta, así que se mide el ancho de banda del
+pico de `t_interior`, no una potencia absorbida. Equivalente temporal: `Q = ω₀τ_A/2` para
+`A(t) ∝ exp(−t/τ_A)`.
+
+**Medido con esa definición**: con la membrana puesta, en 85–115 kHz la respuesta **no cae 3 dB dentro
+de la banda**, así que no hay un Q que reportar y sí una **cota superior: Q ≤ 3.25** (f_pico 97.5 kHz).
+Es coherente con D29 (Q 287 → <5 al entrar la membrana) y es un resultado, no un fallo: el corte con
+membrana no tiene un pico estrecho. Validado contra lorentzianas sintéticas de Q conocido: 1.000,
+2.000 y 5.000 medidos exactos.
+
+**Lo que se agregó a la UI**, siguiendo la instrucción de Diego: un bloque "Q del pico" con el barrido
+como trabajo en cola (banda desde/hasta y cantidad de puntos, editables) y un **campo de Q de
+referencia opcional con tooltip** que dice exactamente lo de arriba — que no existe un Q citable de
+esta cavidad y que `Q_ERB ≈ 12.7` no es esto. Si el usuario carga un valor de su propia fuente, la UI
+compara: con un valor medido reporta el desvío; con una cota dice si la referencia queda dentro o
+fuera del alcance del modelo. **Comparar una cota con un número exacto y llamarlo "desvío" sería
+inventar precisión**, y por eso son dos mensajes distintos.
+
+### 2. Dispersión penetrable 3D — SÍ hay referencia analítica clásica
+
+- **Esfera fluida**: Anderson (1950), *J. Acoust. Soc. Am.* 22:426–431 — solución por ondas parciales
+  (la "serie de Mie acústica"). Esfera `a`, `ρ₁,c₁` en fluido `ρ₀,c₀`, con continuidad de `p` y de
+  `(1/ρ)∂ₙp`. **No está restringida a `ka ≪ 1`**: la aproximación de Rayleigh es la que lo está.
+- **Esfera sólida elástica**: Faran (1951), *J. Acoust. Soc. Am.* 23:405–418 — ondas longitudinales y
+  de corte en un sólido isótropo sumergido; también solución completa por ondas parciales.
+
+Esto cierra el hueco que D32 había dejado anotado: la fase de dispersión penetrable 3D tiene ahora
+contra qué validarse, y el primer paso es la esfera fluida de Anderson (más simple y sin acoplamiento
+elástico).
+
+### 3. Cápsula ótica y CT — tensor sin dato específico; CT→c sí calibrado
+
+- Peterson y Dechow (2003) midieron propiedades **direccionales 3D** por ultrasonido en cortical
+  externa del temporal de 15 cráneos. Pero **cortical externa ≠ porción petrosa ≠ cápsula ótica**, y no
+  hay tensor `E₁,E₂,E₃,ν_ij,G_ij` citable ni verificado para la cápsula ótica humana, ni validez
+  dinámica hasta 1 MHz. No se traslada el tensor de la bóveda.
+- **CT→velocidad sí tiene calibración experimental**: Webb et al. (2018), 91 fragmentos de dos cráneos,
+  500 kHz, `c = m·HU + b` con `R²` entre 0.23 y 0.53 según adquisición. Ejemplo de la tabla I (GE,
+  120 kVp, kernel BONEPLUS, reconstrucción convencional): **m = 0.75 m·s⁻¹·HU⁻¹, b = 1.32 km/s,
+  R² = 0.46**. No es ley universal: depende de energía, reconstrucción y hueso.
+
+### 4. α del hueso a 100 kHz — sigue siendo extrapolación del material
+
+Hay datos publicados **por debajo** de 270 kHz, pero son **pérdida de inserción del sistema**, no α
+intrínseca: Li et al. (2025), *Phys. Med. Biol.* 70:215024 (20 cráneos ex vivo, barrido 100–290 kHz en
+pasos de 10 kHz) y Li et al. (2025), *JASA* 157:2336–2349 (a 220 kHz, 3.6 ± 3.4 dB en históricos y
+2.9 ± 1.8 dB en conservados con Thiel). Incluyen interfaces, interferencia y geometría. Para **α del
+material** a 100 kHz no hay dato citable que separe esas contribuciones: usar Pichardo/White sigue
+siendo extrapolación, ahora contrastable contra mediciones de transmisión del sistema completo.
+
+### Qué significa para la UI
+
+Los tres puntos sin dato citable quedan como **campos que el usuario ingresa**, con tooltip que explica
+qué hace el número y qué se sabe de él — nunca como constante en el código:
+
+| campo | estado | dónde |
+|---|---|---|
+| Q de referencia | opcional, sin valor por defecto | pestaña cóclea, bloque "Q del pico" |
+| propiedades de la membrana basilar | `VERIFY` (ballpark), editables | pestaña cóclea |
+| tensor elástico de la cápsula | no existe citable → isótropo `VERIFY` (`c_p`, `ρ` fijos y declarados) | pestaña cóclea |
+| `m`, `b` de CT→c | calibración citable con ejemplo (Webb et al.) | fase de geometría de CT |
+
+La regla que sale de acá: cuando `sim-datos` dice "no hay dato citable", el número **no** se rellena —
+se expone como entrada del usuario con la explicación de su efecto, y el resultado lo declara.
+
+## D41 — Dispersión penetrable 3D: la serie de Anderson, y el error de signo que traía D32
+
+**Qué se entregó.** `analytic/sphere.py`: la solución por ondas parciales de **Anderson (1950)** para
+una onda plana sobre una esfera fluida (la "Mie acústica"), con `boundary='fluid'|'rigid'`, campos
+exterior/interior, derivadas radiales y truncación automática. Y el FEM 3D penetrable funcionando:
+`assemble_scattered` acepta `background_k` + `background_rho` + `p_inc` e integra el término de
+contraste correcto.
+
+**Validación de la referencia primero.** Una serie mal implementada es peor que ninguna: el FEM
+"coincidiría" con un error. Cuatro chequeos, todos independientes:
+
+- **Esfera casada** (`ρ₁ = ρ₀`, `c₁ = c₀`): `Aₙ = 6.1e-24`. No hay dispersión.
+- **Continuidad en `r = a`** de `p` y de `(1/ρ)∂ᵣp` con los tres campos (incidente, dispersado,
+  interior), a ka = 0.5 / 1 / 3 / 5: saltos de **1e-14 % a 1e-12 %**.
+- **Límite rígido**: `ρ₁ → 1e9` da la condición `∂ᵣp = 0` al **0.0001 %**, y la derivada normal del
+  total rígido se anula al **4.8e-13**.
+- Coherencia con la truncación: `n_max ≈ ka + 4·(ka)^(1/3) + 2` da 23–28 términos para ka ≤ 5.
+
+**El bug que D32 no pudo cerrar.** En el coeficiente de reflexión de la esfera,
+
+    Aₙ = (G·Rₙ − Rₙ′) / (Hₙ′ − G·Hₙ),    G = (ρ₀/ρ₁)·(Jₙ′/Jₙ)
+
+el cociente de densidades va **así**: con `G = (ρ₀/ρ₁)(J′/J)`, el límite `ρ₁ → ∞` da `G → 0` y
+`Aₙ → −Rₙ′/Hₙ′`, que es la condición **rígida** (`∂ᵣp = 0`). Invertido (`ρ₁/ρ₀`) daba el límite
+**blando** (`p = 0`). Y como la presión queda continua *por construcción* (la `Bₙ` sale de esa
+ecuación), el error no aparecía en `p`: aparecía en el **salto de flujo, 73.7 %, constante en ka** —
+la firma de un factor sistemático, no de discretización. Fue el chequeo del límite rígido el que lo
+delató; mirando sólo el campo dispersado contra el FEM hubiera sido indistinguible de un error de
+malla.
+
+**El FEM contra la serie** (misma caja, esfera por centroides de elemento, ABC en las seis caras):
+
+- ka = 1, ppw 12: **3.34 %** (2 197 nodos, 228 elementos en la esfera), 0.19 s.
+- ka = 2, ppw 12: **2.73 %** (13 824 nodos, 1 446 elementos), 0.4 s.
+- Convergencia a ka = 1: **5.72 %** (ppw 8) → 3.32 % (12) → 1.93 % (16) → 1.65 % (20, 1.1 s).
+- Sin contraste (`k` y `ρ` iguales al fondo): `p_s = 0` **exacto** (1e-9).
+
+**Por qué funciona ahora y no antes.** La forma débil correcta del dispersado es
+
+    ∫(1/ρ)∇p_s·∇v − (k²/ρ)p_s v − ABC(p_s) = −C(p_i),
+    C(p_i) = ∫(1/ρ − 1/ρ₀)∇p_i·∇v − (k²/ρ − k₀²/ρ₀)p_i v
+
+El operador es el **local** (lo que ya armaba `assemble_scattered`) y el lado derecho lleva el
+contraste **completo**: los dos términos restan el fondo (`1/ρ₀`, `k₀²/ρ₀`), no sólo `k²`. El intento
+de D32 usaba `(∇p_i·∇v − k²p_i v)/ρ`, que no es `C(p_i)`; por eso con `ρ` variable la comparación se
+iba a 128 % y con `ρ` constante (donde los términos de fondo se cancelaban dentro del volumen) la R
+extraída salía 0.96 en vez de 0.33. Y se integra **sólo donde el medio difiere**: fuera del dispersor
+el integrando es cero en el continuo, pero discretizado sobre todo el dominio deja el flujo espurio
+de la frontera.
+
+**Siguiente paso con referencia ya disponible**: Faran (1951) para la esfera **elástica** sumergida
+(ondas P y S), que es el mismo tipo de serie con dos potenciales en el sólido.
+
+## D42 — La esfera penetrable en la UI, y por qué el mapa mostraba casi nada
+
+**Qué se entregó.** Un tercer modo en la pestaña 3D: *esfera penetrable*, con material de la esfera y
+`ka` editables. Resuelve el campo dispersado con el término de contraste de D41 y sella contra la
+serie de Anderson. Medido: **2.94 %** de error a ka = 1 (9 261 nodos, 180 elementos en la esfera,
+960 puntos de comparación), *1.2 s*. Criterio nuevo en el registro: `volumen_esfera_serie`, 5 %.
+
+**Hallazgo 1 — el mapa del campo total no muestra nada.** El primer intento graficó `|p_total|`: como
+la onda incidente vale ≈ 1 en todo el dominio, la perturbación de la esfera (del orden del 5 %) es
+invisible en una escala de 30 dB — el mapa salía **casi uniforme, con 0.3 dB de rango**. Mostrando el
+**campo dispersado** el rango pasa a decenas de dB. Es la tercera vez que aparece el mismo patrón
+(campo uniforme con agua/tejido en 2D, esfera en 3D): *cuando el campo total está dominado por la
+incidente, lo que hay que graficar es el dispersado*.
+
+**Hallazgo 2 — el plano equivocado.** Con la propagación en `z`, el corte `x-y` (a `z = 0`) es
+perpendicular al haz y sale casi simétrico: una mancha oscura central. Los lóbulos viven en el plano
+`x-z`. En el modo esfera se invirtió cuál es el mapa principal, y el título dice cuál es cuál.
+
+**Lo que el mapa NO demuestra, y por qué igual sirve.** A ka = 1 con una esfera de contraste moderado
+el campo dispersado está dominado por el modo monopolar: se ve un lóbulo central que decae
+radialmente, no la asimetría dipolar de una esfera rígida. Eso es física, no un defecto — pero
+tampoco es la validación: **la validación son los 960 puntos comparados contra la serie** (2.94 %),
+que es un chequeo muchísimo más fuerte que mirar un mapa. La lección es que el sello numérico y la
+imagen tienen que coincidir en lo que afirman, y cuando no, manda el número.
+
+**Costo y tope.** 1.2 s con 9 261 nodos en una caja de 30 mm (2 λ). La malla tiene que resolver la
+esfera: con `ppw = 6` y `ka = 0.2` no cae ningún elemento adentro y el pedido se **rechaza** con un
+mensaje que dice qué subir, en vez de resolver una caja homogénea y devolver un error del 100 %.
+
+## D43 — Barrido de frecuencia de la escena: la resonancia de media onda como criterio
+
+**Qué se entregó.** Un barrido en frecuencia de la escena 2D como trabajo de la cola
+(`sweeps.barrido_escena`), con banda y cantidad de puntos editables, que devuelve R y T por punto y
+dibuja las **resonancias predichas** para que se vea si el modelo las encuentra.
+
+**El criterio, que es físico y no una comparación consigo mismo.** Una losa de espesor `t` en un
+medio transmite al máximo en las resonancias de media onda:
+
+    f_n = n·c_losa / (2t)
+
+Con hueso como fluido (c = 3500 m/s) y t = 10 mm: **175 y 350 kHz**. Medido en 100–400 kHz con 41
+puntos: picos en **176.7 y 353.8 kHz** (≤ 1 % de la predicción, y el corrimiento es el paso del
+barrido de 7.5 kHz). En la resonancia coinciden las tres cosas que tienen que coincidir: `T` sube a
+**0.999**, `R` baja a **0.031** en la misma frecuencia, y la matriz de transferencia reproduce el
+mismo pico. Un barrido que se equivocara de espesor, de velocidad o de fase se vería acá.
+
+**El sello marca "fuera" a ppw 12, y está bien.** El error de T del barrido llega a **5.90 %** por
+encima de 350 kHz, contra el 2 % de la Fase 1. La causa es la malla, no el barrido: con `ppw` fijo,
+a 400 kHz la losa de 10 mm tiene menos elementos por longitud de onda. Subiendo a `ppw = 20` el peor
+error baja a **2.08 %**. Es el caso opuesto al de D39 (donde refinar *empeoraba* el balance de la
+cóclea): acá el consejo "subí ppw" sí es cierto, y por eso el barrido **informa el peor error en vez
+de un promedio** — un promedio de R y T sobre la banda escondería justo el punto donde la malla deja
+de alcanzar.
+
+**Detalle de presentación.** El barrido usa la escena de la pestaña "escena FEM" si el usuario la
+editó (mismo objeto `ESC` en el cliente) y si no una losa por defecto; y el gráfico de sensibilidad
+tiene una guarda para no pisar el del barrido de frecuencia: sin ella, el último que corre borra al
+otro, que es un bug de UI que no da error, sólo muestra el gráfico equivocado.
+
+## D44 — Faran (1951): la derivación arrancada, y dónde se paró a propósito
+
+**Estado: no entregado.** Se empezó la serie de la esfera elástica y se **borró** el módulo a medio
+escribir en vez de dejarlo en el repo. Un coeficiente mal derivado no falla ruidosamente: da un campo
+que parece razonable y no coincide con nada, y descubrirlo después cuesta más que escribirlo bien de
+entrada. Esta ADR guarda lo que sí quedó verificado, para que la próxima sesión continúe en vez de
+reempezar.
+
+**Lo que quedó verificado con sympy** (no a mano). Descomposición
+`u = ∇Φ + ∇×(∇×(Ψ r̂))`, con `Φ = f(r)P(θ)` y `Ψ = g(r)Q(θ)`:
+
+    u_r = Φ_r + n(n+1)·Ψ/r²
+    u_θ = (Φ_θ + Ψ_rθ)/r
+
+Las dos salieron de sympy calculando el rotacional-rotacional en esféricas con simetría axial. El
+chequeo vale: a mano había puesto en duda el segundo término y estaba equivocado en la duda, no en la
+fórmula. Con `Ψ = 0` queda `u = ∇Φ` (`u_r = Φ_r`, `u_θ = Φ_θ/r`), que es el caso puramente
+longitudinal.
+
+**Lo que quedó derivado pero sin armar.** Las expresiones de `σ_rr` y `σ_rθ` en función de
+`f, f′, f″, P, P″` y `g, g′, g″, Q, Q″` (con `ε` en esféricas y `σ = λ·tr(ε)I + 2μ·ε`) salieron de
+sympy, pero están en la forma cruda: falta sustituir la ecuación de Legendre
+(`P″ + cotθ·P′ = −n(n+1)P`), quedarse con `f = jₙ(k_α r)`, `g = jₙ(k_β r)` y armar el sistema **3×3**
+por orden `n` para `(Aₙ, Bₙ, Cₙ)` con las tres condiciones en `r = a`:
+
+    1. u_r(sólido) = u_r(fluido),  con u_r(fluido) = (1/(ρ₀ω²))·∂p/∂r
+    2. σ_rr = −p
+    3. σ_rθ = 0
+
+**Cómo se valida cuando esté** — y esto sí está decidido, porque el problema de Faran es que no hay
+tabla de referencia a mano:
+
+1. **Teorema óptico**, que no necesita referencia: para un dispersor sin pérdidas,
+   `σ_ext = σ_sca`, con `σ_ext = (4π/k₀²)·Im f(0)` y `σ_sca = ∫|f|²dΩ`. Es conservación de energía: si
+   el sistema de coeficientes está mal, no cierra. Es el chequeo más fuerte disponible sin tabla.
+2. **Residuos de las tres condiciones** en `r = a` después de resolver: tienen que bajar a ~1e-12.
+3. **Contraste bajo**: con la esfera casi igual al fluido, `Cₙ → 0`.
+
+**Lo que NO sirve como validación, y por qué.** Comparar contra `sphere.py` en el límite `μ → 0`
+—que es el límite *físico* correcto, el sólido se vuelve fluido— es **numéricamente singular**:
+`k_β = ω/c_s → ∞` y `jₙ(k_β a)` oscila sin límite. La comparación mediría el ruido del límite, no la
+formulación.
+
+**Nota de entorno.** La derivación usa `sympy`, que se instaló en el `.venv` para esto. **No** es
+dependencia de ejecución: `analytic/faran.py` cuando exista sólo necesitará `scipy.special`. Si en
+algún momento se agrega a `pyproject.toml`, va en las de desarrollo.
+
+## D45 — Faran entregado: la esfera elástica, validada sin tabla de referencia
+
+**Qué se entregó.** `analytic/faran.py`, la serie de ondas parciales de la esfera **elástica**
+sumergida: dos potenciales adentro (P y S), tres condiciones en `r = a` y sistema 3×3 por orden `n`.
+Es la contraparte de Anderson (esfera fluida, `sphere.py`).
+
+**Cómo se valida, ya que no hay tabla a mano.** Cinco chequeos, y los cinco son independientes de la
+tabla que no hay:
+
+- **Condición unitaria por coeficiente**, `Re Cₙ = −|Cₙ|²`: se cumple a **1e-16–1e-19**, o sea
+  precisión de máquina. Es el chequeo más fuerte porque es una relación cuadrática entre la parte
+  real y el módulo de cada coeficiente: no se cumple de casualidad.
+- **Teorema óptico**, `σ_ext = σ_sca`: desvío de **1.0e-3 %** (acero, hueso y aluminio), que es la
+  cuadratura de `σ_sca`, no la serie.
+- **Límite de fluido**: con `ρ` y `c_p` iguales al agua y `c_s` bajando, `|C₀|` cae
+  **1.62e-3 → 4.04e-4 → 1.01e-4** para `c_s` 100/50/25, o sea como `c_s²`.
+- **Aproximación al rígido**: contra la esfera rígida de `sphere.py` (otro camino, otra derivación),
+  aluminio (Z/Z₀ = 11.4) **5.2e-3**, acero (30.7) **2.3e-3**, tungsteno (66.9) **1.2e-3** — monótona
+  con la impedancia, como tiene que ser. A `ka = 0.2` el acero queda a **3.5e-5** del rígido.
+- **Residuos** de las tres condiciones de borde: **1e-15 / 1e-17 / 1e-18**.
+
+**Los tres errores propios que hubo que encontrar, porque los tres dan resultados plausibles.**
+
+1. **`n = 0` en las recurrencias de Bessel.** `jₙ′ = jₙ₋₁ − (n+1)jₙ/x` pide `j₋₁` cuando `n = 0`, y
+   `scipy` devuelve `inf`: el NaN se propagaba a todo el sistema y salía `sigma = nan`. Van aparte
+   (`j₀′ = −j₁`, `h₀′ = −h₁`).
+2. **Un `k₀` de más en la continuidad de desplazamiento.** La fila 1 decía
+   `k₀/(ρ₀ω²)·∂h/∂r` cuando `∂h/∂r` **ya** trae el factor `k₀`: duplicado, el sistema entero salía
+   como si cualquier esfera fuera rígida. El síntoma que lo delató fue el caso de control —un sólido
+   con la misma `ρ` y `c_p` que el agua **tiene** que dar `C ≈ 0` y daba `0.2125`, el valor rígido—;
+   el desajuste de tensiones era exactamente `k₀ = 419`. Que la condición unitaria y el teorema
+   óptico se cumplieran igual es lo importante: **los dos son propiedades estructurales del sistema y
+   los dos pasaban con la física mal**. No reemplazan a un caso límite con respuesta conocida.
+3. **Un residuo normalizado contra sí mismo.** Para `σ_rθ` usé `|Σσ_rθ|/Σ|σ_rθ|`, que da ~1 aunque el
+   residuo sea 1e-17 (los términos no se cancelan: cada uno ya es cero). Se normaliza contra la
+   presión y la tensión normal, que son las que el sistema iguala.
+
+**Lo que NO sirve como validación**, y quedó escrito antes de programar: comparar contra `sphere.py`
+en el límite `μ → 0` exacto. Es físicamente correcto pero numéricamente singular (`k_β → ∞`). El
+límite de fluido se testea con `c_s` chico pero finito, donde la convergencia se ve.
+
+**Lo que todavía no hay.** Esto es la **referencia**, no una simulación: no hay solver FEM elástico 3D
+que comparar contra ella (la fase 6b del plan). La serie sirve desde ya para dos cosas: dar la
+respuesta exacta cuando esté el solver, y verificar los límites del propio solver (rígido y fluido)
+antes de mirar un caso con contraste real.
+
+## D46 — Fase 6b, primera mitad: malla de esfera, elasticidad 3D y acoplamiento (y lo que falta)
+
+**Entregado y validado.**
+
+- `meshing3d_sphere.sphere_shell_tet_mesh`: esfera sólida rodeada de una cáscara de fluido, con la
+  interfaz **compartida nodo a nodo**, hecha con **Gmsh** (4.15.2, ahora dependencia). Volumen del
+  sólido: error **3.51 % a h = a/3** y **1.57 % a h = a/4.5**; área de interfaz al **98.4 %** de
+  `4πa²`; conformidad verificada (cada cara de interfaz es frontera de las dos regiones).
+- `fem/elastic3d`: elasticidad vectorial P1 sobre tetraedros. Los seis **modos de cuerpo rígido**
+  caen en el núcleo de `K` a **4.1e-16**, la **energía de una deformación uniforme** da exacta a
+  **1e-16** (P1 reproduce campos lineales, así que no hay tolerancia de malla) y la masa total es
+  `3ρV` exacta.
+- `fem/coupled3d`: los dos bloques acoplados, con ABC-2 en la esfera exterior.
+
+**Qué NO está validado, y hay que decirlo claro.** La comparación con **Faran** para acero a
+`ka = 1` da **22 %**, y ese número **no** se reporta como validación. Lo que se sabe del error:
+
+- El patrón angular coincide en **forma y fase** (razón de amplitudes 0.80–0.88 casi constante, fases
+  dentro de unos pocos grados salvo en `θ = 0`), pero la amplitud sale **18 % baja**. Un déficit
+  uniforme no es un error de forma: es algo que escala.
+- El **desplazamiento interior** del FEM sale casi uniforme —el sólido se mueve como rígido— mientras
+  Faran predice deformación. Para acero la respuesta exterior es casi rígida (los `Cₙ` de Faran
+  difieren de la esfera rígida en 2.3e-3), así que la diferencia interior debería pesar poco… y sin
+  embargo pesa.
+- **A/B hecho**: el mismo dominio resuelto con el Helmholtz **ya validado** (D41) más ABC-2 da
+  **10.35 %** contra la esfera rígida. O sea que el dominio y el ABC aportan ~10 % por sí solos en
+  esta malla, y en el **límite rígido** el acoplado da **10.66 %** — coincidiendo con el camino
+  validado. El acoplamiento está bien; lo que falta aislar es la respuesta **elástica**.
+
+**Los cuatro errores propios de esta mitad** (los cuatro daban resultados plausibles):
+
+1. **Malla de capas hecha a mano, no conforme.** Icósfera + capas de prismas: el split de 3
+   tetraedros por prisma no respeta las diagonales de las caras compartidas. Medido: **2 240 caras
+   internas** apareciendo una sola vez en vez de 320. Se abandonó por Gmsh en vez de pelear el split.
+2. **`∇N₀` sumando el eje equivocado.** `-inv.sum(axis=1)` sobre un stack `(M,3,3)` no da la suma de
+   columnas. Efecto: los gradientes no sumaban cero, una **traslación producía deformación** y la
+   energía salía **5× más grande**. Se reescribió sumando los tres gradientes ya calculados.
+3. **`∇Nᵢ` como fila de `J⁻¹` en vez de columna.** Es `J·∇N = eᵢ`. Con la transpuesta mal, los modos
+   rígidos no se anulaban (6.6e-4) y la energía quedaba 4.6 % baja — un error del tamaño justo para
+   confundirse con convergencia.
+4. **Espacios reducidos.** Armar `K` sobre todos los nodos deja filas vacías en los nodos que sólo
+   existen dentro de la esfera (44 medidas) y el sistema global sale singular. Lo mismo del lado del
+   fluido. El error de SuperLU es "Factor is exactly singular", que no dice nada de la causa.
+
+**Lo siguiente, concreto.** Aislar la respuesta elástica: comparar el desplazamiento interior del FEM
+contra `Φ`/`Ψ` de Faran punto por punto (no sólo en el eje, donde `Pₙ(1) = 1` esconde los órdenes
+`n ≥ 1`), y con eso decidir de qué lado está la diferencia. Recién después tiene sentido refinar:
+la convergencia medida (22.4 → 19.6 → 17.5 % al pasar de h = a/3 a a/5) es **O(h)**, y un error de
+primer orden no es el que deja una formulación correcta sobre una superficie facetada.
+
+### D46 — apéndice: el 22 % queda **localizado**, no resuelto
+
+Después de la primera mitad se hizo el diagnóstico que faltaba. Los tres resultados que importan:
+
+**1. El campo interior de Faran está bien.** Se agregó `faran.campo_interior` (desplazamiento dentro
+del sólido en puntos arbitrarios) y se validó contra lo que ya estaba validado: en ``r = a`` la
+componente radial del sólido tiene que igualar a la del fluido, ``(1/ρ₀ω²)·∂p/∂r``. Da
+**1.0000 en todos los ángulos** (±1e-4). Hacía falta medirlo fuera del eje: en el eje
+``Pₙ(1) = 1`` y ``dPₙ/dθ = 0``, así que mirar sólo ahí **esconde todos los órdenes ``n ≥ 1```,
+que es donde aparece la deformación.
+
+**2. La rigidez elástica y la fuerza de acoplamiento están bien.** Test estático con respuesta
+exacta: presión uniforme sobre la esfera, ``u_r = −p·r/(3K)``. Medido **0.9994** (desvío 1.5 %), y
+0.9998 sobre la superficie. Ese test prueba a la vez ``K``, la matriz constitutiva y el término de
+fuerza ``−∫p(n·v)``. (Detalle: el problema estático es singular en los seis modos rígidos, así que
+hay que proyectarlos antes de comparar; sin eso los números salen con desvíos de 200 % que parecen
+un bug de física y son una traslación arbitraria del solver.)
+
+**3. El error está en el balance DINÁMICO, y se ve separando traslación de deformación.** En el
+interior, para acero a ``ka = 1``:
+
+- Faran: traslación **4.79e-15** m, deformación **3.86e-15** m (55 % del total).
+- FEM: traslación **5.62e-14** m (12× la de Faran), deformación **6.63e-16** m (**0.17×**).
+
+O sea: el sólido del FEM **casi no deforma** y **traslada 12 veces de más**. Ni la rigidez ni la
+estática pueden producir eso — las dos están validadas. Lo que falla es cómo se equilibran las dos
+contribuciones dinámicas en la interfaz: la fuerza del incidente ``−∫p_i(n·v)`` y la reacción
+``∫p_s(n·v)``. En una esfera rígida esas dos se cancelan exactamente (no hay traslación en una onda
+plana); si la cancelación queda desbalanceada, el residuo es una **fuerza neta** que traslada al
+sólido sin deformarlo, que es exactamente el patrón medido.
+
+**Siguiente paso, concreto y acotado.** Medir la fuerza neta en la solución del FEM:
+``F = ∫_Γ (σ·n + p·n) dS`` sobre la interfaz. Si ``F ≠ 0``, el desbalance está en los dos términos
+del acoplamiento y se arregla ahí; si ``F ≈ 0``, el problema es la *distribución* de la tracción
+(el sólido recibe una presión casi uniforme en vez de la que corresponde), y el sospechoso pasa a ser
+la proyección de ``n`` sobre los grados de libertad del sólido en ``C``.
+
+Lo que **no** hay que hacer todavía: refinar. La convergencia medida es O(h) y el error no es de
+discretización; refinar una formulación con un desbalance dinámico sólo hace más caro el mismo error.
+
+### D46 — segundo apéndice: el 22 % **resuelto**, y el piso que queda (9.7 %)
+
+**La aislación que faltaba.** Se resolvió **sólo el fluido** con el desplazamiento impuesto en la
+interfaz, dos veces:
+
+- con el desplazamiento **exacto** de Faran: error **9.73 %**, razón de amplitudes 0.980.
+- con el desplazamiento que resuelve el **FEM acoplado**: error **21.52 %**, y el desplazamiento
+  normal del FEM es **20.3×** el exacto.
+
+O sea: el fluido y el ABC están bien (ese 9.73 % es el piso de la malla y el dominio, coherente con el
+10.35 % que da el camino validado de D41 en la misma malla). **Todo el error estaba en el sólido.**
+
+**La causa: los seis modos de cuerpo rígido.** El sólido libre no tiene rigidez elástica en esos
+modos; la única que los contiene es la reacción del fluido, que es chica. Para una onda plana sobre un
+cuerpo real la fuerza neta es **cero**, y la ecuación de movimiento `−ω²Mu = F` implica entonces
+**desplazamiento medio nulo**. Pero la malla no cancela esa fuerza exactamente, el residuo excita la
+traslación sin freno y esa traslación contamina todo el campo dispersado.
+
+**La prueba y el arreglo.** Primero con una penalización (experimento): el error bajó de 19.36 % a
+13.11 % y la razón de amplitudes pasó de 0.843 a **1.012**. Después, con la versión principiada —
+restricción de Lagrange de traslación media nula, que además **devuelve los multiplicadores** (la
+fuerza y el torque que la malla no canceló):
+
+- `h = a/3.5`: 19.36 % → **10.20 %**, razón 0.843 → 0.970
+- `h = a/4.5`: 18.15 % → **9.70 %**, razón 0.858 → 0.988
+- `h = a/5.5`: 17.68 % → **9.21 %**, razón 0.865 → **0.997**
+- residuo de fuerza: **4e-7 → 7.6e-8 N**
+
+El límite rígido no cambia (9.54 % → 9.60 %): ahí el sólido ya no se mueve y la restricción no tiene
+nada que atar.
+
+**La restricción tiene dominio de validez, y se midió dónde se rompe.** Con la esfera
+**indistinguible del medio**, apagarla es obligatorio: sin restricción la dispersión es 3.0e-2 (bien),
+con restricción es **1.6 Pa sobre una incidente de 1 Pa**. Es coherente: si el cuerpo es transparente,
+la onda pasa de largo y **sí** ejerce fuerza neta, así que el desplazamiento medio no es cero y
+forzarlo mete dispersión falsa. `fijar_rigidos` queda como opción explícita de `resolver`, con default
+`True` y el caso de excepción documentado y testeado.
+
+**Qué queda, y es honesto llamarlo piso.** El 9.2-10.7 % restante **no es del sólido**: es el mismo
+número que da el fluido solo con datos exactos (9.73 %). Descomposición de ese piso: superficie
+facetada (el poliedro inscripto tiene radio efectivo 0.96-0.99 a), ABC-2 sobre una esfera de radio
+2.5a (`k₀b = 2.5`, chico para el ABC) y elementos P1 en el fluido. Para bajarlo hay tres caminos
+medibles y en ese orden: agrandar el dominio manteniendo el tamaño de elemento (el ABC pesa menos),
+afinar la malla (el facetado pesa menos) y pasar a elementos de frontera curva (deal.II/FEniCSx,
+repos de `docs/referencias.md`).
+
+**Un barrido que no sirvió y por qué.** Se barrió `ka = 0.2 … 1.0` a radio variable: 41 % a `ka = 0.2`,
+15 % a `ka = 0.5`, 19 % a `ka = 1`. El 41 % de `ka = 0.2` **no dice nada del acoplamiento**: con
+`ka = 0.2` el dominio exterior queda en `k₀b = 0.5`, o sea media longitud de onda para el ABC. Es el
+mismo error de antes (mirar un número sin preguntar qué lo domina).
+
+### D46 — tercer apéndice: de dónde salen los 9 puntos, y el dominio pasa a 4a
+
+**El experimento.** Fluido solo con el desplazamiento exacto de Faran en la interfaz (9.73 % de base),
+moviendo **una cosa por vez**. Ese camino aísla dominio y malla del sólido, y cuesta 2 s en vez de 30.
+
+**Dominio (`h = a/4.5` fijo):**
+
+- `b = 2.5a` (`k₀b = 2.5`): **9.30 %** — 5 934 nodos, 2.0 s
+- `b = 4.0a` (`k₀b = 4.0`): **4.06 %** — 21 398 nodos, 24 s
+- `b = 6.0a` (`k₀b = 6.0`): **3.96 %** — 67 113 nodos, 303 s
+
+O sea: **el ABC se lleva ~5 puntos de los 9**, y a 4a ya está por debajo del piso de malla. Ir a 6a
+mejora 0.1 puntos por **12× el costo**. El ABC local no es el problema: el problema era ponerle un
+dominio de `k₀b = 2.5`, que es media longitud de onda.
+
+**Malla (en `b = 4a`):**
+
+- `h = a/3`: 10.24 % (área de interfaz 0.9807 de la esfera)
+- `h = a/4.5`: **4.06 %** (0.9913) — orden aparente 2.28
+- `h = a/6`: **3.03 %** (0.9945) — orden 1.02
+
+El orden **baja a 1** al refinar, y el área de la interfaz converge despacio: a partir de acá el que
+manda es el **facetado** (el poliedro inscripto tiene área y radio menores que la esfera). Refinar más
+no arregla eso — lo arreglan elementos de frontera curva, y por eso `docs/referencias.md` apunta a
+deal.II/FEniCSx para ese paso.
+
+**Acoplado completo, con el sólido resuelto:**
+
+| configuración | error | nodos | tiempo |
+|---|---|---|---|
+| 2.5a, h=a/3.5 | 10.20 % | 2 858 | 1.3 s |
+| 3.0a, h=a/4.5 | 7.62 % | 9 755 | 13.9 s |
+| **4.0a, h=a/4.5** | **4.21 %** | 21 398 | 32 s |
+| 4.0a, h=a/6 | 3.01 % | 47 574 | 211 s |
+
+Comparado con el fluido solo y datos exactos a 4a (4.06 %), el **sólido aporta 0.15 puntos**: la
+resolución elástica dejó de ser el cuello de botella.
+
+**Decisión de API.** `sphere_shell_tet_mesh` toma `outer_radius` y `spacing` por defecto
+(`4·radius` y `radius/4.5`) y **avisa** si el radio exterior baja de `3·radius`, con el número medido
+en el mensaje. Un dominio chico sigue permitido —para una vista rápida sirve— pero ya no puede pasar
+silenciosamente a un número que se reporte.
+
+**Lo que queda sobre la mesa.** Si se quiere el 4 % **al costo de 1.3 s**, el camino es una condición
+**Dirichlet-to-Neumann exacta** sobre la esfera exterior (expansión en armónicos esféricos con
+`hₗ′(k b)/hₗ(k b)` por modo, en vez del ABC local): es exacta para una frontera esférica y permitiría
+`b = 2.5a`. No está implementada; queda como el siguiente paso si el costo de 32 s molesta en la UI.
+
+## D47 — U7: la esfera elástica en la UI, y el hallazgo del sólido de bajo contraste
+
+**Qué se entregó.** Pestaña **"esfera elástica"**: material, `ka`, frecuencia, dos mallas (rápida y
+precisa) y el interruptor de la restricción de modos rígidos, todo con tooltip. El servidor resuelve
+con `coupled3d` y contrasta contra Faran en la misma corrida; la UI pinta el campo dispersado en el
+plano x-z, el módulo `|p_s|` contra θ y la **diferencia de fase** (no las dos fases: sus saltos de
+±180° se leen como discontinuidades del modelo y no lo son). El sello sale del registro
+(`volumen_esfera_elastica`, 6 %), no de una constante en el JS.
+
+**Error contra Faran por material**, malla precisa (dominio 4a, `h = a/4.5`, 21 398 nodos, ~40 s):
+
+- acero: **4.29 %** (razón de amplitudes 0.969)
+- aluminio: **3.99 %** (0.972)
+- tungsteno: **4.71 %** (0.966)
+- **hueso: 13.16 %** (1.058)
+
+**El hueso no es un problema de malla: es de modelo.** Se probó apagar la restricción de rígidos y
+empeora a **54.61 %** (contra 19.52 % del acero), así que la restricción no es la culpable — sigue
+siendo imprescindible. Lo que pasa es que el hueso tiene un contraste de impedancia de **4.6** contra
+**30.7** del acero: con contraste bajo, el cuerpo **se mueve parcialmente con el fluido**, y la
+condición de traslación media nula deja de ser exacta. Es la misma frontera que apareció con la
+esfera transparente (donde la restricción mete dispersión falsa de 1.6 Pa) pero en un régimen
+intermedio, y por eso hay que decirlo en vez de ajustar el umbral hasta que entre.
+
+**Lo que arreglaría eso, y no es una malla más fina.** Formular el sólido también en **campo
+dispersado** (`u_s = u − u_i`, con `u_i` la incidente del fluido prolongada al interior): así el caso
+transparente da `u_s = 0` **exactamente**, sin restricción, y los modos rígidos sólo se excitan por el
+contraste real. Arrastra el mismo tipo de término que D41 (hay que aplicar el **operador completo** a
+la incidente restringido al sólido, no `−(k²−k_b²)`), así que se hace con la misma disciplina: primero
+la derivación, después el test de que el caso transparente da exactamente cero.
+
+**Mientras tanto, la UI dice la verdad.** El sello marca `fuera` para el hueso con el número medido y
+la fuente; no se subió el umbral a 13 % para que la tabla se viera verde. Un criterio que se ajusta
+hasta que pasa deja de ser un criterio.
+
+**Dos arreglos de plataforma que salieron de esto:**
+
+- **Gmsh desde un hilo.** `gmsh.initialize()` reemplaza el manejador de SIGINT, y eso revienta en el
+  hilo del worker de la cola: *"signal only works in main thread"*. Se pasa `interruptible=False`.
+  Sin eso la vista no funcionaba desde la UI y sí desde la consola — el peor tipo de bug.
+- **Interpolación para el mapa.** Probar los 8 672 tetraedros por cada uno de los 6 561 puntos del
+  mapa tardaba **15.1 s** (el solve son 1.8 s). Con un KD-tree y 32 vecinos baja a **1.08 s**, y se
+  verificó que da exactamente lo mismo que la búsqueda exhaustiva.
+
+### D47 — apéndice: el tejido casi fluido y la restricción que no se puede imponer
+
+El barrido por material que se había lanzado dejó un número que no se podía publicar así: con
+**tejido casi fluido** (`c_s = 30 m/s`, contraste de impedancia **1.08×** el agua) el campo dispersado
+sale **53×** el exacto — **5264 %** de error. No es un problema de malla: es la restricción de
+traslación media nula, que **supone que la onda plana no ejerce fuerza neta**, y con contraste bajo el
+cuerpo se mueve parcialmente **con** el fluido y la suposición se rompe. Sin la restricción, el mismo
+caso da razón **1.13×** y error absoluto **7.2e-3 Pa** sobre una incidente de 1 Pa.
+
+**Lo que se hizo, en vez de subir el umbral:**
+
+1. **La restricción se desactiva sola** por debajo de un contraste de impedancia de **2.5**, y se
+   informa (`restriccion_automatica`). El corte sale de dos puntos medidos: 4.55 (hueso) da 15 % con
+   la restricción y 1.08 (tejido) da 5264 %; no de una fórmula.
+2. **El sello deja de usar el error relativo cuando el campo es débil.** Si `|p_s|` máximo no llega al
+   5 % de la incidente, el denominador se achica pero el error absoluto no, y "23 % de error" pasa a
+   ser un número sin sentido que además asusta. En ese régimen el sello va a **`sin_referencia`** y se
+   muestra el **error absoluto** contra la incidente.
+3. **La UI lo dice en la ficha**: contraste, si la restricción se desactivó sola y por qué, y el error
+   absoluto con su escala.
+
+**Tabla completa, `ka = 1`, dominio 4a, `h = a/4.5`, 21 398 nodos:**
+
+- acero (contraste 30.7): **4.29 %** — validado, es el caso del criterio
+- aluminio (11.4): **3.99 %**
+- tungsteno (66.9): **4.71 %**
+- hueso (4.6): **13.16 %** — error de modelo por contraste moderado
+- tejido casi fluido (1.08): con restricción **5264 %**; sin restricción, error absoluto *7.2e-3 Pa*
+
+**La lección, que es la misma de siempre en este proyecto:** el criterio no se ajusta para que la
+tabla quede verde. Un material que la formulación no sabe representar se marca, se explica y se
+desactiva lo que corresponde — y el arreglo de fondo sigue siendo el mismo: formular el sólido en
+campo dispersado, donde el caso transparente da exactamente cero **sin** necesidad de restringir nada.
+
+**La tabla completa, y de dónde sale cada error.** Con `ka = 1`, dominio 4a, `h = a/4.5`:
+
+- acero (contraste 30.7): **4.29 %** con restricción · 19.52 % sin ella
+- aluminio (11.4): **3.99 %**
+- tungsteno (66.9): **4.71 %**
+- hueso (4.6): **13.16 %** con restricción · 54.61 % sin ella
+- tejido casi fluido (1.08, `c_s = 30`): **5264 %** con restricción · 23.19 % sin ella
+- tejido (`c_s = 200`): 1049 % con restricción · 111 % sin ella
+- grasa (`c_s = 100`, contraste 0.92): 589 % con restricción · **353 % sin ella**
+
+**La grasa agrega un tercer mecanismo, distinto de los otros dos.** Con `c_s = 100` la longitud de
+onda de corte es `λ_s = c_s/f = 1.0 mm`, y el elemento mide 0.53 mm: **1.9 elementos por λ_s**. La
+malla se elige con la longitud de onda del **fluido** (15 mm), y un sólido blando necesita su propia
+malla más fina. Por eso a la grasa no le alcanza con apagar la restricción: el interior del sólido
+está sub-resuelto.
+
+Se agregó la métrica `elementos_por_lambda_corte` a la salida, y la UI avisa cuando baja de 4. Medido:
+acero **53.6**, hueso **31.8** (o sea que el 13 % del hueso **no** es falta de resolución de corte, es
+el modelo), tejido casi fluido **0.5**. Tres mecanismos distintos, tres diagnósticos distintos, y
+ninguno se arregla subiendo el `ppw` del fluido.
+
+## D48 — Consulta a Sim-Datos: la restricción de traslación media nula está mal planteada
+
+Consulta del 2026-11-20 sobre (1) `c_s` de tejido blando en banda, (2) el parámetro correcto para
+decidir "dispersor débil", (3) cómo reportar el error de un campo dispersado débil y (4) a partir de
+qué contraste vale la suposición de desplazamiento medio nulo. La respuesta obliga a corregir tres
+cosas de D47, y una de ellas es conceptual.
+
+### 1. La premisa física era falsa
+
+Se impuso `U_CM = 0` argumentando que "una onda plana no ejerce fuerza neta sobre un cuerpo real".
+**Sim-Datos: eso confunde la fuerza armónica de primer orden con la fuerza media de radiación de
+segundo orden.** Que la primera promedie cero en un ciclo no significa que su amplitud compleja sea
+cero ni que el cuerpo no oscile. Para un sólido libre el balance es
+
+    −ω²·M·U_CM = −∮ p_total·n dS
+
+e imponer `U_CM = 0` **elimina la respuesta traslacional** salvo que la fuerza resultante sea también
+cero.
+
+Referencia directamente pertinente: **Feuillade y Clay (1999), *Anderson (1950) revisited*, JASA
+106:553–564, §IV**, que demuestra que Faran y Anderson **contienen** el *rebound* traslacional y que
+expandir alrededor de un origen fijo no lo elimina.
+
+Criterio cuantitativo en el límite `k₀a ≪ 1` (esfera pequeña, fluido inviscido, respuesta dipolar),
+de las ecs. 22 y 26 de Bruus (2012):
+
+    v_partícula / v_incidente = 3 / (2g + 1),   con g = ρ_sólido / ρ_fluido
+
+Con esa fórmula se entiende la tabla de D47 sin inventar nada: cuando `g ≈ 1` la traslación **acompaña
+al fluido** y no debe anularse (tejido, g = 1.05 → 0.97); con acero (g = 7.8 → 0.18) la contribución
+suprimida es chica. La inmovilidad aparece como límite de **gran inercia**, no de gran impedancia.
+
+Consecuencia: **no existe un umbral en `Z_s/Z_0`**. El corte en 2.5 que se puso en D47 no es un
+criterio físico; queda como **interruptor empírico de dos puntos medidos**, rotulado como tal, y el
+arreglo es dejar de imponer la restricción resolviendo el sólido en campo dispersado (donde el
+*rebound* aparece por construcción).
+
+### 2. El parámetro de "dispersor débil" no es la impedancia
+
+Para una esfera elástica los parámetros independientes son `ρ_s/ρ_0`, `c_p,s/c_0` y `c_s/c_0`; dos
+materiales con el mismo producto `ρ·c_p` **no** dan la misma dispersión. El criterio publicado de Born
+para dispersores fluidos (Sharma y Saha 2004, ecs. 4a–4b) es
+
+    γ_ρ  = (ρ_s − ρ_0)/ρ_s ;  γ_κ = (κ_s − κ_0)/κ_0
+    |γ_ρ| ≪ 1 ;  |γ_κ| ≪ 1 ;  x·|γ_ρ| < 1 ;  x·|γ_κ| < 1      (x = k₀a)
+
+y **no** fija un porcentaje universal de contraste que garantice una precisión dada, ni se traslada
+sin más a una esfera sólida con resonancias de corte. Rayleigh (`k₀a ≪ 1`) y Born (perturbación débil
+del campo interno) son hipótesis distintas: un objeto chico puede tener contraste grande y dispersión
+resonante.
+
+### 3. Cómo reportar el error de un campo dispersado débil
+
+Se reportan **las dos métricas, siempre, sobre los mismos puntos**, y no se elige una:
+
+    E_inc = ‖p_s,num − p_s,ref‖∞ / |p_inc|        (precisión respecto de la excitación)
+    E_sca = ‖p_s,num − p_s,ref‖∞ / ‖p_s,ref‖∞     (precisión respecto de la señal a resolver)
+
+Es una recomendación de validación, **no una norma acústica**. No hay umbral citable para descartar
+`E_sca`; cuando la referencia se anula el error relativo queda indefinido y cerca de un nulo es muy
+sensible (Lavia et al., TetraScatt, fig. 4, atribuyen picos del error relativo a nulos de la
+respuesta). O sea: el estado `sin_referencia` que se puso en D47 por debajo del 5 % de amplitud es
+defendible, pero **no reemplaza** a `E_inc`: se muestran las dos.
+
+Sobre secciones eficaces: son observables estándar (`dσ/dΩ = |F|²`, `σ_sca = ∫|F|²dΩ`), pero pierden
+fase y detalle angular, y un patrón normalizado por su propio máximo puede ocultar un error
+multiplicativo enorme. Para validar Faran: **campo complejo + σ_sca + patrón angular con escala
+absoluta**, no `σ_sca` en lugar del campo.
+
+### 4. `c_s` de tejido blando: no hay dato citable en la banda
+
+- Las `c_s` de elastografía (1–5 m/s, μ ~ 1–20 kPa) son de **cientos de Hz**, no de la portadora
+  ultrasónica; Chen et al. (2009) trabajan con ondas de corte de cientos de Hz.
+- Hay mediciones ultrasónicas de tejido bovino (Madsen et al. 1983, JASA 74:1346, 2–14 MHz) pero
+  **fuera de la banda** y con fuerte dispersión.
+- En 100 kHz–1 MHz hay un dato biológico parcial: Feng, Li y Yun (2023, Nat. Commun. 14:4949), ondas
+  de Rayleigh en piel humana *in vivo* hasta 500 kHz; a 500 kHz implican `c_R ≈ 200 m/s`, pero es una
+  **onda superficial en piel estratificada**, no `c_s` volumétrica de músculo, grasa o hígado.
+- Para tejido viscoelástico hace falta `μ*(ω)`, no sólo `μ` real: `k_s² = ρω²/μ*(ω)`.
+
+**Conclusión para el simulador**: los materiales "tejido (casi fluido, c_s = 30)" y "grasa
+(c_s = 100)" que están en la UI **no tienen fuente citable** en la banda. Quedan como *supuesto
+explícito* rotulado en el tooltip, no como dato. Y no hay umbral universal de `c_s` para decidir
+cuándo un modelo fluido es suficiente: hay que mirar la contribución de corte y su amortiguamiento.
+
+### Lo que cambia en el repo
+
+1. `docs/decisions.md` (este ADR): se corrige la justificación de D47. El umbral de contraste 2.5 deja
+   de presentarse como criterio físico y pasa a interruptor empírico.
+2. Los materiales blandos se rotulan en la UI como **ballpark sin fuente en banda**.
+3. La métrica doble (`E_inc` y `E_sca`) ya está en la salida; el sello usa `E_sca` y el texto muestra
+   las dos.
+4. El paso de fondo —sólido en campo dispersado— deja de ser "una mejora" y pasa a ser **la
+   corrección de un error conceptual**: la formulación actual suprime un término dipolar que Faran
+   incluye.
+
+## D49 — Sólido en campo dispersado: la formulación correcta es numéricamente peor
+
+**Qué se hizo.** Se agregó `formulacion="dispersada"` a `coupled3d.resolver`: se resuelve
+`u_s = u − u_i` en vez del desplazamiento total, y la incidente entra como **término de contraste**.
+Es la respuesta a D48 (la restricción de traslación media nula suprime un dipolo físico).
+
+**El detalle que hace que funcione: contraste, no residuo.** Restar el operador **completo**
+`(K−ω²M)·u_i − b_s` deja un residuo O(h²) —medido: **0.35 %** de la tracción incidente, con los dos
+términos valiendo 2.558e-7 y 2.549e-7— y ese residuo empuja un campo espurio de **~0.06 Pa**, del orden
+del 18 % del campo real de un metal. La forma correcta es la lección de D41 trasladada a elasticidad:
+aplicar sólo el **contraste del operador**, con el operador del fluido armado sobre la **misma malla y
+la misma cuadratura**. Así, un cuerpo indistinguible del fluido da matrices **idénticas** y el término
+es exactamente cero, sin depender de `h`.
+
+**Validado en el límite, y esto sí es exacto.** Con `ρ` y `c_p` del agua y `c_s` bajando:
+
+    c_s = 100 → |p_s| = 6.7e-2 Pa
+    c_s =  30 → |p_s| = 2.6e-3 Pa
+    c_s =  10 → |p_s| = 5.3e-4 Pa
+    c_s =   3 → |p_s| = 1.2e-4 Pa      (incidente = 1 Pa)
+
+Converge a cero como `c_s²`, **sin restringir nada**. Y el test de que las dos matrices coinciden da
+diferencia exactamente 0.0. La formulación está bien.
+
+**Y sin embargo, contra Faran es peor:**
+
+- acero: **19.49 %** (razón 0.847) contra **4.29 %** de la total+restricción
+- aluminio: **44.14 %** (razón 0.673) contra **3.99 %**
+
+**Por qué (hipótesis con fundamento).** Para un metal el cuerpo casi no se mueve, así que
+`u_s ≈ −u_i` con la magnitud de la incidente, y el término elástico `(K−ω²M)u_s` con la rigidez del
+acero es enorme: la ecuación es una **resta de términos grandes**. Cualquier error de interpolación de
+`u_i` en el interior se amplifica por `K` (~1e11). La formulación dispersada es correcta en el
+continuo y **mal condicionada en esta malla**; la total+restricción es incorrecta en el continuo pero
+bien condicionada.
+
+**Consecuencia honesta, y hay que decirla: el 4.29 % estaba en parte de suerte.** No es que la
+restricción acierte: suprime el término dipolar que Faran incluye, y en esta malla el error que
+introduce se cancela parcialmente con el error de discretización del resto. Un número bueno por
+cancelación no es una validación, y por eso el criterio `volumen_esfera_elastica` queda **calificado**
+en D48/D49: vale para metales con la formulación total y **no** para materiales livianos.
+
+**Decisión de default.** Se deja `formulacion="total"` con `fijar_rigidos=True` como default —es la
+que reproduce 4.29 % y la que está sellada— y la dispersada se expone como opción documentada. Cambiar
+el default a la formulación correcta pero 5-10× peor contra la referencia habría empeorado la UI sin
+explicar nada; lo que corresponde es entender la amplificación antes de mover el default.
+
+**Siguiente paso, concreto.** Antes de refinar a ciegas: (a) comparar la **traslación** que resuelve la
+formulación dispersada contra la ley analítica `v_partícula/v_inc = 3/(2g+1)` en el límite `k₀a ≪ 1`
+(Bruus 2012, ecs. 22 y 26) — si la traslación sale bien y el campo mal, el problema es el resto del
+campo; si sale mal, es el acoplamiento con el fluido en un contorno que se mueve; (b) recién después
+decidir si se refina el sólido, el fluido o se cambia de formulación.
+
+#### D49 — apéndice: la corrida vieja, que confirma el diagnóstico
+
+Quedó registrada una corrida del barrido anterior (con el operador **completo** restado, no el
+contraste). Su límite transparente **no converge**:
+
+    c_s = 100 → 1.22e-1 Pa
+    c_s =  30 → 6.42e-2 Pa
+    c_s =  10 → 5.72e-2 Pa      ← se estanca
+
+Contra el operador de contraste, a `c_s = 10`: **5.3e-4 Pa**. Misma malla, mismo caso, **100× menos**.
+O sea que el residuo O(h²) del operador completo no era un detalle de implementación: era el piso del
+error, y por eso el límite no bajaba al bajar `c_s`. Es la evidencia de que el cambio de "restar el
+operador completo" a "aplicar el contraste" era el paso correcto, más allá de que el número contra
+Faran haya empeorado por otra razón.
+
+Y el `fijar_rigidos` con default booleano era una trampa: pedir `formulacion="dispersada"` sin tocar
+nada reventaba con un error que hablaba de la restricción. Ahora su default es `None` y se resuelve
+solo según la formulación (`True` en total, `False` en dispersada); el error queda sólo para quien
+pida explícitamente las dos cosas contradictorias.
+
+#### D49 — apéndice 2: la tabla completa de la formulación dispersada, y el patrón
+
+Barrido completo a `ka = 1`, dominio 4a, `h = a/4.5`. Se compara la formulación dispersada contra la
+total+restricción, que es la que hoy está sellada:
+
+| material | contraste `ρc_p` | dispersada | total+restricción |
+|---|---|---|---|
+| tungsteno | 66.9 | **10.70 %** (razón 0.914) | 4.71 % |
+| acero | 30.7 | **19.49 %** (0.847) | 4.29 % |
+| aluminio | 11.4 | **44.14 %** (0.673) | 3.99 % |
+| hueso | 4.6 | **54.53 %** (0.628) | 13.16 % |
+
+**El patrón: el error de la dispersada crece al bajar el contraste**, en el orden exacto de la
+impedancia. Eso es coherente con la explicación de D49 y la precisa: el término de contraste
+`(K_sólido − K_fluido)u_i` es una **diferencia de operadores grandes**, y el error de interpolación de
+`u_i` en el interior no se hace pequeño al bajar el contraste. El campo dispersado verdadero sí se
+achica con el contraste, así que el error espurio —que no se achica— domina cada vez más. De ahí que
+tungsteno (contraste 66.9) sea el mejor caso de la dispersada y hueso (4.6) el peor.
+
+**Lo que esto NO dice.** No dice que la dispersada esté mal implementada: su límite transparente
+converge como `c_s²` y las dos matrices coinciden exactamente cuando los materiales son iguales. Dice
+que **esta malla no resuelve el término de contraste** para contrastes moderados, y que el número
+"bueno" de la total+restricción se sostiene por una cancelación entre el dipolo suprimido y el error
+de discretización. Ninguna de las dos es una validación limpia del caso elástico, y así queda escrito.
+
+**Nota de método.** La corrida de tests que se lanzó en paralelo con este barrido **se cortó por
+timeout** (900 s, código 124): los dos jobs se peleaban la CPU, no era un fallo del código. Se repitió
+en solitario para tener el veredicto.
+
+**Insumo para el siguiente paso**: la ley `3/(2g+1)` (Bruus 2012) permite predecir la traslación
+dipolar y separarla del resto del campo. Con la tabla de arriba, la hipótesis a testear es que la
+traslación sale bien y el error está en el resto del campo (que es lo que el contraste moderado
+amplifica). Eso decide si hay que refinar el sólido, el fluido, o cambiar de formulación.
+
+## D50 — La traslación dipolar valida `3/(2g+1)` al 1-2 %, y la restricción la anula
+
+**El test.** En el límite de Rayleigh (`k₀a ≪ 1`) la amplitud de oscilación del cuerpo tiene forma
+cerrada: `|u_cm|/|u_i| = 3/(2g+1)` con `g = ρ_sólido/ρ_fluido` (Bruus 2012, ecs. 22 y 26). Es una
+predicción **analítica, exacta en ese límite e independiente de la malla** — no hay nada que ajustar.
+Se corre a `k₀a = 0.1` (`a = 0.239 mm`, dominio 4a, `h = a/4.5`) y se extrae el desplazamiento de
+cuerpo rígido proyectando sobre el modo de traslación **con la matriz de masa**
+(`a_d = t_dᵀMu / t_dᵀMt_d`), no promediando nodos: la malla no está uniformemente repartida.
+
+| material | g | `3/(2g+1)` | total+restricción | total | dispersada |
+|---|---|---|---|---|---|
+| acero | 7.80 | 0.1807 | **0.0000** | 0.1772 | 0.1772 |
+| aluminio | 2.70 | 0.4688 | **0.0000** | 0.4627 | 0.4627 |
+| hueso | 1.95 | 0.6122 | **0.0001** | 0.6064 | 0.6064 |
+| tejido `c_s=30` | 1.05 | 0.9677 | **10.09** | 0.9670 | 0.9670 |
+
+**Tres lecturas, las tres importantes.**
+
+1. **Las dos formulaciones correctas dan la traslación al 1-2 %.** El acoplamiento fluido-sólido y la
+   masa añadida están bien. El error del 19-44 % a `ka = 1` **no viene de acá**.
+
+2. **La restricción de traslación media nula no "aproxima" la traslación: la pone en cero.** Donde la
+   física pide 0.18 (acero), 0.47 (aluminio) o 0.61 (hueso), devuelve 0.0000 / 0.0000 / 0.0001. Es la
+   confirmación cuantitativa de D48: no es una condición de gauge inofensiva, es suprimir un grado de
+   libertad que oscila de verdad. Y en el caso casi transparente **amplifica**: 10.09 contra 0.9677,
+   un factor 10 de dispersión falsa.
+
+3. **La formulación dispersada reproduce la traslación exactamente** (idéntica a la total sin
+   restricción, hasta el dígito que se imprime). El operador de contraste no introduce sesgo en la
+   respuesta dipolar, que es justo lo que se le pedía.
+
+**Consecuencia para el siguiente paso.** Como la traslación está bien, el 19-44 % a `ka = 1` es un
+problema de **resolución del resto del campo**: la estructura angular/radial del dispersado para un
+objeto de tamaño comparable a la longitud de onda. Eso se ataca refinando (y midiendo si converge), no
+cambiando la formulación. Se lanza la convergencia en `h` para el acero con la dispersada.
+
+**Y una consecuencia para el sello.** El criterio `volumen_esfera_elastica` sigue apoyado en la
+formulación total+restricción, cuya traslación es 0 por construcción. A `ka = 0.1` eso se ve como un
+error del 100 % en la traslación y a `ka = 1` se disimula en el 4.29 %. Queda calificado: **el sello no
+distingue "acertó" de "canceló"**, y eso es una limitación del criterio, no del método.
+
+#### D49 — apéndice 3: **no es resolución de malla**, y la métrica de máximo es frágil
+
+Convergencia en `h` de la formulación dispersada, acero a `ka = 1`, dominio 4a:
+
+| `h` | nodos | error |
+|---|---|---|
+| a/4.5 | 21 398 | 19.49 % |
+| a/6 | 47 574 | **18.84 %** |
+
+Doblar el número de nodos baja el error **0.65 puntos** (orden aparente ≈ 0.14). Eso **descarta** la
+hipótesis que había escrito en el apéndice anterior ("es resolución del resto del campo"): refinar no
+lo arregla. El error es **sistemático de la formulación o de la métrica**, no de discretización.
+
+Dos sospechosos, y el segundo es el que ahora me parece más probable:
+
+1. **El término de contraste está mal en algo que no depende de `h`.** La identidad
+   `(K_f − ω²M_f)u_i = −∮p_i(n·v)` es exacta en el continuo para cualquier `v` (se verificó con la
+   integración por partes y el caso transparente converge como `c_s²`), así que si hay un error acá
+   tiene que ser en el acoplamiento de superficie, no en el volumen.
+
+2. **La métrica es frágil.** El error se mide como el **máximo sobre la curva angular** de la
+   diferencia contra Faran. La esfera del FEM es **facetada**: con `h = a/6` hay ~6 facetas por radio,
+   o sea del orden de 10° de paso angular, y eso **desplaza los lóbulos** en lugar de atenuarlos. Un
+   lóbulo corrido unos grados da un error grande en el máximo aunque la magnitud global esté bien — y
+   ese error no baja al refinar `h` tan rápido como baja el error de amplitud. Es el mismo tipo de
+   trampa que el promedio de D43, al revés: el máximo premia el detalle más frágil.
+
+**Lo que hay que hacer antes de tocar el código**: medir el error en **puntos fijos** (o en norma L2
+sobre la curva, o en el coeficiente `C_0` de la serie) además del máximo. Si el error de los puntos
+fijos baja con `h` y el máximo no, el problema es la métrica y la implementación está bien. Si ninguno
+baja, es la formulación. Esa distinción decide el trabajo siguiente y todavía no la tengo.
+
+**Mientras tanto**, la UI muestra las dos formulaciones con su número medido y la advertencia de que
+la correcta da peor: no se esconde el resultado incómodo ni se presenta el 4.29 % como si fuera una
+validación limpia.
+
+## D51 — La ventana de validez de la esfera elástica es estrecha, y el barrido en `ka` lo muestra
+
+**Qué se agregó.** `dashboard/elastic_sweep.py` y su vista: resuelve la esfera en varios `ka` con una
+formulación y grafica el error contra Faran con la tolerancia del criterio como línea horizontal. Un
+número suelto dice cuánto se equivoca; el barrido dice **en qué régimen vale**.
+
+**Barrido preciso** (acero, dominio 4a, `h = a/4.5`, 61 puntos angulares):
+
+| `ka` | total: error máx. | total: L2 | sello total | dispersada: máx. | dispersada: L2 |
+|---|---|---|---|---|---|
+| 0.75 | 6.84 % | 5.89 % | fuera | 19.50 % | 20.14 % |
+| 1.17 | **4.88 %** | 3.09 % | **validado** | 20.24 % | 17.88 % |
+| 1.58 | **4.78 %** | 3.12 % | **validado** | 14.54 % | 13.66 % |
+| 2.00 | 9.20 % | 5.45 % | fuera | **7.43 %** | 7.69 % |
+
+**Tres consecuencias, y la primera es la que hay que decir en voz alta.**
+
+1. **El criterio del 6 % no vale en todo el rango: vale en `ka` ≈ 1.1–1.6.** En `ka = 0.75` la total da
+   6.84 % y en `ka = 2` da 9.20 %, las dos **fuera**. O sea que decir "la esfera elástica está validada
+   al 4.29 %" sin decir en qué ventana es exactamente el tipo de afirmación que este proyecto no hace.
+   Se corrige la `fuente` del criterio para que nombre la ventana medida.
+
+2. **Las dos formulaciones se cruzan.** La total gana en la ventana y en `ka` bajo; a `ka = 2` la
+   dispersada es mejor (7.43 % contra 9.20 %). No hay una "mejor" en todo el rango: la formulación
+   total es un instrumento con dominio de validez, no una aproximación universal. Es coherente con
+   D48 —suprime un término cuyo peso cambia con `ka`— y con D49 —la dispersada es una resta de
+   términos grandes que pesa más donde el campo dispersado es chico—.
+
+3. **El modo rápido NO sirve para comparar formulaciones, y el barrido lo delató.** Con dominio 2.5a
+   (5 puntos, acero): total 17.7 / 10.8 / 7.9 / 10.0 / 17.1 % y dispersada 15.2 / 19.6 / 20.1 / 11.3 /
+   12.9 %, y ahí la dispersada parecía **mejor en `ka` bajo**. En el preciso ocurre al revés (6.84 %
+   contra 19.50 % en `ka = 0.75`). La explicación es que con dominio 2.5a el error del ABC domina y
+   las dos formulaciones miden ese error, no su diferencia. Es la lección de D43 otra vez, en otra
+   escala: **no se comparan dos modelos donde manda un tercer error**. Por eso la UI muestra el modo y
+   el aviso de dominio junto al barrido.
+
+**Lo que queda anotado como límite del criterio, no como bug.** El criterio `volumen_esfera_elastica`
+es un criterio de una ventana; la fuente ahora lo dice. Lo que falta para tener un criterio de todo el
+rango es entender el error de la total fuera de la ventana —y ahí la hipótesis sigue siendo el dipolo
+suprimido (D48), que pesa más justo donde la total falla: `ka` bajo y `ka` alto.
+
+## D52 — El "error relativo de R" de la escena comparaba fasores con orígenes distintos
+
+**Qué pasaba.** La escena reportaba `error_R_pct` en el rango de **100 % a 200 %** mientras el error
+de amplitud era del **0.2 %** y el sello decía VALIDADO. Un número que se lee como "el modelo se
+equivoca al doble" al lado de un "validado" es exactamente la clase de dato que no se puede dejar
+pasar.
+
+**La causa, medida.** Dos cosas a la vez:
+
+1. **`R` se comparaba como fasor y `T` como módulo.** La línea era
+   `e_r = |r_num − r_an| / |r_an|` para R y `e_t = | |t_num| − |t_an| | / |t_an|` para T. No era una
+   decisión: era un descuido, y hacía que los dos números no fueran comparables entre sí.
+
+2. **Los dos fasores tenían orígenes distintos.** `r_num` sale de ajustar `a·e^{ikx} + b·e^{−ikx}` con
+   la `x` **global**, así que `b/a` está referido a `x = 0`; `r_an` (matriz de transferencia) está
+   referido a la **primera interfaz** (`x = t₁`). Entre los dos hay un giro `e^{2ik·t₁}` que es
+   propagación, no error.
+
+**La verificación.** Si el desvío era sólo ese giro, tenía que cumplirse
+`|ΔR|/|R| = 2·sin(k·t₁)`. Medido contra predicho, con `t₁ = 20 mm` de tejido:
+
+| f | `|ΔR|/|R|` medido | `2·sin(k·t₁)` |
+|---|---|---|
+| 100 kHz | 1.917 | 1.907 |
+| 200 kHz | 1.072 | 1.149 |
+| 300 kHz | 1.259 | 1.215 |
+| 400 kHz | 1.839 | 1.881 |
+
+Cuatro de cuatro, dentro del 7 %. Es el giro de propagación, no un error del solver.
+
+**La corrección.** Se lleva `r` a la referencia de la interfaz (`r·e^{−2ik t₁}`) antes de comparar
+fasores, y se reportan **dos** números con nombre propio:
+
+- `error_R_pct`: sobre el **módulo**, igual que `error_T_pct` — es el número comparable y el que se lee
+  de un vistazo. Ahora da **0.4–2.0 %** (antes 107–199 %).
+- `error_R_fasor_pct`: el fasor ya alineado. Da **6–8 %**, que es del orden del error de **fase** de
+  la malla con `ppw = 8` (~7°), no del error de amplitud. Se reporta porque la fase es información
+  real, pero no se mezcla con la amplitud.
+- `desfase_referencia_R_deg`: el giro que se sacó (935° a 100 kHz, 3740° a 400 kHz), a la vista, para
+  que quien compare fases sepa qué se corrigió.
+
+**Por qué importa para el proyecto.** El criterio de la Fase 1 juzga "dentro del 2 % **en amplitud**" y
+usa `error_R_abs`, que siempre estuvo bien: el sello nunca estuvo mal. Lo que estaba mal era un número
+**al lado** del sello que lo contradecía. Un reporte que se contradice a sí mismo se deja de mirar, y
+ahí se pierde el valor de tener el registro.
+
+## D53 — El criterio de pitch `λ/4` medido en la UI: 0.28 λ para el 2 %
+
+**Qué se agregó.** Un barrido de apertura en la pestaña `barridos`: con el ancho de apertura fijo
+(60 mm), variar la cantidad de elementos es variar el **pitch**; cada punto es un campo de verdad y se
+compara el FWHM lateral contra una apertura cuasi-continua (`n = 400`) del mismo ancho. Es D25/D26
+llevado de script a instrumento.
+
+**Medido** (60 mm, foco 90 mm, 250 kHz, agua, grilla 120×120):
+
+| pitch | FWHM lateral | desvío vs continuo | grataje |
+|---|---|---|---|
+| 1.25 λ | 7.95 mm | **10.8 %** | 53.3° |
+| 0.45 λ | 7.34 mm | 2.3 % | — |
+| 0.28 λ | 7.30 mm | **1.7 %** | — |
+| 0.20 λ | 7.29 mm | 1.6 % | — |
+| 0.16 λ | 7.28 mm | 1.5 % | — |
+| continuo (n=400) | 7.18 mm | — | — |
+
+El pitch más grueso que cumple el 2 % cae en **0.28 λ**, o sea **1.1× el criterio `λ/4`** de D25/D26.
+Coincide, y con el matiz que corresponde: el criterio es un orden, no un borde exacto; entre 0.25 λ y
+0.28 λ el desvío está en 1.7–1.8 %.
+
+**Dos errores propios que el barrido delató, y los dos del tipo que "parece un resultado":**
+
+1. **No barría.** La primera versión pasaba `n` y `d` al payload de `calcular`, que espera `n_elements`
+   y `aperture_mm`. No fallaba: las ignoraba y devolvía **el mismo campo cinco veces** (FWHM 9.12 mm y
+   sidelobe −9.24 dB idénticos con 8 y con 64 elementos). Lo peor de ese modo de fallar es que el
+   gráfico sale prolijo y plano, y sin un test que exija que el número **cambie** no se nota.
+2. **La firma de la cola.** `jobs` llama `fn(trabajo, datos)` y el barrido esperaba `(datos, trabajo)`:
+   moría con `'Trabajo' object has no attribute 'get'`, que no dice nada sobre la causa.
+
+Ambos quedan fijados en `tests/test_barrido_apertura.py`: uno exige que el FWHM **cambie** con el
+pitch, el otro que el punto del 2 % caiga entre 0.15 λ y 0.60 λ (o sea, ni un orden de magnitud
+arriba ni abajo).
+
+**Por qué va en el repo.** El criterio de pitch estaba en `docs/` y en un script; ahora se puede
+reproducir desde la UI y el resultado trae su número al lado. Es la diferencia entre "D25 dice λ/4" y
+"con estos parámetros, 0.28 λ da 1.7 %".
+
+#### D53 — apéndice: el pitch que cumple el 2 % se mide en el medio elegido
+
+El barrido usaba `λ = 1500/f` fija (agua) para normalizar el pitch. Eso mide el criterio de otro
+medio: en hueso `λ` es 2.33× más corta y el pitch que cumple `λ/4` baja con ella. Ahora se toma
+`λ` del material resuelto (el `lambda_mm` que devuelve el propio campo), y el barrido deja elegir
+medio.
+
+Medido, 60 mm y 250 kHz, 4 puntos:
+
+| medio | `pitch/λ` para n = 8, 22, 36, 64 | pitch más grueso dentro del 2 % |
+|---|---|---|
+| agua | 1.25, 0.37, 0.22, 0.16 | **0.370 λ** |
+| hueso | 0.536, 0.159, 0.095, 0.067 | **0.159 λ** |
+
+El número en `λ` baja en hueso porque `λ` baja: en milímetros el pitch que cumple es el mismo
+(60 mm / n), lo que cambia es contra qué se compara. Es la comprobación de que normalizar por `λ` del
+medio es lo correcto y no un detalle de presentación.

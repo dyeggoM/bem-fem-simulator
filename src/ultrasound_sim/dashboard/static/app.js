@@ -16,6 +16,10 @@ const S = {
   grid: 120,
   fuentes: null,          // null = el servidor arma el arreglo
   ultimo: null,
+  // Comparación de dos configuraciones: el uso central del dashboard es "muevo un transductor y
+  // quiero ver QUÉ cambió". Restar mapas en dB responde eso; mirar dos mapas de a uno, no.
+  referencia: null,       // {p2_db, x_mm, y_mm, meta} congelado con "fijar referencia"
+  diferencia: false,      // mostrar la diferencia en vez del campo
 };
 
 const $ = (id) => document.getElementById(id);
@@ -44,6 +48,126 @@ function pedir() {
   clearTimeout(temporizador);
   temporizador = setTimeout(enviar, 150);
 }
+
+/* ---------------------------------------------------------------------------------------------
+ * Persistencia del último resultado de una vista.
+ *
+ * Las vistas caras (esfera precisa ~30 s, escena, volumen, cóclea) pierden el resultado al recargar
+ * o al cambiar de pestaña y volver. Guardarlo en localStorage deja volver a mirarlo sin volver a
+ * resolver — que es la diferencia entre usar el dashboard para explorar y usarlo para una sola foto.
+ *
+ * Se guarda por vista y con la fecha, así el usuario ve de cuándo es lo que está mirando. Si el
+ * resultado no entra en la cuota, se descarta en silencio y se avisa por consola: nunca se rompe la
+ * vista por no poder cachear.
+ * ------------------------------------------------------------------------------------------- */
+
+const VISTA_CLAVE = 'usim.vista.';
+const VISTA_TTL_MS = 12 * 60 * 60 * 1000;   // 12 h: un resultado de ayer no debería parecer de ahora
+
+window.vistaGuardar = function vistaGuardar(vista, resultado) {
+  try {
+    localStorage.setItem(VISTA_CLAVE + vista, JSON.stringify({
+      fecha: new Date().toISOString(), resultado,
+    }));
+    return true;
+  } catch (e) {
+    try { localStorage.removeItem(VISTA_CLAVE + vista); } catch { /* nada */ }
+    console.warn(`[${vista}] no se pudo guardar el resultado (cuota):`, e && e.message);
+    return false;
+  }
+};
+
+window.vistaCargar = function vistaCargar(vista) {
+  try {
+    const crudo = localStorage.getItem(VISTA_CLAVE + vista);
+    if (!crudo) return null;
+    const datos = JSON.parse(crudo);
+    if (!datos || !datos.resultado) return null;
+    const edad = Date.now() - Date.parse(datos.fecha);
+    if (!Number.isFinite(edad) || edad > VISTA_TTL_MS) {
+      localStorage.removeItem(VISTA_CLAVE + vista);
+      return null;
+    }
+    return datos;
+  } catch {
+    return null;
+  }
+};
+
+window.vistaBorrar = function vistaBorrar(vista) {
+  try { localStorage.removeItem(VISTA_CLAVE + vista); } catch { /* nada */ }
+};
+
+/* ---------------------------------------------------------------------------------------------
+ * Exportación de la vista activa.
+ *
+ * No sabe nada de la física ni del estado de cada vista: agarra las gráficas Plotly que están
+ * VISIBLES en el DOM y las baja. Así funciona igual en las siete vistas y no hay que mantener siete
+ * exportadores en paralelo (que es como se desincronizan).
+ *
+ * Qué baja:
+ *   - un PNG por gráfica, con el nombre del contenedor para poder ordenarlos;
+ *   - un JSON con las trazas completas (x, y, nombre, tipo) y el layout, que es lo que permite
+ *     re-graficar o comparar sin volver a resolver.
+ * ------------------------------------------------------------------------------------------- */
+
+function contenedoresVisibles() {
+  return [...document.querySelectorAll('.js-plotly-plot')].filter((gd) => {
+    if (!gd || !gd.data || !gd.data.length) return false;
+    const r = gd.getBoundingClientRect();
+    return r.width > 20 && r.height > 20;   // una pestaña oculta mide 0
+  });
+}
+
+function nombreDeGrafica(gd, i) {
+  return gd.id || gd.parentElement.id || `grafica_${i + 1}`;
+}
+
+function descargarBlob(nombre, blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nombre;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+window.exportarVista = async function exportarVista() {
+  const boton = document.getElementById('btnExportarVista');
+  const graficas = contenedoresVisibles();
+  if (!graficas.length) {
+    if (boton) boton.textContent = 'no hay gráficas visibles';
+    setTimeout(() => { if (boton) boton.textContent = 'exportar vista'; }, 2500);
+    return;
+  }
+  if (boton) { boton.disabled = true; boton.textContent = 'exportando…'; }
+  const vista = document.querySelector('.vista-btn.activo');
+  const sello = (vista ? vista.dataset.vista : 'vista') + '_' + new Date()
+    .toISOString().slice(0, 19).replace(/[:T]/g, '-');
+
+  const trazas = [];
+  for (let i = 0; i < graficas.length; i += 1) {
+    const gd = graficas[i];
+    const nombre = nombreDeGrafica(gd, i);
+    trazas.push({ grafica: nombre, layout: { title: gd.layout && gd.layout.title }, datos: gd.data });
+    try {
+      const url = await Plotly.toImage(gd, { format: 'png', width: 1400, height: Math.max(500,
+        Math.round(1400 * (gd.getBoundingClientRect().height / Math.max(1, gd.getBoundingClientRect().width)))) });
+      const blob = await (await fetch(url)).blob();
+      descargarBlob(`${sello}__${nombre}.png`, blob);
+    } catch (e) {
+      trazas.push({ grafica: nombre, error_png: String(e && e.message ? e.message : e) });
+    }
+  }
+  descargarBlob(`${sello}__trazas.json`,
+    new Blob([JSON.stringify({ formato: 'ultrasound-sim/dashboard/vista/1',
+      fecha: new Date().toISOString(), vista: vista ? vista.dataset.vista : null, graficas: trazas },
+    null, 2)], { type: 'application/json' }));
+
+  if (boton) { boton.disabled = false; boton.textContent = 'exportar vista'; }
+};
 
 async function enviar() {
   if (control) control.abort();
@@ -91,6 +215,7 @@ async function enviar() {
 
 function pintar(r) {
   const m = r.metrics;
+  S.ultimo = r;    // queda disponible para "fijar referencia" 
   $('mPico').textContent = `${fmt(m.peak_x_mm, 1)} · ${fmt(m.peak_y_mm, 1)} mm`;
   $('mFwhm').textContent = m.fwhm_lateral_mm ? `${fmt(m.fwhm_lateral_mm)} mm` : '—';
   $('mFwhmAx').textContent = m.fwhm_axial_mm ? `${fmt(m.fwhm_axial_mm)} mm` : '—';
@@ -126,10 +251,30 @@ function pintar(r) {
         return out;
       })();
 
+  // Si hay referencia congelada y la grilla coincide, se dibuja la DIFERENCIA de niveles. Si la
+  // grilla cambió (otra frecuencia, otra malla) no se resta nada: se avisa y se muestra el campo,
+  // porque restar dos grillas distintas daría un mapa con forma de error de interpolación.
+  const ref = S.referencia;
+  const mismaGrilla = ref && ref.p2_db.length === r.p2_db.length
+    && ref.p2_db[0].length === r.p2_db[0].length
+    && ref.x_mm.length === r.x_mm.length && ref.y_mm.length === r.y_mm.length;
+  const verDif = S.diferencia && Boolean(ref);
+  if (verDif && !mismaGrilla) {
+    $('estado').textContent =
+      'la referencia tiene otra grilla (cambió la frecuencia o el tamaño de malla): no se resta. '
+      + 'Fijá de nuevo la referencia con la grilla actual.';
+  }
+  const zMapa = (verDif && mismaGrilla)
+    ? r.p2_db.map((fila, i) => fila.map((v, j) => v - ref.p2_db[i][j]))
+    : r.p2_db;
+
   const trazas = [{
-    type: 'heatmap', x: r.x_mm, y: r.y_mm, z: r.p2_db,
-    colorscale: 'Inferno', zmin: -40, zmax: 0, zhoverformat: '.1f',
-    colorbar: { title: { text: 'dB', side: 'top' }, thickness: 11, len: 0.8,
+    type: 'heatmap', x: r.x_mm, y: r.y_mm, z: zMapa,
+    colorscale: (verDif && mismaGrilla) ? 'RdBu' : 'Inferno',
+    zmin: (verDif && mismaGrilla) ? -20 : -40, zmax: (verDif && mismaGrilla) ? 20 : 0,
+    zhoverformat: '.1f',
+    colorbar: { title: { text: (verDif && mismaGrilla) ? 'Δ dB' : 'dB', side: 'top' },
+                thickness: 11, len: 0.8,
                 tickfont: { size: 9, color: '#8b95a1' }, outlinewidth: 0 },
     hovertemplate: 'x %{x:.1f} mm<br>y %{y:.1f} mm<br>%{z:.1f} dB<extra></extra>',
   }, {
@@ -158,8 +303,12 @@ function pintar(r) {
 
   Plotly.react('mapa', trazas, {
     ...BASE, margin: { l: 54, r: 8, t: 26, b: 40 },
-    title: { text: `${r.meta.material} · ${fmt(r.meta.frequency_khz, 0)} kHz`, font: { size: 12 },
-             x: 0.01, y: 0.98, xanchor: 'left' },
+    title: {
+      text: (verDif && mismaGrilla)
+        ? `diferencia contra la referencia (${ref.meta.material} · ${fmt(ref.meta.frequency_khz, 0)} kHz)`
+        : `${r.meta.material} · ${fmt(r.meta.frequency_khz, 0)} kHz`,
+      font: { size: 12 }, x: 0.01, y: 0.98, xanchor: 'left',
+    },
     // Sin `scaleanchor`: con rangos fijos, Plotly no puede satisfacer el aspecto 1:1 dentro del
     // panel y aborta con "Something went wrong with axis scaling".
     xaxis: { ...EJE, title: 'x [mm]', range: xrango },
@@ -199,6 +348,15 @@ function pintar(r) {
   }));
   const axial = r.p2_db[biy];                                  // varía x
   const lateral = r.p2_db.map((fila) => fila[bix]);            // varía y
+  // Con referencia se superpone el perfil de la referencia en punteado: en los cortes se ve el
+  // corrimiento del foco y cuánto sube o baja el lóbulo, que es lo que no se lee en el mapa.
+  const axialRef = (ref && mismaGrilla) ? ref.p2_db[biy] : null;
+  const lateralRef = (ref && mismaGrilla) ? ref.p2_db.map((fila) => fila[bix]) : null;
+  const trazaRef = (x, y, nombre) => (y ? [{
+    type: 'scatter', mode: 'lines', x, y, name: nombre,
+    line: { color: '#8b95a1', width: 1.1, dash: 'dot' },
+    hovertemplate: '%{x:.1f} mm<br>%{y:.1f} dB (ref.)<extra></extra>',
+  }] : []);
 
   // Rango automático por corte: en escala fija −40..0 dB un perfil axial que varía 5 dB se ve plano.
   const rango = (valores) => {
@@ -209,9 +367,10 @@ function pintar(r) {
                             line: { color: '#4a5566', width: 1, dash: 'dot' } });
 
   Plotly.react('axial', [{
-    type: 'scatter', mode: 'lines', x: r.x_mm, y: axial, line: { color: '#58a6ff', width: 1.6 },
+    type: 'scatter', mode: 'lines', x: r.x_mm, y: axial, name: 'actual',
+    line: { color: '#58a6ff', width: 1.6 },
     hovertemplate: 'x %{x:.1f} mm<br>%{y:.1f} dB<extra></extra>',
-  }], {
+  }, ...trazaRef(r.x_mm, axialRef, 'referencia')], {
     ...BASE, margin: { l: 46, r: 12, t: 24, b: 34 },
     title: { text: 'corte axial (y = pico)', font: { size: 11 }, x: 0.01, y: 0.95, xanchor: 'left' },
     xaxis: { ...EJE, title: 'x [mm]' }, yaxis: { ...EJE, title: 'dB', range: rango(axial) },
@@ -219,9 +378,10 @@ function pintar(r) {
   }, CONFIG);
 
   Plotly.react('lateral', [{
-    type: 'scatter', mode: 'lines', x: r.y_mm, y: lateral, line: { color: '#3fb950', width: 1.6 },
+    type: 'scatter', mode: 'lines', x: r.y_mm, y: lateral, name: 'actual',
+    line: { color: '#3fb950', width: 1.6 },
     hovertemplate: 'y %{x:.1f} mm<br>%{y:.1f} dB<extra></extra>',
-  }], {
+  }, ...trazaRef(r.y_mm, lateralRef, 'referencia')], {
     ...BASE, margin: { l: 46, r: 12, t: 24, b: 34 },
     title: { text: 'corte lateral en el pico', font: { size: 11 }, x: 0.01, y: 0.95, xanchor: 'left' },
     xaxis: { ...EJE, title: 'y [mm]' }, yaxis: { ...EJE, title: 'dB', range: rango(lateral) },
@@ -510,6 +670,35 @@ function aplicar(cfg) {
   }
 }
 
+$('btnExportarVista').addEventListener('click', () => window.exportarVista());
+
+/* ------------------------------------------------------- referencia para comparar dos corridas */
+$('btnRefFijar').addEventListener('click', () => {
+  if (!S.ultimo) { $('refEstado').textContent = 'todavía no hay un campo calculado'; return; }
+  const r = S.ultimo;
+  S.referencia = { p2_db: r.p2_db, x_mm: r.x_mm, y_mm: r.y_mm, meta: r.meta };
+  S.diferencia = true;
+  $('chkRefVer').checked = true;
+  $('refEstado').textContent = `referencia: ${r.meta.material} · `
+    + `${fmt(r.meta.frequency_khz, 0)} kHz · pico ${fmt(r.metrics.peak_x_mm, 1)} mm`;
+  pedir();
+});
+$('btnRefSoltar').addEventListener('click', () => {
+  S.referencia = null;
+  S.diferencia = false;
+  $('chkRefVer').checked = false;
+  $('refEstado').textContent = 'sin referencia';
+  pedir();
+});
+$('chkRefVer').addEventListener('change', (e) => {
+  if (!S.referencia) {
+    e.target.checked = false;
+    $('refEstado').textContent = 'primero fijá una referencia';
+    return;
+  }
+  S.diferencia = e.target.checked;
+  pedir();
+});
 $('btnGuardar').addEventListener('click', () => {
   const texto = JSON.stringify(instantanea(), null, 2);
   const url = URL.createObjectURL(new Blob([texto], { type: 'application/json' }));

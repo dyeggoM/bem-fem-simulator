@@ -291,6 +291,297 @@ def test_api_coclea_rechaza_parametros_fuera_de_rango(servidor):
         assert exc.value.code == 400
 
 
+# ------------------------------------------------------------------ escena FEM (U1)
+
+
+def _post(url: str, cuerpo: dict) -> dict:
+    datos = json.dumps(cuerpo).encode("utf-8")
+    req = urllib.request.Request(url, data=datos, headers={"content-type": "application/json"})
+    with urllib.request.urlopen(req, timeout=120) as r:
+        return json.loads(r.read())
+
+
+ESCENA_HTTP = {
+    "frecuencia_hz": 100.0e3,
+    "ppw": 12,
+    "alto_m": 20.0e-3,
+    "capas": [
+        {"material": "agua", "espesor_m": 20.0e-3},
+        {"material": "hueso", "espesor_m": 10.0e-3},
+        {"material": "agua", "espesor_m": 20.0e-3},
+    ],
+}
+
+
+def test_api_scene_cost_no_resuelve(servidor):
+    r = _post(servidor + "/api/scene/cost", ESCENA_HTTP)
+    assert r["ok"] is True
+    assert r["grilla"]["n_elementos"] > 0
+    assert r["estimado_solve_s"] > 0
+    assert "campo" not in r, "estimar no puede resolver"
+
+
+def test_api_scene_solve_devuelve_el_campo_y_las_metricas(servidor):
+    r = _post(servidor + "/api/scene/solve", ESCENA_HTTP)
+    assert r["ok"] is True
+    m = r["metricas"]
+    assert m["error_R_abs"] < 0.02
+    assert m["error_T_abs"] < 0.02
+    assert m["energia"] == pytest.approx(1.0, abs=0.02)
+    n_y = len(r["grilla"]["y_mm"])
+    n_x = len(r["grilla"]["x_mm"])
+    assert len(r["campo"]["db"]) == n_y
+    assert len(r["campo"]["db"][0]) == n_x
+
+
+def test_api_scene_solve_rechaza_incidencia_oblicua(servidor):
+    req = urllib.request.Request(
+        servidor + "/api/scene/solve",
+        data=json.dumps(dict(ESCENA_HTTP, angulo_deg=30.0)).encode("utf-8"),
+        headers={"content-type": "application/json"},
+    )
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        urllib.request.urlopen(req, timeout=60)
+    assert exc.value.code == 400
+    assert b"incidencia normal" in exc.value.read()
+
+
+def test_api_materials_expone_la_escena_y_sus_topes(servidor):
+    _estado, cuerpo = _get(servidor + "/api/materials")
+    datos = json.loads(cuerpo)
+    ids = {m["id"] for m in datos["scene_materials"]}
+    assert {"agua", "tejido", "hueso", "perilinfa", "endolinfa"} <= ids
+    assert datos["scene_limits"]["max_elementos"] > 0
+    assert "abc1" in datos["scene_limits"]["abc"]
+
+
+# ------------------------------------------------------------------ dispersor (U2)
+
+
+def test_api_scatterer_cost_y_solve(servidor):
+    costo = _post(servidor + "/api/scatterer/cost", {"ka": 1.0})
+    assert costo["ok"] is True
+    assert costo["malla"]["n_elementos"] > 0
+    assert "metricas" not in costo
+
+    r = _post(servidor + "/api/scatterer/solve", {"ka": 1.0})
+    assert r["ok"] is True
+    m = r["metricas"]
+    assert m["fem_vs_serie_pct"] < 2.0
+    assert m["bem_vs_serie_pct"] < 2.0
+    assert len(r["mapa"]["db"]) == len(r["mapa"]["x_mm"])
+
+
+def test_api_scatterer_solve_emite_json_sin_nan(servidor):
+    """El cuerpo tiene que ser JSON estricto: con `NaN` el navegador no parsea nada."""
+    datos = json.dumps({"ka": 1.0}).encode("utf-8")
+    req = urllib.request.Request(
+        servidor + "/api/scatterer/solve", data=datos, headers={"content-type": "application/json"}
+    )
+    with urllib.request.urlopen(req, timeout=120) as r:
+        crudo = r.read()
+    assert b"NaN" not in crudo, "el servidor emitió NaN: JSON.parse lo rechaza"
+    json.loads(crudo)  # revienta si no es JSON estricto
+
+
+def test_api_scatterer_rechaza_ecuacion_desconocida(servidor):
+    req = urllib.request.Request(
+        servidor + "/api/scatterer/solve",
+        data=json.dumps({"ka": 1.0, "equation": "galerkin"}).encode("utf-8"),
+        headers={"content-type": "application/json"},
+    )
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        urllib.request.urlopen(req, timeout=60)
+    assert exc.value.code == 400
+
+
+# ------------------------------------------------------------------ cóclea (U3)
+
+
+def test_api_cochlea_field_cost(servidor):
+    r = _post(servidor + "/api/cochlea/field/cost", {"thickness_mm": 2.0})
+    assert r["ok"] is True
+    assert r["malla"]["n_nodos"] > 10_000
+    assert "metricas" not in r
+
+
+def test_api_cochlea_field_devuelve_mapa_y_metricas(servidor):
+    r = _post(servidor + "/api/cochlea/field", {"thickness_mm": 2.0, "c_s": 1900.0})
+    assert r["ok"] is True
+    m = r["metricas"]
+    assert m["t_interior"] == pytest.approx(0.53187, rel=0.01)
+    assert m["balance_energia"] < 0.01
+    assert len(r["mapa"]["db"]) == len(r["mapa"]["x_mm"])
+
+
+def test_api_cochlea_field_emite_json_sin_complejos(servidor):
+    """`sol.as_dict()` trae `window_impedance` complejo: si no se sanea, el navegador no recibe nada."""
+    datos = json.dumps({"thickness_mm": 2.0}).encode("utf-8")
+    req = urllib.request.Request(
+        servidor + "/api/cochlea/field", data=datos, headers={"content-type": "application/json"}
+    )
+    with urllib.request.urlopen(req, timeout=180) as r:
+        crudo = r.read()
+    assert b"NaN" not in crudo
+    cuerpo = json.loads(crudo)
+    assert cuerpo["detalle"]["window_impedance"]["re"] > 0
+    assert cuerpo["detalle"]["window_impedance"]["im"] == 0.0
+
+
+# ------------------------------------------------------------------ barridos y cola (U5)
+
+
+def test_api_sweeps_lista_el_barrido_y_su_estimacion(servidor):
+    _estado, cuerpo = _get(servidor + "/api/sweeps")
+    datos = json.loads(cuerpo)
+    barrido = datos["barridos"][0]
+    assert barrido["id"] == "sensibilidad"
+    assert barrido["puntos"] > 10
+    assert barrido["estimado_s"] > 0
+    assert "D30" in barrido["referencia"]
+
+
+def test_api_jobs_lanza_y_se_sigue_por_id(servidor):
+    """El ciclo completo por HTTP: encolar, consultar estado, y que el id desconocido dé 404."""
+    datos = json.dumps({}).encode("utf-8")
+    req = urllib.request.Request(
+        servidor + "/api/jobs/sensibilidad", data=datos,
+        headers={"content-type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=30) as r:
+        lanzado = json.loads(r.read())
+    job_id = lanzado["job"]["id"]
+    assert lanzado["ok"] is True
+    assert lanzado["job"]["estado"] in ("en_cola", "corriendo")
+
+    with urllib.request.urlopen(f"{servidor}/api/jobs/{job_id}", timeout=30) as r:
+        estado = json.loads(r.read())
+    assert estado["id"] == job_id
+    assert 0.0 <= estado["progreso"] <= 1.0
+
+    # se cancela para no dejar 90 s de barrido colgados en el suite
+    req = urllib.request.Request(f"{servidor}/api/jobs/{job_id}/cancel", data=b"{}",
+                                 headers={"content-type": "application/json"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        cancelado = json.loads(r.read())
+    assert cancelado["estado"] in ("cancelado", "corriendo")
+
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        urllib.request.urlopen(f"{servidor}/api/jobs/noexiste", timeout=10)
+    assert exc.value.code == 404
+
+
+def test_api_jobs_lista_todos(servidor):
+    _estado, cuerpo = _get(servidor + "/api/jobs")
+    assert "jobs" in json.loads(cuerpo)
+
+
+# ------------------------------------------------------------------ 3D por rebanadas (U4)
+
+
+def test_api_volume3d_cost_y_solve(servidor):
+    cuerpo = {
+        "frecuencia_hz": 100.0e3, "ppw": 10, "alto_m": 22.0e-3, "fuente": "puntual",
+        "capas": [{"material": "agua", "espesor_m": 22.0e-3}],
+    }
+    costo = _post(servidor + "/api/volume3d/cost", cuerpo)
+    assert costo["ok"] is True
+    assert costo["malla"]["n_nodos"] > 0
+    assert costo["tope_nodos"] > 0
+    assert "metricas" not in costo
+
+    r = _post(servidor + "/api/volume3d/solve", cuerpo)
+    assert r["ok"] is True
+    assert r["metricas"]["error_green_pct"] < 10.0
+    assert len(r["rebanadas"]["xy"]["db"]) == len(r["rebanadas"]["xy"]["y_mm"])
+
+
+def test_api_volume3d_rechaza_oblicua(servidor):
+    req = urllib.request.Request(
+        servidor + "/api/volume3d/solve",
+        data=json.dumps({"fuente": "plano", "angulo_deg": 20.0}).encode("utf-8"),
+        headers={"content-type": "application/json"},
+    )
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        urllib.request.urlopen(req, timeout=60)
+    assert exc.value.code == 400
+
+
+# ------------------------------------------------------------------ trazabilidad (U6)
+
+
+def test_api_validacion_publica_el_catalogo(servidor):
+    _estado, cuerpo = _get(servidor + "/api/validacion")
+    datos = json.loads(cuerpo)
+    ids = {c["id"] for c in datos["criterios"]}
+    assert {"escena_rt_r", "volumen_green", "barrido_d30"} <= ids
+    for c in datos["criterios"]:
+        assert c["fuente"], f"{c['id']} sin fuente"
+
+
+def test_las_corridas_por_http_traen_sello(servidor):
+    """El sello viaja en la respuesta: la UI no lo calcula."""
+    r = _post(servidor + "/api/scene/solve", ESCENA_HTTP)
+    assert "sello" in r
+    assert r["sello"]["estado"] == "validado"
+    assert "Fuente:" in r["sello"]["texto"]
+
+
+def test_la_pagina_expone_la_vista_3d():
+    html = (ESTATICOS / "index.html").read_text(encoding="utf-8")
+    for pieza in ('data-vista="volumen"', 'id="vistaVolumen"', 'id="mapaVolumen"',
+                  'id="corteVolumen"', 'id="volFuente"', 'volumen.js'):
+        assert pieza in html, f"falta {pieza} en index.html"
+    js = (ESTATICOS / "volumen.js").read_text(encoding="utf-8")
+    for pieza in ("function volResolver", "function volDibujar", "/api/volume3d/solve",
+                  "mostrarSello", "scaleanchor"):
+        assert pieza in js, f"falta {pieza} en volumen.js"
+
+
+def test_la_pagina_expone_la_vista_de_barridos():
+    html = (ESTATICOS / "index.html").read_text(encoding="utf-8")
+    for pieza in ('data-vista="barridos"', 'id="vistaBarridos"', 'id="barProgreso"',
+                  'id="barRanking"', 'id="btnBarrido"', 'barridos.js'):
+        assert pieza in html, f"falta {pieza} en index.html"
+    js = (ESTATICOS / "barridos.js").read_text(encoding="utf-8")
+    for pieza in ("/api/jobs/", "/api/sweeps", "function barPintar", "comparacion"):
+        assert pieza in js, f"falta {pieza} en barridos.js"
+
+
+def test_la_pagina_expone_la_vista_de_cochlea():
+    html = (ESTATICOS / "index.html").read_text(encoding="utf-8")
+    for pieza in ('data-vista="cochlea"', 'id="vistaCochlea"', 'id="mapaCochlea"',
+                  'id="cocFieldT"', 'id="cocFieldBalance"', 'id="cocFieldMemb"', 'cochlea.js'):
+        assert pieza in html, f"falta {pieza} en index.html"
+    js = (ESTATICOS / "cochlea.js").read_text(encoding="utf-8")
+    for pieza in ("function cocfResolver", "function cocfDibujar", "/api/cochlea/field",
+                  "mostrarSello"):
+        assert pieza in js, f"falta {pieza} en cochlea.js"
+
+
+def test_la_pagina_expone_la_vista_de_dispersor():
+    html = (ESTATICOS / "index.html").read_text(encoding="utf-8")
+    for pieza in ('data-vista="dispersor"', 'id="vistaDispersor"', 'id="mapaDisp"',
+                  'id="comparacionDisp"', 'id="disFemSerie"', 'dispersor.js'):
+        assert pieza in html, f"falta {pieza} en index.html"
+    js = (ESTATICOS / "dispersor.js").read_text(encoding="utf-8")
+    for pieza in ("function disResolver", "function disDibujar", "/api/scatterer/solve",
+                  "/api/scatterer/cost", "mostrarSello"):
+        assert pieza in js, f"falta {pieza} en dispersor.js"
+
+
+def test_la_pagina_expone_la_vista_de_escena():
+    html = (ESTATICOS / "index.html").read_text(encoding="utf-8")
+    for pieza in ('data-vista="escena"', 'id="vistaEscena"', 'id="capas"', 'id="btnEscena"',
+                  'id="mapaEscena"', 'id="escR"', 'id="escErrR"', 'escena.js'):
+        assert pieza in html, f"falta {pieza} en index.html"
+    js = (ESTATICOS / "escena.js").read_text(encoding="utf-8")
+    # el criterio ya no vive acá: lo evalúa el servidor y la vista lo pinta (U6)
+    for pieza in ("function escResolver", "function escPintarCapas", "function escDibujar",
+                  "function mostrarSello", "/api/scene/solve", "/api/scene/cost"):
+        assert pieza in js, f"falta {pieza} en escena.js"
+
+
 def test_la_pagina_expone_arrastre_y_configuracion():
     """Contrato de la UI: el overlay de arrastre y los botones de guardar/cargar tienen que estar.
 

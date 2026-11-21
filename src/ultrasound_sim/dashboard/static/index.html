@@ -16,6 +16,21 @@
       <p class="sub">modelo 2D · apertura sobre baffle rígido</p>
     </div>
 
+    <nav class="vistas">
+      <button class="vista-btn activo" data-vista="campo">campo</button>
+      <button class="vista-btn" data-vista="escena">escena FEM</button>
+      <button class="vista-btn" data-vista="dispersor">dispersor BEM</button>
+      <button class="vista-btn" data-vista="cochlea">cóclea</button>
+      <button class="vista-btn" data-vista="barridos">barridos</button>
+      <button class="vista-btn" data-vista="volumen">3D</button>
+      <button class="vista-btn" data-vista="esfera">esfera elástica</button>
+      <button class="vista-btn" data-vista="criterios">criterios</button>
+      <button class="btn mini" id="btnExportarVista"
+        title="Baja un PNG de cada gráfica visible y un JSON con sus trazas. Sirve igual en todas las vistas: no depende de lo que cada una tenga montado, lee las gráficas que están en pantalla.">exportar vista</button>
+    </nav>
+
+    <div id="vistaCampo">
+
     <section>
       <label>Material</label>
       <select id="mat">
@@ -86,6 +101,20 @@
     </section>
 
     <section>
+      <label>Comparar con una referencia
+        <span class="tip" title="Congelá el campo actual como referencia, cambiá lo que quieras (mover una fuente, cambiar la frecuencia, la apertura) y mirá la DIFERENCIA en dB en vez de dos mapas de a uno. Es para lo que se usa el dashboard: ver qué cambió al mover el transductor, no sólo cómo quedó. Si cambiás el tamaño de malla o la frecuencia el vector de coordenadas no coincide y no se resta: se avisa en la línea de estado.">?</span>
+      </label>
+      <div class="fila-botones">
+        <button class="btn mini" id="btnRefFijar">fijar referencia</button>
+        <button class="btn mini" id="btnRefSoltar">soltar</button>
+      </div>
+      <label class="hist-fila" style="padding-left:0">
+        <input type="checkbox" id="chkRefVer"> ver la diferencia en el mapa
+      </label>
+      <p class="hint" id="refEstado">sin referencia</p>
+    </section>
+
+    <section>
       <label>Resolución de malla</label>
       <select id="res">
         <option value="80">80 × 80 (rápido)</option>
@@ -145,11 +174,373 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
       <div class="chip"><span>cálculo</span><b id="mTime">—</b></div>
     </section>
 
+    </div><!-- /vistaCampo -->
+
+    <div id="vistaEscena" hidden>
+      <section>
+        <label>Capas <span class="mini">(eje de propagación: x)</span></label>
+        <div class="tabla-capas-head">
+          <span>material</span><span>espesor</span><span></span>
+        </div>
+        <div id="capas"></div>
+        <div class="fila-botones">
+          <button class="btn mini" id="btnCapaAdd">+ capa</button>
+          <span class="hint" id="capaAviso"></span>
+        </div>
+      </section>
+
+      <section>
+        <label>Frecuencia <b id="escFreqVal">100 kHz</b></label>
+        <input type="range" id="escFreq" min="20" max="1000" step="5" value="100">
+        <label>Elementos por longitud de onda <b id="escPpwVal">12</b></label>
+        <input type="range" id="escPpw" min="6" max="40" step="1" value="12">
+        <label>Alto del dominio <b id="escAltoVal">20 mm</b></label>
+        <input type="range" id="escAlto" min="5" max="60" step="1" value="20">
+        <label>Rango de color
+          <select id="escRango">
+            <option value="40" selected>40 dB</option>
+            <option value="20">20 dB</option>
+            <option value="10">10 dB</option>
+            <option value="lineal">lineal</option>
+          </select>
+        </label>
+        <p class="hint" id="escRangoHint">En incidencia normal con contraste chico el campo es casi
+        uniforme: bajá el rango para ver la onda estacionaria.</p>
+      </section>
+
+      <section>
+        <div class="chips">
+          <div class="chip"><span>nodos</span><b id="escNodos">—</b></div>
+          <div class="chip"><span>elementos</span><b id="escElems">—</b></div>
+          <div class="chip"><span>paso y</span><b id="escPaso">—</b></div>
+          <div class="chip"><span>estimado</span><b id="escEstimado">—</b></div>
+        </div>
+        <div class="fila-botones">
+          <button class="btn mini" id="btnEstimar">estimar</button>
+          <button class="btn" id="btnEscena">resolver FEM</button>
+        </div>
+      </section>
+
+      <section>
+        <label>Resultado</label>
+        <div class="chips">
+          <div class="chip"><span>R</span><b id="escR">—</b></div>
+          <div class="chip"><span>R analítico</span><b id="escRan">—</b></div>
+          <div class="chip"><span>error R</span><b id="escErrR">—</b></div>
+          <div class="chip"><span>T</span><b id="escT">—</b></div>
+          <div class="chip"><span>T analítico</span><b id="escTan">—</b></div>
+          <div class="chip"><span>error T</span><b id="escErrT">—</b></div>
+          <div class="chip"><span>energía</span><b id="escEnergia">—</b></div>
+          <div class="chip"><span>solve</span><b id="escTiempo">—</b></div>
+        </div>
+        <p class="hint" id="escSello"></p>
+      </section>
+
+      <p class="pie" id="escEstado">sin resolver</p>
+    </div><!-- /vistaEscena -->
+
+    <div id="vistaDispersor" hidden>
+      <section>
+        <label>Dispersor</label>
+        <p class="hint">Cilindro rígido en agua, onda plana desde la izquierda. Los tres caminos
+        resuelven el mismo problema: BEM el exterior, FEM la corona en campo dispersado, y la
+        serie de Bessel da la referencia.</p>
+      </section>
+
+      <section>
+        <label>ka = 2πa/λ <b id="disKaVal">1.0</b></label>
+        <input type="range" id="disKa" min="0.2" max="6" step="0.1" value="1">
+        <label>Elementos por longitud de onda <b id="disPpwVal">20</b></label>
+        <input type="range" id="disPpw" min="8" max="40" step="1" value="20">
+        <label>R/a (dominio FEM) <b id="disRoutVal">3.0</b></label>
+        <input type="range" id="disRout" min="1.5" max="6" step="0.5" value="3">
+        <label>ABC del FEM
+          <select id="disAbc">
+            <option value="2" selected>orden 2 (BGT)</option>
+            <option value="1">orden 1</option>
+          </select>
+        </label>
+        <label>Ecuación integral del BEM
+          <select id="disEcuacion">
+            <option value="standard" selected>standard</option>
+            <option value="burton_miller">Burton-Miller</option>
+            <option value="chief">CHIEF</option>
+          </select>
+        </label>
+      </section>
+
+      <section>
+        <div class="chips">
+          <div class="chip"><span>radio</span><b id="disRadio">—</b></div>
+          <div class="chip"><span>elementos FEM</span><b id="disElems">—</b></div>
+          <div class="chip"><span>paneles BEM</span><b id="disPaneles">—</b></div>
+          <div class="chip"><span>estimado</span><b id="disEstimado">—</b></div>
+        </div>
+        <div class="fila-botones">
+          <button class="btn mini" id="btnDisEstimar">estimar</button>
+          <button class="btn" id="btnDisolver">resolver los tres</button>
+        </div>
+      </section>
+
+      <section>
+        <label>Contraste</label>
+        <div class="chips">
+          <div class="chip"><span>FEM − BEM</span><b id="disFemBem">—</b></div>
+          <div class="chip"><span>FEM − serie</span><b id="disFemSerie">—</b></div>
+          <div class="chip"><span>BEM − serie</span><b id="disBemSerie">—</b></div>
+          <div class="chip"><span>cond. BEM</span><b id="disCond">—</b></div>
+          <div class="chip"><span>t FEM</span><b id="disTFem">—</b></div>
+          <div class="chip"><span>t BEM</span><b id="disTBem">—</b></div>
+        </div>
+        <p class="hint" id="disSello"></p>
+      </section>
+
+      <p class="pie" id="disEstado">sin resolver</p>
+    </div><!-- /vistaDispersor -->
+
+    <div id="vistaCochlea" hidden>
+      <section>
+        <label>Corte transversal</label>
+        <p class="hint">Cápsula elástica + perilinfa, con la membrana basilar y la ventana redonda.
+        Es la escena de la Fase 5 resuelta por el solver acoplado; el mapa es el campo interior.</p>
+      </section>
+
+      <section>
+        <label for="cocFieldEsp">espesor de la cápsula <b id="cocFieldEspVal">2.0 mm</b>
+          <span class="tip" title="Peso medido en la sensibilidad (D30): 53 % — es el parámetro que más mueve t_interior.">?</span>
+        </label>
+        <input type="range" id="cocFieldEsp" min="0.5" max="8" step="0.5" value="2">
+
+        <label for="cocFieldCs">c_s del hueso <b id="cocFieldCsVal">1900 m/s</b>
+          <span class="tip" title="Peso medido (D30): 8 %. c_p y ρ quedan fijos en el ballpark VERIFY de D20.">?</span>
+        </label>
+        <input type="range" id="cocFieldCs" min="1000" max="2500" step="50" value="1900">
+
+        <label for="cocFieldAlpha">atenuación α <b id="cocFieldAlphaVal">0 Np/m</b>
+          <span class="tip" title="Peso medido (D30): 10 %. Se aplica al hueso; la perilinfa queda sin pérdidas.">?</span>
+        </label>
+        <input type="range" id="cocFieldAlpha" min="0" max="40" step="1" value="0">
+      </section>
+
+      <section>
+        <label>Componentes
+          <label class="check"><input type="checkbox" id="cocFieldMemb" checked> membrana basilar</label>
+          <label class="check"><input type="checkbox" id="cocFieldVent" checked> ventana redonda</label>
+        </label>
+      </section>
+
+      <section>
+        <div class="chips">
+          <div class="chip"><span>nodos</span><b id="cocFieldNodos">—</b></div>
+          <div class="chip"><span>estimado</span><b id="cocFieldEstimado">—</b></div>
+        </div>
+        <div class="fila-botones">
+          <button class="btn mini" id="btnCocFieldEstimar">estimar</button>
+          <button class="btn" id="btnCocField">resolver corte</button>
+        </div>
+      </section>
+
+      <section>
+        <label>Resultado</label>
+        <div class="chips">
+          <div class="chip"><span>t interior</span><b id="cocFieldT">—</b></div>
+          <div class="chip"><span>armónico n=0</span><b id="cocFieldN0">—</b></div>
+          <div class="chip"><span>absorbe membrana</span><b id="cocFieldAbs">—</b></div>
+          <div class="chip"><span>ventana (real)</span><b id="cocFieldVentana">—</b></div>
+          <div class="chip"><span>balance energía</span><b id="cocFieldBalance">—</b></div>
+          <div class="chip"><span>cálculo</span><b id="cocFieldTiempo">—</b></div>
+        </div>
+        <p class="hint" id="cocFieldSello"></p>
+      </section>
+
+      <p class="pie" id="cocFieldEstado">sin resolver</p>
+
+      <section>
+        <label>Q del pico <span class="mini">(barrido de frecuencia)</span></label>
+        <p class="hint">Q = f_pico/Δf con |p|² a la mitad del máximo (o sea |p| = máx/√2). Es una
+        <b>definición operativa</b>: no existe un Q citable de la resonancia de la cápsula ótica.</p>
+        <label for="cocQDesde">desde <b id="cocQDesdeVal">85 kHz</b></label>
+        <input type="range" id="cocQDesde" min="20" max="200" step="5" value="85">
+        <label for="cocQHasta">hasta <b id="cocQHastaVal">115 kHz</b></label>
+        <input type="range" id="cocQHasta" min="30" max="300" step="5" value="115">
+        <label for="cocQPuntos">puntos <b id="cocQPuntosVal">13</b></label>
+        <input type="range" id="cocQPuntos" min="5" max="41" step="2" value="13">
+        <label for="cocQRef">Q de referencia <span class="mini">(opcional)</span>
+          <span class="tip" title="No hay Q citable de la cavidad coclear humana: Q_ERB ≈ 12.7 a 1 kHz es selectividad de los filtros del órgano de Corti, no la resonancia de la cápsula. Si tenés un valor de tu propia fuente, escribilo acá y la UI mide cuánto se aleja el modelo. Vacío = no se compara.">?</span>
+        </label>
+        <input type="number" id="cocQRef" min="0" step="0.5" placeholder="sin referencia">
+        <div class="fila-botones">
+          <button class="btn mini" id="btnQ">medir Q</button>
+          <button class="btn mini" id="btnQCancelar" disabled>cancelar</button>
+        </div>
+        <div class="progreso"><div class="progreso-barra" id="cocQProgreso"></div></div>
+        <div class="chips">
+          <div class="chip"><span>Q medido</span><b id="cocQValor">—</b></div>
+          <div class="chip"><span>f del pico</span><b id="cocQPico">—</b></div>
+        </div>
+        <p class="hint" id="cocQSello"></p>
+        <p class="pie" id="cocQEstado">sin medir</p>
+      </section>
+    </div><!-- /vistaCochlea -->
+
+    <div id="vistaBarridos" hidden>
+      <section>
+        <label>Barrido de apertura (FWHM contra pitch)
+          <span class="tip" title="Con el ancho de apertura fijo, variar la cantidad de elementos es variar el paso entre elementos. Es la variable que manda (D25/D26): para empatar con una apertura continua dentro del ~2 % hace falta pitch ≤ λ/4. Cada punto es un campo de verdad (~1 s).">
+?</span>
+        </label>
+        <div class="fila-botones">
+          <label class="mini-campo">n desde <input type="number" id="barApDesde" value="8" min="2" max="512" step="1"></label>
+          <label class="mini-campo">n hasta <input type="number" id="barApHasta" value="64" min="3" max="512" step="1"></label>
+          <label class="mini-campo">puntos <input type="number" id="barApPuntos" value="7" min="2" max="15" step="1"></label>
+        </div>
+        <div class="fila-botones">
+          <label class="mini-campo">apertura mm <input type="number" id="barApApertura" value="60" min="5" max="200" step="5"></label>
+          <label class="mini-campo">foco mm <input type="number" id="barApFoco" value="90" min="10" max="400" step="10"></label>
+          <label class="mini-campo">kHz <input type="number" id="barApFreq" value="250" min="20" max="1000" step="10"></label>
+        </div>
+        <div class="fila-botones">
+          <label class="mini-campo">medio
+            <select id="barApMaterial">
+              <option value="agua" selected>agua (1500 m/s)</option>
+              <option value="tejido">tejido (1540 m/s)</option>
+              <option value="hueso">hueso (3500 m/s)</option>
+            </select>
+          </label>
+        </div>
+        <div class="fila-botones">
+          <button class="btn mini" id="btnBarApertura">barrer apertura</button>
+          <button class="btn mini" id="btnBarAperturaCancelar" disabled>cancelar</button>
+        </div>
+        <div class="progreso"><div class="progreso-barra" id="barApProgreso"></div></div>
+        <p class="pie" id="barApEstado">sin lanzar</p>
+        <p class="hint" id="barApResumen"></p>
+      </section>
+
+      <section>
+        <label>Barridos en cola</label>
+        <p class="hint">Las corridas largas van a una cola con progreso y cancelación: un barrido
+        son decenas de solves y no puede dejar el navegador colgado.</p>
+      </section>
+
+      <section>
+        <label>Sensibilidad de la cóclea <span class="mini">(one-at-a-time)</span></label>
+        <p class="hint" id="barInfo">—</p>
+        <div class="fila-botones">
+          <button class="btn" id="btnBarrido">lanzar barrido</button>
+          <button class="btn mini" id="btnCancelar" disabled>cancelar</button>
+        </div>
+        <div class="progreso"><div class="progreso-barra" id="barProgreso"></div></div>
+        <p class="pie" id="barEstado">sin lanzar</p>
+      </section>
+
+      <section>
+        <label>Barrido de frecuencia <span class="mini">(escena 2D)</span>
+          <span class="tip" title="Barre la escena de la pestaña 'escena FEM' en frecuencia y mide R y T en cada punto. Criterio físico: una losa de espesor t transmite al máximo en las resonancias de media onda f_n = n·c_losa/(2t); la UI marca las predichas para que se vea si el modelo las encuentra.">?</span>
+        </label>
+        <p class="hint" id="barEscInfo">usa la escena de la pestaña «escena FEM»</p>
+        <label>desde <b id="barEscDesdeVal">100 kHz</b></label>
+        <input type="range" id="barEscDesde" min="20" max="400" step="10" value="100">
+        <label>hasta <b id="barEscHastaVal">400 kHz</b></label>
+        <input type="range" id="barEscHasta" min="30" max="800" step="10" value="400">
+        <label>puntos <b id="barEscPuntosVal">30</b></label>
+        <input type="range" id="barEscPuntos" min="5" max="61" step="2" value="30">
+        <div class="fila-botones">
+          <button class="btn" id="btnBarridoEscena">barrer frecuencia</button>
+          <button class="btn mini" id="btnCancelarEscena" disabled>cancelar</button>
+        </div>
+        <div class="progreso"><div class="progreso-barra" id="barEscProgreso"></div></div>
+        <p class="pie" id="barEscEstado">sin lanzar</p>
+        <p class="hint" id="barEscSello"></p>
+      </section>
+
+      <section>
+        <label>Ranking medido</label>
+        <div id="barRanking" class="ranking"></div>
+        <p class="hint" id="barSello"></p>
+      </section>
+    </div><!-- /vistaBarridos -->
+
+    <div id="vistaVolumen" hidden>
+      <section>
+        <label>Escena 3D</label>
+        <p class="hint">Caja tetraédrica P1 con ABC. En <b>puntual</b> el medio es agua y se compara
+        con el Green 3D; en <b>plano</b> se apilan capas y se miden R y T contra la matriz de
+        transferencia. Las rebanadas son el plano x-y a mitad de z y el x-z a mitad de y.</p>
+      </section>
+
+      <section>
+        <label>Fuente
+          <select id="volFuente">
+            <option value="puntual" selected>puntual (monopolo)</option>
+            <option value="plano">onda plana con capas</option>
+            <option value="esfera">esfera penetrable (Anderson)</option>
+          </select>
+        </label>
+        <label>Frecuencia <b id="volFreqVal">100 kHz</b></label>
+        <input type="range" id="volFreq" min="20" max="400" step="10" value="100">
+        <label>Elementos por longitud de onda <b id="volPpwVal">10</b></label>
+        <input type="range" id="volPpw" min="6" max="20" step="1" value="10">
+        <label>Alto de la caja <b id="volAltoVal">30 mm</b></label>
+        <input type="range" id="volAlto" min="5" max="40" step="1" value="30">
+      </section>
+
+      <section id="volCapasBox" hidden>
+        <label>Capas <span class="mini">(eje x)</span></label>
+        <div id="volCapas"></div>
+      </section>
+
+      <section id="volEsferaBox" hidden>
+        <label>Esfera
+          <span class="tip" title="El FEM resuelve el campo dispersado con el término de contraste (D41) y se compara con la serie de ondas parciales de Anderson (1950) sobre r = 1.5a. El agua es el medio; la esfera es del material elegido, tratado como fluido.">?</span>
+        </label>
+        <label>Material de la esfera
+          <select id="volMatEsfera">
+            <option value="hueso">hueso (c 3500, ρ 1950)</option>
+            <option value="tejido">tejido blando</option>
+            <option value="perilinfa">perilinfa</option>
+          </select>
+        </label>
+        <label>ka = 2πa/λ <b id="volKaVal">1.0</b></label>
+        <input type="range" id="volKa" min="0.2" max="4" step="0.1" value="1">
+      </section>
+
+      <section>
+        <div class="chips">
+          <div class="chip"><span>nodos</span><b id="volNodos">—</b></div>
+          <div class="chip"><span>elementos</span><b id="volElems">—</b></div>
+          <div class="chip"><span>estimado</span><b id="volEstimado">—</b></div>
+          <div class="chip"><span>solve</span><b id="volTiempo">—</b></div>
+        </div>
+        <div class="fila-botones">
+          <button class="btn mini" id="btnVolEstimar">estimar</button>
+          <button class="btn" id="btnVolumen">resolver 3D</button>
+        </div>
+      </section>
+
+      <section>
+        <label>Resultado</label>
+        <div class="chips">
+          <div class="chip"><span>error Green</span><b id="volGreen">—</b></div>
+          <div class="chip"><span>amplitud</span><b id="volAmp">—</b></div>
+          <div class="chip"><span>R</span><b id="volR">—</b></div>
+          <div class="chip"><span>R analítico</span><b id="volRan">—</b></div>
+          <div class="chip"><span>error R</span><b id="volErrR">—</b></div>
+          <div class="chip"><span>error T</span><b id="volErrT">—</b></div>
+          <div class="chip"><span>error Anderson</span><b id="volSerie">—</b></div>
+          <div class="chip"><span>radio</span><b id="volRadio">—</b></div>
+        </div>
+        <p class="hint" id="volSello"></p>
+      </section>
+
+      <p class="pie" id="volEstado">sin resolver</p>
+    </div><!-- /vistaVolumen -->
+
     <p class="aviso" id="aviso" hidden></p>
     <p class="pie" id="estado">listo</p>
   </aside>
 
-  <main class="vista">
+  <main class="vista" id="mainCampo">
     <div class="mapa-wrap">
       <div id="mapa" class="mapa"></div>
       <div id="arrastre" class="arrastre"></div>
@@ -160,7 +551,199 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
     </div>
   </main>
 
+
+    <div id="vistaEsfera" hidden>
+
+      <section>
+        <label>Material del sólido
+          <span class="tip" title="Un sólido elástico sostiene ondas de corte: la respuesta depende de c_s, no sólo de la impedancia. Es lo que diferencia esta vista de la esfera penetrable de la pestaña 3D (que por dentro sigue siendo fluido). OJO con los materiales blandos: no hay c_s citable en 100 kHz-1 MHz para tejido ni grasa (las de elastografía son de cientos de Hz y las de Madsen 1983 son de 2-14 MHz), así que sus valores son ballpark, no datos. Y con c_s chico la malla tiene que resolver λ_s = c_s/f, que es mucho más corta que la del fluido.">?</span>
+        </label>
+        <select id="esfMaterial">
+          <option value="acero" selected>acero (5900/3200 m/s)</option>
+          <option value="hueso">hueso (3500/1900 m/s)</option>
+          <option value="aluminio">aluminio (6320/3130 m/s)</option>
+          <option value="tungsteno">tungsteno (5200/2800 m/s)</option>
+          <option value="tejido (casi fluido)">tejido, casi fluido (1540/30 m/s) — c_s ballpark</option>
+        </select>
+      </section>
+
+      <section>
+        <label>ka = k₀·a <b id="esfKaVal">1.00</b>
+          <span class="tip" title="Producto del número de onda del agua por el radio de la esfera. Es el parámetro que gobierna la dispersión: ka mucho menor que 1 es régimen de Rayleigh (la esfera casi no perturba), ka ~1 es donde el patrón angular empieza a tener lóbulos.">?</span>
+        </label>
+        <input type="range" id="esfKa" min="0.30" max="3.00" step="0.05" value="1.00">
+      </section>
+
+      <section>
+        <label>Frecuencia <b id="esfFreqVal">100 kHz</b></label>
+        <input type="range" id="esfFreq" min="20" max="400" step="10" value="100">
+      </section>
+
+      <section>
+        <label>Malla
+          <span class="tip" title="La rápida usa un dominio de 2.5 radios: el ABC no alcanza y deja ~9 % de error, así que su sello va a salir FUERA. La precisa usa 4 radios y es el número que se reporta (4.21 % medido).">?</span>
+        </label>
+        <select id="esfModo">
+          <option value="precisa" selected>precisa (dominio 4a, ~30 s)</option>
+          <option value="rapida">rápida (dominio 2.5a, ~2 s)</option>
+        </select>
+        <p class="hint" id="esfCosto">—</p>
+      </section>
+
+      <section>
+        <label>Restricción de modos rígidos
+          <span class="tip" title="El sólido libre tiene seis modos de cuerpo rígido sin rigidez elástica. Con una onda plana la fuerza neta exacta es cero, así que el desplazamiento medio debe ser cero; sin imponerlo, el residuo numérico excita la traslación y el error pasa de 4 % a 18 %. Se puede apagar, pero NO con un cuerpo transparente (tejido casi fluido): ahí la onda sí ejerce fuerza neta y la restricción mete dispersión falsa.">?</span>
+        </label>
+        <select id="esfRigidos">
+          <option value="si" selected>imponer traslación media nula (recomendado)</option>
+          <option value="no">no imponer (para comparar)</option>
+        </select>
+      </section>
+
+      <section>
+        <label>Formulación del sólido
+          <span class="tip" title="Son dos maneras de escribir la misma ecuación, y NO dan lo mismo en esta malla. TOTAL resuelve el desplazamiento completo; es la que está sellada (4.29 % en acero) pero suprime una respuesta dipolar física, así que ese número está en parte cancelado (D48). DISPERSADA resuelve u_s = u - u_i aplicando el operador de contraste: es la correcta en el continuo — da la traslación 3/(2g+1) al 1-2 % y el caso transparente exacto — pero es una resta de términos grandes y contra Faran da 19.49 % en acero y 44.14 % en aluminio (D49). Si ves 19 % en acero con la dispersada, no es un bug: es el estado del arte de esta implementación.">?</span>
+        </label>
+        <select id="esfFormulacion">
+          <option value="total" selected>total + traslación nula (sellada, 4.29 % acero)</option>
+          <option value="dispersada">dispersada (correcta, 19.49 % acero)</option>
+        </select>
+      </section>
+
+      <div class="fila-botones">
+        <button class="btn" id="btnEsfera">resolver esfera</button>
+        <button class="btn mini" id="btnEsferaCancelar" disabled>cancelar</button>
+      </div>
+      <div class="progreso"><div class="progreso-barra" id="esfProgreso"></div></div>
+      <p class="pie" id="esfEstado">sin lanzar</p>
+      <p class="hint" id="esfSello"></p>
+      <p class="hint" id="esfMetricas"></p>
+
+      <section>
+        <label>Barrido en ka de la misma esfera
+          <span class="tip" title="Resuelve la esfera en varios ka y grafica el error de cada formulación contra Faran. Sirve para ver DÓNDE deja de valer: un número suelto dice cuánto se equivoca, el barrido dice en qué régimen. Con el modo rápido cada punto es ~2 s; con el preciso ~30 s.">?</span>
+        </label>
+        <div class="fila-botones">
+          <label class="mini-campo">desde <input type="number" id="esfBarDesde" value="0.5" min="0.3" max="3" step="0.1"></label>
+          <label class="mini-campo">hasta <input type="number" id="esfBarHasta" value="2.0" min="0.3" max="3" step="0.1"></label>
+          <label class="mini-campo">puntos <input type="number" id="esfBarPuntos" value="7" min="2" max="25" step="1"></label>
+        </div>
+        <div class="fila-botones">
+          <button class="btn mini" id="btnEsfBarrido">barrer ka</button>
+          <button class="btn mini" id="btnEsfBarridoCancelar" disabled>cancelar</button>
+        </div>
+        <label class="hist-fila" style="padding-left:0">
+          <input type="checkbox" id="esfBarComparar"> comparar las dos formulaciones (cuesta el doble)
+        </label>
+        <div class="progreso"><div class="progreso-barra" id="esfBarProgreso"></div></div>
+        <p class="pie" id="esfBarEstado">sin lanzar</p>
+        <p class="hint" id="esfBarResumen"></p>
+      </section>
+
+      <section>
+        <label>Resultados</label>
+        <div class="fila-botones">
+          <button class="btn mini" id="btnEsfJson">descargar JSON</button>
+          <button class="btn mini" id="btnEsfCsv">descargar CSV (θ)</button>
+          <button class="btn mini" id="btnEsfGuardar">guardar en el historial</button>
+        </div>
+        <p class="hint" id="esfDescarga">Corré una simulación para poder exportar. El JSON lleva todo
+          (curvas, mapa, métricas y sello); el CSV lleva sólo |p_s|(θ) del FEM y de Faran, que es lo
+          que se compara en una hoja de cálculo.</p>
+      </section>
+
+      <section>
+        <label>Historial de esta sesión
+          <span class="tip" title="Se guarda en el navegador (localStorage), no en el servidor. Sirve para comparar corridas: al marcar una, sus curvas se superponen punteadas en las gráficas de arriba. Se conservan las últimas 12.">?</span>
+        </label>
+        <div id="esfHistorial" class="historial"><p class="hint">todavía no guardaste ninguna corrida</p></div>
+      </section>
+    </div>
+
+  <main class="vista" id="vistaEscenaMain" hidden>
+    <div class="mapa-wrap">
+      <div id="mapaEscena" class="mapa"></div>
+    </div>
+    <div class="cortes">
+      <div id="axialEscena" class="corte"></div>
+      <div id="lateralEscena" class="corte"></div>
+    </div>
+  </main>
+
+  <main class="vista" id="vistaVolumenMain" hidden>
+    <div class="mapa-wrap">
+      <div id="mapaVolumen" class="mapa"></div>
+    </div>
+    <div class="cortes">
+      <div id="corteVolumen" class="corte ancho"></div>
+    </div>
+  </main>
+
+  <main class="vista" id="vistaBarridosMain" hidden>
+    <div class="mapa-wrap">
+      <div id="graficoBarrido" class="mapa"></div>
+    </div>
+    <div class="cortes">
+      <div id="barrasBarrido" class="corte ancho"></div>
+      <div id="graficoApertura" class="corte ancho"></div>
+    </div>
+  </main>
+
+  <main class="vista" id="vistaCochleaMain" hidden>
+    <div class="mapa-wrap">
+      <div id="mapaCochlea" class="mapa"></div>
+    </div>
+    <div class="cortes">
+      <div id="corteCochlea" class="corte ancho"></div>
+    </div>
+  </main>
+
+  <main class="vista" id="vistaDispersorMain" hidden>
+    <div class="mapa-wrap">
+      <div id="mapaDisp" class="mapa"></div>
+    </div>
+    <div class="cortes">
+      <div id="comparacionDisp" class="corte ancho"></div>
+    </div>
+  </main>
+
+
+  <main class="vista" id="vistaEsferaMain" hidden>
+    <div class="mapa-wrap">
+      <div id="mapaEsf" class="mapa"></div>
+    </div>
+    <div class="cortes">
+      <div id="angEsf" class="corte ancho"></div>
+      <div id="faseEsf" class="corte ancho"></div>
+      <div id="barridoEsf" class="corte ancho"></div>
+    </div>
+  </main>
+
+  <main class="vista" id="vistaCriteriosMain" hidden>
+    <div class="mapa-wrap criterios-wrap">
+      <h2 class="criterios-titulo">Registro de criterios
+        <span class="tip" title="Cada criterio vive en el servidor (validacion.py) con su tolerancia y su fuente. Un resultado se sella contra este registro: la UI no tiene umbrales propios. 'sin medir' significa que en esta sesión no se corrió la vista que lo produce; 'sin_referencia' significa que se midió pero la referencia no cubre esa configuración.">?</span>
+      </h2>
+      <p class="hint" id="criteriosResumen">—</p>
+      <div class="fila-botones">
+        <button class="btn mini" id="btnInforme">descargar informe de la sesión</button>
+        <button class="btn mini" id="btnInformeJson">descargar todo (JSON)</button>
+      </div>
+      <p class="hint" id="informeAviso">El informe junta lo que se resolvió en esta sesión con su sello
+        y su fuente, para pegarlo en una nota o adjuntarlo. No incluye las gráficas: para eso está
+        «exportar vista».</p>
+      <div id="tablaCriterios" class="tabla-criterios"></div>
+    </div>
+  </main>
+
 </div>
 <script src="/static/app.js"></script>
+<script src="/static/escena.js"></script>
+<script src="/static/dispersor.js"></script>
+<script src="/static/cochlea.js"></script>
+<script src="/static/barridos.js"></script>
+<script src="/static/volumen.js"></script>
+<script src="/static/esfera.js"></script>
+<script src="/static/criterios.js"></script>
 </body>
 </html>

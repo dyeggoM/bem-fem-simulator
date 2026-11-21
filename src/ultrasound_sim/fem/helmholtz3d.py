@@ -856,6 +856,21 @@ def _solve_sparse(a: sp.csr_matrix, b: np.ndarray) -> np.ndarray:
 # --------------------------------------------------------------------------- #
 
 
+def _incident_at_nodes(p_inc, x: np.ndarray) -> np.ndarray:
+    """Evalúa la onda incidente en los nodos; acepta objeto con ``.value`` o un callable."""
+    if hasattr(p_inc, "value"):
+        vals = np.asarray(p_inc.value(x), dtype=complex).reshape(-1)
+    elif callable(p_inc):
+        vals = np.asarray(p_inc(x), dtype=complex).reshape(-1)
+    else:
+        raise TypeError("p_inc debe tener .value (onda) o ser un callable")
+    if vals.size != x.shape[0]:
+        raise ValueError(f"p_inc devolvió {vals.size} valores para {x.shape[0]} nodos")
+    if not (np.all(np.isfinite(vals.real)) and np.all(np.isfinite(vals.imag))):
+        raise ValueError("p_inc devolvió valores no finitos")
+    return vals
+
+
 def assemble_scattered(
     nodes,
     tets,
@@ -869,6 +884,9 @@ def assemble_scattered(
     abc_order: int = 1,
     abc_center=None,
     neumann_normals=None,
+    background_k=None,
+    background_rho=None,
+    p_inc=None,
     point_sources=None,
     point_volume_velocities=None,
     frequency=None,
@@ -957,6 +975,48 @@ def assemble_scattered(
     elif dp_dn_incident is not None:
         raise ValueError("dp_dn_incident se pasó sin neumann_faces")
 
+    if background_k is not None:
+        # DISPERSOR PENETRABLE. Partiendo de p = p_i + p_s y restando la ecuación del fondo, en forma
+        # débil queda
+        #     ∫(1/ρ)∇p_s∇v − (k²/ρ)p_s v  −  ABC(p_s)  =  −C(p_i)
+        # con  C(p_i) = ∫(1/ρ − 1/ρ₀)∇p_i·∇v − (k²/ρ − k₀²/ρ₀)p_i v
+        # El operador es el local (lo que ya arma esta función) y el lado derecho lleva el contraste.
+        #
+        # Las dos diferencias con el intento fallido de D32: (a) el contraste incluye el fondo en los
+        # dos términos, no sólo en k²; (b) se integra sólo donde el medio difiere — fuera del
+        # dispersor el integrando es cero y agregarlo mete el flujo espurio de la frontera.
+        if p_inc is None:
+            raise ValueError("background_k requiere p_inc: el término de contraste es −C(p_i)")
+        k_bg = np.asarray(background_k, dtype=complex).reshape(-1)
+        if k_bg.size == 1:
+            k_bg = np.full(t.shape[0], k_bg[0], dtype=complex)
+        if k_bg.size != t.shape[0]:
+            raise ValueError(f"background_k debe ser escalar o por elemento ({t.shape[0]})")
+        if background_rho is None:
+            raise ValueError("background_k requiere background_rho (el contraste lo usa)")
+        rho_bg = np.asarray(background_rho, dtype=float).reshape(-1)
+        if rho_bg.size == 1:
+            rho_bg = np.full(t.shape[0], rho_bg[0])
+        if rho_bg.size != t.shape[0]:
+            raise ValueError(f"background_rho debe ser escalar o por elemento ({t.shape[0]})")
+
+        p_i_nodos = _incident_at_nodes(p_inc, x)
+        p_i_el = p_i_nodos[t]
+        mass, stiff, _ = p1_tet_local(x, t)
+        kp = np.einsum("mij,mj->mi", mass, p_i_el)
+        gp = np.einsum("mij,mj->mi", stiff, p_i_el)
+        # −C(p_i) = ∫(1/ρ₀ − 1/ρ)∇p_i·∇v + (k²/ρ − k₀²/ρ₀)p_i v
+        coef_rigidez = (1.0 / rho_bg - 1.0 / rho_el)[:, None]
+        coef_masa = ((k_el**2) / rho_el - (k_bg**2) / rho_bg)[:, None]
+        local_vec = coef_rigidez * gp + coef_masa * kp
+
+        con_contraste = (np.abs(k_el - k_bg) > 0) | (np.abs(rho_el - rho_bg) > 0)
+        local_vec[~con_contraste] = 0.0
+        for j in range(4):
+            np.add.at(b, t[:, j], local_vec[:, j])
+    elif p_inc is not None:
+        raise ValueError("p_inc se pasó sin background_k: no hay contraste que integrar")
+
     if point_sources is not None:
         _add_point_sources(b, x, point_sources, point_volume_velocities, frequency)
     elif point_volume_velocities is not None:
@@ -978,6 +1038,9 @@ def solve_scattered(
     abc_order: int = 1,
     abc_center=None,
     neumann_normals=None,
+    background_k=None,
+    background_rho=None,
+    p_inc=None,
     point_sources=None,
     point_volume_velocities=None,
     frequency=None,
@@ -987,7 +1050,9 @@ def solve_scattered(
         nodes, tets, element_k, abc_faces=abc_faces, neumann_faces=neumann_faces,
         dp_dn_incident=dp_dn_incident, element_rho=element_rho, face_rho=face_rho,
         normals=normals, abc_order=abc_order, abc_center=abc_center,
-        neumann_normals=neumann_normals, point_sources=point_sources,
+        neumann_normals=neumann_normals, background_k=background_k,
+        background_rho=background_rho, p_inc=p_inc,
+        point_sources=point_sources,
         point_volume_velocities=point_volume_velocities, frequency=frequency,
     )
     return _solve_sparse(a, b)

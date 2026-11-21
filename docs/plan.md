@@ -39,9 +39,70 @@ Resumen de lo que está *cerrado con número medido*, no de lo que está escrito
 - **UI (D27/D31)** — dashboard local con motor de campo, editor de fuentes con arrastre, panel de
   cóclea y métricas; 250 tests en verde (1 xfail documentado).
 
-**Pendiente y por qué**: dispersión penetrable 3D (el operador del dispersado tiene que ser el del
-fondo; ver D32), elasticidad 3D, geometría de CT, referencia externa Elmer/openCFS, y la UI de
-trabajo (abajo).
+**Pendiente y por qué** (actualizado con la consulta a `sim-datos`, D40):
+
+- **Dispersión penetrable 3D — CERRADA (D41).** `analytic/sphere.py` implementa la serie de **Anderson
+  (1950)** validada por continuidad (salto de `p` y de flujo ≤ 1e-12 a ka = 0.5–5), por el límite
+  rígido (`ρ→∞` da `∂ᵣp = 0` al 0.0001 %) y por la esfera casada (`Aₙ = 6e-24`). El FEM 3D con el
+  término de contraste corregido la reproduce: **3.34 % (ka = 1)** y **2.73 % (ka = 2)** a ppw 12, con
+  convergencia **5.72 % → 1.93 %** al ir de ppw 8 a 16. El bug de D32 era el cociente de densidades
+  invertido en el contraste, más el fondo ausente en el término de rigidez.
+  **En la UI**: la pestaña 3D tiene un tercer modo *esfera penetrable* (material y `ka` editables) que
+  muestra el **campo dispersado** en el plano de propagación y sella contra Anderson
+  (*2.94 % a ka = 1*, 9 261 nodos, 1.2 s). Se muestra el dispersado y no el total porque en el total
+  manda la incidente y la perturbación desaparece en la escala de dB.
+  **Faran (1951) — ENTREGADO (D45).** `analytic/faran.py`: la serie de la esfera **elástica**
+  sumergida (dos potenciales P/S, tres condiciones de borde, sistema 3×3 por orden), validada sin
+  tabla de referencia: condición unitaria a **1e-16**, teorema óptico al **1.0e-3 %**, límite de
+  fluido cayendo como `c_s²` (**1.62e-3 → 4.04e-4 → 1.01e-4**) y aproximación monótona al rígido
+  contra `sphere.py` (aluminio 5.2e-3 · acero 2.3e-3 · tungsteno 1.2e-3). 14 tests.
+  **Fase 6b — primera mitad ENTREGADA (D46).** Malla esfera+cáscara de fluido con Gmsh (interfaz
+  compartida nodo a nodo; volumen del sólido 3.51 % → 1.57 % al refinar) y elasticidad vectorial P1
+  con acoplamiento fluido–sólido. Elasticidad **exacta**: modos rígidos en el núcleo de `K` a *4.1e-16*,
+  energía de deformación uniforme exacta, masa `3ρV` exacta. El acoplamiento está bien por sus
+  límites: sin contraste no dispersa y el límite rígido da *10.66 %* contra `sphere.py`, que es el
+  *10.35 %* que da en el mismo dominio el Helmholtz ya validado (D41) — o sea, el dominio y el ABC.
+  **Contra Faran: 9.2 % a `ka = 1`** (era 22 %), con razón de amplitudes *0.997*. El 22 % inicial se
+  debía a los **seis modos de cuerpo rígido** del sólido libre: no tienen rigidez elástica y su
+  excitación espuria por una fuerza neta que la malla no cancela contaminaba todo el campo. Se
+  arregló con una restricción de Lagrange de traslación media nula, cuyos multiplicadores **son** la
+  fuerza espuria y se devuelven como diagnóstico (*7.6e-8 N*). Convergencia al refinar: *10.20 %*
+  (h=a/3.5) → *9.70 %* (a/4.5) → *9.21 %* (a/5.5).
+  **El piso, descompuesto y bajado (D46, 3.er apéndice).** Fluido solo con datos exactos, una cosa
+  por vez: el **dominio** se llevaba ~5 de los 9 puntos (`2.5a` → *9.30 %*, `4a` → *4.06 %*, `6a` →
+  *3.96 %* por 12× el costo), y el resto es malla (`h=a/3` *10.24 %* → `a/4.5` *4.06 %* → `a/6`
+  *3.03 %*, con el orden cayendo a 1 por el **facetado**). El acoplado completo en el dominio
+  recomendado da **4.21 %** a `h=a/4.5` (32 s) y *3.01 %* a `a/6` (211 s): **el sólido aporta 0.15
+  puntos**. `sphere_shell_tet_mesh` ahora toma `4·radius` y `radius/4.5` por defecto y **avisa** si el
+  radio exterior baja de `3·radius`.
+  Lo que queda sobre la mesa: una condición **Dirichlet-to-Neumann exacta** sobre la esfera exterior
+  permitiría el 4 % al costo de 1.3 s (dominio chico), en vez de 32 s.
+  **La restricción tiene dominio de validez medido**: con una esfera indistinguible del medio hay que
+  apagarla, porque ahí la onda incidente **sí** ejerce fuerza neta y el desplazamiento medio no es
+  cero (con restricción mete dispersión falsa de 1.6 Pa sobre 1 Pa). Está como opción explícita y
+  testeada en los dos sentidos.
+
+  **Faran (1951) — la derivación, guardada (D44).** La serie de la esfera elástica (dos
+  potenciales P/S, tres condiciones de borde en `r = a`, sistema 3×3 por orden) quedó a mitad de
+  derivación: `u_r = Φ_r + n(n+1)Ψ/r²` y `u_θ = (Φ_θ + Ψ_rθ)/r` **verificados con sympy**, y las
+  expresiones de `σ_rr`/`σ_rθ` derivadas pero sin armar. Se borró el módulo a medio escribir a
+  propósito: un coeficiente mal derivado no falla ruidosamente. La validación ya está decidida —el
+  **teorema óptico** (`σ_ext = σ_sca`), que no necesita tabla de referencia, más los residuos de las
+  tres condiciones y el límite de contraste bajo—. Lo que NO sirve como validación es comparar
+  contra `sphere.py` con `μ → 0`: ese límite es físicamente correcto pero numéricamente singular
+  (`k_β → ∞`).
+- **Tensor elástico de la cápsula ótica — no hay dato citable.** Peterson y Dechow (2003) dan
+  propiedades direccionales de cortical externa del temporal, no de la cápsula. Se sigue con isótropo
+  `VERIFY` y los parámetros expuestos en la UI.
+- **CT→velocidad — hay calibración.** Webb et al. (2018): `c = m·HU + b`, ejemplo `m = 0.75
+  m·s⁻¹·HU⁻¹`, `b = 1.32 km/s`, `R² = 0.46` (depende de energía y reconstrucción). Entra como valores
+  por defecto citados y editables en la fase de geometría de CT.
+- **α del hueso a 100 kHz — sigue siendo extrapolación del material.** Li et al. (2025) tienen
+  *pérdida de inserción* a 100–290 kHz, no α intrínseca: sirven para contrastar el modelo completo,
+  no para fijar el coeficiente.
+- **Q de la cavidad — no hay dato citable.** Se mide con la definición operativa de D40
+  (`Q = f_pico/Δf` con `|p|²` a la mitad) y la UI permite cargar un Q de referencia propio.
+- Referencia externa Elmer/openCFS, y el resto de la Fase 8 (ya completa en U1–U6).
 
 ## Física y decisiones de modelado (del plan de Diego)
 
@@ -230,7 +291,12 @@ agrega a la librería con su criterio, después se enchufa.
 
 ### Las fases
 
-- **U1 — Escena 2D + FEM acústico.** Editor de regiones rectangulares (material por región),
+- **U1 — Escena 2D + FEM acústico. ENTREGADA.** `dashboard/scene.py` (validación, malla, solve,
+  métricas) + `meshing.grid_tri_mesh` (reticulado conforma por construcción) + pestaña "escena FEM"
+  en el dashboard. Medido: agua/hueso/agua a ppw 12 — *R 0.9018 vs 0.9037* (abs 0.0019),
+  *T 0.4323 vs 0.4281* (abs 0.0041), energía *1.0000*, solve *11 ms* con 1 152 elementos;
+  agua/tejido/agua — R abs 0.0060, T abs 0.0009. 18 tests en `test_scene.py` + 5 de HTTP.
+  Editor de regiones rectangulares (material por región),
   vista previa de malla con el conteo y el costo estimado, selector de formulación
   (total/dispersado), ABC-1/BGT-2, frecuencia, y mapa de |p| + cortes.
   *Aceptación*: desde la UI, la capa agua/tejido/agua reproduce R y T de la Fase 1 dentro de **2 %**
@@ -238,35 +304,153 @@ agrega a la librería con su criterio, después se enchufa.
   escena guarda/carga en JSON con la malla reproducible bit a bit.
   *Bloqueante técnico*: el servidor es síncrono hoy; un solve 2D de 5 k elementos tarda ~1 s, así que
   U1 puede quedar síncrona. Recién 3D obliga a trabajos asíncronos.
-- **U2 — Dispersores y BEM.** Elegir dispersor (círculo/elipse/polígono), ecuación de frontera
+- **U2 — Dispersores y BEM. ENTREGADA (cilindro rígido).** `dashboard/scatterer.py` + pestaña
+  "dispersor BEM": el mismo cilindro rígido en agua resuelto por BEM (exterior), FEM (corona en
+  campo dispersado) y la serie de Bessel, con el mapa del campo dispersado, las tres curvas `|p|`
+  contra θ en `r = 1.5a` y las tres discrepancias. Medido: ka=1 → *FEM−BEM 0.97 %*, *FEM−serie
+  0.94 %*, *BEM−serie 0.05 %*; ka=2 → 0.58/0.60/0.14 %; ka=3 → 0.84/0.72/0.27 %. Las tres
+  ecuaciones (standard/Burton-Miller/CHIEF) dan el mismo campo dentro del criterio. Costo 2.2 s
+  por corrida (de los cuales 1.9 s es el mapa BEM).
+  Falta de esta fase: elipse/polígono (contornos BEM no circulares) y dispersor **penetrable**
+  (el mismo frente que D32 dejó abierto en 3D).
+  Editor de regiones rectangulares (material por región),
   (`standard`/`burton_miller`/`chief`), y el **mismo problema por los dos métodos lado a lado**.
   *Aceptación*: el cilindro rígido contra la serie de Bessel da < 2 % mostrado en pantalla, y el panel
   de contraste FEM/BEM muestra la discrepancia y el tiempo de cada uno (referencia: 0.97 %/0.59 %,
   FEM 12–41 ms vs BEM 203–242 ms).
   Es la fase que más rinde: es el uso que Diego pidió desde el principio —comparar métodos y ver
   dónde no coinciden.
-- **U3 — Cóclea de trabajo.** La escena completa de 5a+5b: cápsula con espesor, dos scalae, membrana
+- **U3 — Cóclea de trabajo. ENTREGADA.** `dashboard/cochlea_field.py` + pestaña "cóclea": el corte
+  completo de la Fase 5 (cápsula elástica, perilinfa, membrana basilar, ventana redonda) resuelto
+  por `cochlea.solve_cross_section`, con el **mapa del campo interior** interpolado sobre el disco,
+  corte por el centro, y las métricas de D29/D30 en vivo. Medido: `t_interior = 0.53187` (D30:
+  0.53187, desvío *0.00 %*), armónico n=0 0.17913, membrana absorbe *72.9 %*, balance de energía
+  *0.09 %*. Sin membrana: `t_interior` 0.97218 y absorción exactamente 0 (el interruptor mueve la
+  física, no un parámetro cosmético). Costo *4.3 s* (malla 0.47 s + solve 4.3 s).
+  **Q no se muestra**: medirlo pide un barrido de frecuencia (~9 solves) y eso es U5 — la UI lo dice
+  en vez de inventar un número.
+  La escena completa de 5a+5b: cápsula con espesor, dos scalae, membrana
   basilar con sus tres parámetros, ventanas. Vista del campo interior, `t_interior`, balance de
   energía y `Q` en vivo.
   *Aceptación*: reproduce `t_interior = 0.53187` dentro de 1 %, energía dentro de 0.46 % y `Q < 5`
   (los números de D29/D30), y los tres sliders ya expuestos siguen moviendo el resultado con los
   pesos medidos (53 %/8 %/10 %).
-- **U4 — 3D.** Escena de cajas (o malla externa), solver P1 con ABC-1/BGT-2, y visualización por
+- **U4 — 3D. ENTREGADA (dos modos, con rebanadas).** `dashboard/volume3d.py` + pestaña "3D" con el
+  plano *x-y* a mitad de *z* y el *x-z* a mitad de *y*. Dos modos: **puntual** (monopolo en agua, ABC
+  en las seis caras, se compara con el Green 3D) y **plano** (capas, ABC sólo en *x*, R/T contra la
+  matriz de transferencia). Medido: puntual → error Green *7.0 %* con amplitud *0.969* en 9 261 nodos
+  y *1.0 s*; plano → *R 0.9032 vs 0.9037* (abs 0.0005), *T 0.4343 vs 0.4281* (abs 0.0061), energía
+  *1.0044*. Tope de 90 000 nodos con mensaje, y el techo conocido de D32 declarado antes de resolver.
+  Escena de cajas (o malla externa), solver P1 con ABC-1/BGT-2, y visualización por
   **rebanadas** (no volumen completo: con 18 k nodos el campo es un sólido y Plotly no lo pinta bien).
   *Aceptación*: reproduce D32 desde la UI —onda plana 3.53 % a ppw 20, pistón 0.0000 % contra
   Rayleigh-Sommerfeld, R/T estratificado 2.91 %/2.11 %— con el conteo de nodos y el tiempo a la vista.
   *Bloqueante*: acá sí hace falta cola de trabajos (`POST` devuelve job id, el front consulta estado y
   progreso, hay cancelar) y un tope duro de elementos con mensaje claro en vez de colgar la máquina.
-- **U5 — Barridos y comparación.** Barrido de frecuencia, de espesor o de número de elementos sobre
-  la escena actual, en cola, con progreso, CSV y superposición de curvas de varias corridas.
-  *Aceptación*: repetir el barrido de 15 configuraciones de D25 desde la UI y que el CSV coincida con
-  `out/focusing_study.csv` dentro de la tolerancia de malla; y el barrido de sensibilidad de D30
-  (85 puntos) con los mismos pesos.
-- **U6 — Trazabilidad.** Cada resultado lleva su "sello": qué criterio, contra qué número de
+- **U5 — Barridos con cola, progreso y cancelación. ENTREGADA (sensibilidad).** `dashboard/jobs.py`
+  (cola FIFO, un worker, cancelación cooperativa, retención acotada) + `dashboard/sweeps.py` (barrido
+  OAT de la cóclea) + pestaña "barridos" con barra de progreso, cancelar y ranking en vivo.
+  *Aceptación cumplida*: el barrido de 31 puntos reproduce el ranking de D30 **exacto** — espesor
+  *53.11 %*, c_p *16.06 %*, atenuación *9.60 %*, c_s *8.22 %*, ρ *1.03 %*, Z_r *0.28 %* (peor desvío
+  *1.8 %*), en *89 s* con `t_interior` base 0.53187. Los α de las tres leyes se piden a
+  `attenuation.py` (3.777 / 6.243 / 15.312 Np/m a 100 kHz), no se escriben a mano.
+  **Barrido de frecuencia de la escena 2D — ENTREGADA (D43).** Barre la escena de la pestaña "escena
+  FEM" en frecuencia desde la cola, mide R y T por punto y marca las **resonancias de media onda
+  predichas** `f_n = n·c_losa/(2t)`. Medido con una losa de hueso de 10 mm: picos en *176.7 y
+  353.8 kHz* contra *175 y 350* predichos (≤1 %), con *T = 0.999* y *R = 0.031* coincidiendo en la
+  resonancia. El sello marca "fuera" a ppw 12 porque el error de T llega a *5.90 %* arriba de 350 kHz
+  (a ppw 20 baja a *2.08 %*): es la malla, no el barrido, y el barrido lo dice en vez de promediar.
+  Falta de esta fase: el barrido de las 15 configuraciones de D25 y la exportación a CSV desde la UI.
+- **U7 — Esfera elástica. ENTREGADA (D47).** Pestaña nueva: material (acero, hueso, aluminio,
+  tungsteno, tejido casi fluido), `ka`, frecuencia, dos mallas y el interruptor de la restricción de
+  modos rígidos con su tooltip. El servidor resuelve con `coupled3d` y contrasta contra **Faran** en
+  la misma corrida; la UI pinta el campo dispersado en el plano x-z, `|p_s|` contra θ y la
+  **diferencia de fase**. Criterio nuevo `volumen_esfera_elastica` (6 %).
+  Medido a `ka = 1`, dominio 4a, `h = a/4.5` (21 398 nodos, ~40 s): **acero 4.29 %**, aluminio
+  *3.99 %*, tungsteno *4.71 %*, **hueso 13.16 %**.
+  *El hueso es un error de MODELO, no de malla*: su contraste de impedancia es 4.6 contra 30.7 del
+  acero, así que el cuerpo se mueve parcialmente con el fluido y la condición de traslación media
+  nula deja de ser exacta. Apagar la restricción lo empeora a 54.6 %, o sea que sigue siendo
+  imprescindible. El sello lo marca `fuera` con el número y la fuente: **no se subió el umbral para
+  que la tabla se viera verde**.
+  *Con tejido casi fluido (contraste 1.08) la restricción se rompe del todo*: el campo salía **53×**
+  el exacto. Ahí la restricción **se desactiva sola** (umbral de contraste 2.5, medido) y el sello
+  pasa a **`sin_referencia`**, porque con un campo dispersado del orden del 2 % de la incidente el
+  error *relativo* no indica nada: se muestra el **error absoluto** contra la incidente
+  (7.2e-3 Pa sobre 1 Pa).
+  *Formulación dispersada IMPLEMENTADA (D49), y el resultado obliga a matizar.* `u_s = u − u_i` con
+  el **operador de contraste** (no el completo: restar el completo deja un residuo O(h²) que empuja un
+  campo espurio del 18 %). El límite transparente ahora **valida exacto**: `|p_s|` converge a cero
+  como `c_s²` (6.7e-2 → 2.6e-3 → 5.3e-4 → 1.2e-4 para `c_s` 100/30/10/3) sin restringir nada.
+  **Pero contra Faran es peor**: acero **19.49 %** y aluminio **44.14 %**, contra 4.29 %/3.99 % de la
+  total+restricción. La razón: para un metal `u_s ≈ −u_i` y `(K−ω²M)u_s` con la rigidez del acero es
+  una resta de términos grandes; el error de interpolación de la incidente se amplifica por `K`.
+  **Consecuencia honesta**: el 4.29 % está en parte **cancelado** con el error de discretización, no
+  ganado. El default sigue en la total (`fijar_rigidos=True`) porque es la sellada, y el criterio queda
+  calificado a metales.
+  *Barrido de apertura en la UI (U8, D53)*: FWHM lateral contra `pitch/λ` con la apertura continua
+  como referencia. Medido a 60 mm, foco 90 mm, 250 kHz: 1.25 λ → **10.8 %** de desvío (y grataje a
+  53°), 0.45 λ → 2.3 %, **0.28 λ → 1.7 %**, 0.16 λ → 1.5 %. El pitch más grueso que cumple el 2 % es
+  **1.1× el `λ/4` de D25/D26**: coincide con el criterio y le pone el número al lado.
+  *Barrido en `ka` en la UI (U7b)*: la vista resuelve la esfera en varios `ka` y grafica el error de
+  cada formulación contra Faran, con la tolerancia del criterio como línea. Primer resultado con el
+  modo rápido (dominio 2.5a, 5 puntos): la **dispersada gana en `ka = 0.5`** (15.2 % contra 17.7 %) y
+  **pierde entre `ka = 1.0` y `1.5`** (19.6/20.1 % contra 10.8/7.9 %). O sea: la formulación correcta
+  mejora justo en el límite de Rayleigh, que es donde la traslación `3/(2g+1)` pesa, y empeora donde
+  el campo dispersado tiene estructura. Es la confirmación numérica de D50 en el rango, no sólo en el
+  punto.
+  *Traslación contrastada (D50), y el resultado es limpio*: a `k₀a = 0.1` las dos formulaciones
+  correctas dan `|u_cm|/|u_i|` al **1-2 %** de `3/(2g+1)` (acero 0.1772 vs 0.1807; hueso 0.6064 vs
+  0.6122). El acoplamiento fluido-sólido y la masa añadida están bien ⇒ **el 19-44 % a `ka = 1` es
+  resolución del resto del campo, no de la física**. Y la restricción no "aproxima" la traslación: la
+  pone en **0.0000** donde la ley pide 0.18, y en el caso casi transparente la **amplifica 10×**
+  (10.09 contra 0.9677).
+  *Siguiente paso*: convergencia en `h` de la dispersada en acero a `ka = 1` para confirmar que el
+  19.49 % baja al refinar. Si no baja, el sospechoso es la estructura angular (elementos P1 rectos
+  sobre una esfera facetada), no la formulación.
+  **Y no es una mejora opcional (D48)**: Sim-Datos confirmó que la premisa de la restricción es
+  **falsa** — una onda plana sí ejerce fuerza armónica de primer orden sobre el cuerpo, y Faran
+  **incluye** ese *rebound* traslacional (Feuillade y Clay 1999, JASA 106:553, §IV). La amplitud
+  suprimida escala como `3/(2g+1)` con `g = ρ_sólido/ρ_fluido` (Bruus 2012, ecs. 22 y 26): 0.18 en
+  acero, 0.61 en hueso, 0.97 en tejido — exactamente el orden del error medido. La restricción es una
+  **limitación de la implementación**, no del método, y el arreglo es la formulación dispersada.
+  También de D48: no hay umbral citable de contraste para "dispersor débil" (los de Born son
+  `|γ_ρ|, |γ_κ| ≪ 1` y `x·|γ| < 1`, sin porcentaje garantizado), y `c_s` de tejido blando **no tiene
+  fuente en la banda** (las de elastografía son de cientos de Hz): esos materiales quedan rotulados
+  como ballpark, no como dato.
+- **U6 — Trazabilidad. ENTREGADA.** `dashboard/validacion.py` con un registro de *10 criterios*, cada
+  uno con su descripción, referencia, tolerancia, unidad y **fuente** (fase o ADR). Cada endpoint
+  devuelve `sello` ya evaluado —`validado` / `fuera` / `sin_referencia`— y la UI sólo lo pinta. El
+  resumen **no promedia**: si un criterio falla, el conjunto falla. `sin_referencia` es un estado
+  explícito, no un aprobado por omisión: la cóclea con espesor 3 mm lo muestra (el caso base de D30
+  no la cubre). Test que fija el contrato: ningún JS del cliente puede contener `0.53187` ni
+  `CRITERIO_*` — si aparecen, la validación volvió a partirse entre servidor y cliente.
+  Cada resultado lleva su "sello": qué criterio, contra qué número de
   referencia y con cuánto margen. Un resultado sin sello se marca como *no verificado*.
   *Aceptación*: la UI rechaza mostrar un número como validado si el test que lo respalda no corrió
   para esa configuración —el sello sale de la corrida, no de una constante escrita a mano en el JS.
   Esta fase es la que evita que dentro de tres meses no sepamos qué era confiable.
+
+- **U8 — Banco de simulación. ENTREGADA.** Lo que convierte el explorador en una herramienta con la
+  que se trabaja horas sin perder el hilo. Cinco piezas, cada una con su decisión:
+  1. **Vista `criterios`**: el registro de validación del servidor (12 criterios con tolerancia,
+     unidad y fuente) cruzado con lo medido en la sesión. Un criterio sin corrida dice `sin medir`,
+     no un aprobado por omisión.
+  2. **Persistencia por vista** (`localStorage`, TTL 12 h): volver a una pestaña cara (esfera precisa
+     ~30 s, 3D, cóclea, barridos) ya no cuesta otro solve; se repinta con su fecha. Restaurar no
+     re-guarda, o el TTL nunca vencería.
+  3. **Exportación transversal**: un botón que baja PNG de cada gráfica visible y un JSON con sus
+     trazas, sin saber nada de cada vista. En la esfera, además, JSON completo, CSV de `|p_s|(θ)` y un
+     historial de corridas que se **superponen** para comparar.
+  4. **Comparar dos campos** en la vista de campo: referencia congelada y mapa de **diferencia en dB**
+     (±20 dB, escala divergente), con el perfil de la referencia punteado en los cortes.
+  5. **Barridos nuevos**: apertura (FWHM vs `pitch/λ`, D53) y `ka` de la esfera con "comparar", que
+     resuelve las dos formulaciones en una corrida y marca el cruce (D51).
+  *Aceptación cumplida*: las ocho vistas resuelven sin errores de consola y sellan; los barridos
+  nuevos traen número medido (0.28 λ → 1.7 % de desvío; `ka` 1.17–1.58 validado y fuera de ahí 6.8 %
+  y 9.2 %); y el informe de la sesión sale en Markdown con las corridas y sus fuentes.
+  *Lo que la UI sigue sin hacer*: no mide nada propia (todo viene del servidor), no elige formulación
+  por el usuario y no promedia criterios.
 
 ### Orden y dependencias
 

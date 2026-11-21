@@ -27,6 +27,9 @@ import numpy as np
 from .. import cochlea, materials as mats
 from . import bem_field
 from . import field as campo
+from . import (
+    cochlea_field, elastic_sweep, elastic_sphere, jobs, scatterer, scene, sweeps, validacion, volume3d,
+)
 
 ESTATICOS = Path(__file__).resolve().parent / "static"
 MATERIALES = {
@@ -168,7 +171,10 @@ class Handler(BaseHTTPRequestHandler):
 
     # ------------------------------------------------------------------ utilidades
     def _json(self, datos: dict, codigo: int = 200) -> None:
-        cuerpo = json.dumps(datos, separators=(",", ":")).encode()
+        # `allow_nan=False`: si algún número sale NaN/Inf el pedido falla acá con un 500 y un
+        # mensaje, en vez de llegar al navegador como un cuerpo que `JSON.parse` rechaza entero
+        # (`NaN` no es JSON válido). Pasó con el mapa del dispersor, que tiene huecos.
+        cuerpo = json.dumps(datos, separators=(",", ":"), allow_nan=False).encode()
         self.send_response(codigo)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(cuerpo)))
@@ -203,7 +209,20 @@ class Handler(BaseHTTPRequestHandler):
                 "materials": [
                     {"id": k, "c_m_s": m.c, "rho": m.rho, "alpha_1mhz_np_m": getattr(m, "alpha_1mhz", 0.0)}
                     for k, m in MATERIALES.items()
-                ]
+                ],
+                # el registro de la escena suma perilinfa y endolinfa (los fluidos cocleares)
+                "scene_materials": [
+                    {"id": k, "c_m_s": m.c, "rho": m.rho,
+                     "alpha_1mhz_np_m": getattr(m, "alpha_1mhz", 0.0),
+                     "impedancia": m.rho * m.c}
+                    for k, m in scene.MATERIALES.items()
+                ],
+                "scene_limits": {
+                    "max_elementos": scene.MAX_ELEMENTOS,
+                    "max_nodos": scene.MAX_NODOS,
+                    "abc": list(scene.ABC_DISPONIBLES),
+                    "formulaciones": list(scene.FORMULACIONES),
+                }
             })
         elif partes.path == "/api/cochlea":
             consulta: dict[str, object] = {k: v[0] for k, v in parse_qs(partes.query).items()}
@@ -211,6 +230,43 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(calcular_coclea(consulta))
             except (ValueError, KeyError) as exc:
                 self._error(str(exc))
+        elif partes.path == "/api/validacion":
+            # el catálogo de criterios con su fuente: la UI puede listarlos sin inventar ninguno
+            self._json({"criterios": validacion.catalogo()})
+        elif partes.path == "/api/jobs":
+            self._json({"jobs": jobs.COLA.listar()})
+        elif partes.path.startswith("/api/jobs/"):
+            job_id = partes.path[len("/api/jobs/"):].strip("/")
+            estado = jobs.COLA.estado(job_id)
+            if estado is None:
+                self._error(f"job desconocido: {job_id}", HTTPStatus.NOT_FOUND)
+            else:
+                self._json(estado)
+        elif partes.path == "/api/esfera/cost":
+            consulta_e = {k: v[0] for k, v in parse_qs(partes.query).items()}
+            try:
+                self._json({"ok": True, **elastic_sphere.costo(consulta_e)})
+            except (ValueError, KeyError) as exc:
+                self._error(str(exc))
+        elif partes.path == "/api/esfera/opciones":
+            self._json({
+                "ok": True,
+                "modos": {k: v["etiqueta"] for k, v in elastic_sphere.MODOS.items()},
+                "materiales": list(elastic_sphere.MATERIALES),
+                "formulaciones": {k: v["etiqueta"] for k, v in elastic_sphere.FORMULACIONES.items()},
+                "notas_formulacion": {k: v["nota"] for k, v in elastic_sphere.FORMULACIONES.items()},
+            })
+        elif partes.path == "/api/sweeps":
+            self._json({
+                "barridos": [{
+                    "id": "sensibilidad",
+                    "nombre": "sensibilidad de la cóclea (OAT)",
+                    "puntos": sweeps.total_de_puntos(),
+                    "estimado_s": sweeps.estimar_demora_s(),
+                    "referencia": "D30: espesor 53.11 %, c_p 16.06 %, atenuación 9.60 %, "
+                                  "c_s 8.22 %, ρ 1.03 %, Z_r 0.28 %",
+                }],
+            })
         elif partes.path == "/api/field":
             consulta = {k: v[0] for k, v in parse_qs(partes.query).items()}
             for clave in ("nx", "ny", "n_elements"):
@@ -225,7 +281,22 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         ruta = urlparse(self.path).path
-        if ruta not in ("/api/field", "/api/cochlea"):
+        if ruta.startswith("/api/jobs/") and ruta.endswith("/cancel"):
+            job_id = ruta[len("/api/jobs/"):-len("/cancel")].strip("/")
+            estado = jobs.COLA.cancelar(job_id)
+            if estado is None:
+                self._error(f"job desconocido: {job_id}", HTTPStatus.NOT_FOUND)
+            else:
+                self._json(estado)
+            return
+
+        if ruta not in ("/api/field", "/api/cochlea", "/api/scene/solve", "/api/scene/cost",
+                        "/api/scatterer/solve", "/api/scatterer/cost",
+                        "/api/cochlea/field", "/api/cochlea/field/cost",
+                        "/api/jobs/sensibilidad", "/api/jobs/q_coclea",
+                        "/api/jobs/barrido_escena", "/api/jobs/esfera",
+                        "/api/jobs/esfera_barrido", "/api/jobs/barrido_apertura",
+                        "/api/volume3d/cost", "/api/volume3d/solve"):
             self._error("no encontrado", HTTPStatus.NOT_FOUND)
             return
         largo = int(self.headers.get("Content-Length") or 0)
@@ -239,7 +310,79 @@ class Handler(BaseHTTPRequestHandler):
             return
         cuerpo = payload if isinstance(payload, dict) else {}
         try:
-            self._json(calcular_coclea(cuerpo) if ruta == "/api/cochlea" else calcular(cuerpo))
+            if ruta == "/api/cochlea":
+                respuesta = calcular_coclea(cuerpo)
+            elif ruta == "/api/scene/cost":
+                respuesta = scene.estimar_costo(cuerpo)
+            elif ruta == "/api/scene/solve":
+                respuesta = scene.resolver_escena(cuerpo)
+            elif ruta == "/api/scatterer/cost":
+                respuesta = scatterer.estimar_dispersor(cuerpo)
+            elif ruta == "/api/scatterer/solve":
+                respuesta = scatterer.resolver_dispersor(cuerpo)
+            elif ruta == "/api/cochlea/field/cost":
+                respuesta = cochlea_field.estimar_cochlea(cuerpo)
+            elif ruta == "/api/cochlea/field":
+                respuesta = cochlea_field.resolver_cochlea(cuerpo)
+            elif ruta == "/api/volume3d/cost":
+                respuesta = volume3d.estimar_volumen(cuerpo)
+            elif ruta == "/api/volume3d/solve":
+                respuesta = volume3d.resolver_volumen(cuerpo)
+            elif ruta == "/api/jobs/barrido_apertura":
+                trabajo = jobs.COLA.enviar(
+                    "barrido_apertura",
+                    f"barrido de apertura ({cuerpo.get('desde', 8)}-{cuerpo.get('hasta', 64)} "
+                    f"elementos)",
+                    _barrido_apertura_job, cuerpo,
+                )
+                respuesta = {"ok": True, "job": trabajo.a_dict()}
+            elif ruta == "/api/jobs/esfera_barrido":
+                trabajo = jobs.COLA.enviar(
+                    "esfera_barrido",
+                    f"barrido ka de la esfera ({cuerpo.get('desde', 0.5)}–{cuerpo.get('hasta', 2.0)}, "
+                    f"{cuerpo.get('puntos', 7)} puntos)",
+                    _esfera_barrido_job, cuerpo,
+                )
+                respuesta = {"ok": True, "job": trabajo.a_dict()}
+            elif ruta == "/api/jobs/esfera":
+                trabajo = jobs.COLA.enviar(
+                    "esfera", f"esfera elástica (ka {cuerpo.get('ka', 1.0)})",
+                    _esfera_job, cuerpo,
+                )
+                respuesta = {"ok": True, "job": trabajo.a_dict()}
+            elif ruta == "/api/jobs/barrido_escena":
+                escena = cuerpo.get("escena") or {}
+                if not isinstance(escena, dict):
+                    raise ValueError("'escena' tiene que ser un objeto")
+                trabajo = jobs.COLA.enviar(
+                    "barrido_escena", "barrido de frecuencia (escena 2D)",
+                    sweeps.barrido_escena,
+                    escena=escena,
+                    desde_hz=float(cuerpo.get("desde_hz", 100e3)),
+                    hasta_hz=float(cuerpo.get("hasta_hz", 400e3)),
+                    puntos=int(cuerpo.get("puntos", 30)),
+                )
+                respuesta = {"ok": True, "job": trabajo.a_dict()}
+            elif ruta == "/api/jobs/q_coclea":
+                desde = float(cuerpo.get("desde_hz", 85e3))
+                hasta = float(cuerpo.get("hasta_hz", 115e3))
+                puntos = int(cuerpo.get("puntos", 13))
+                if not (20e3 <= desde < hasta <= 1e6):
+                    raise ValueError(f"banda inválida: {desde:g}–{hasta:g} Hz")
+                if not (5 <= puntos <= 41):
+                    raise ValueError(f"puntos fuera de rango [5, 41]: {puntos}")
+                trabajo = jobs.COLA.enviar(
+                    "q_coclea", f"Q {desde/1e3:.0f}–{hasta/1e3:.0f} kHz",
+                    sweeps.barrido_frecuencia,
+                    desde_hz=desde, hasta_hz=hasta, puntos=puntos,
+                )
+                respuesta = {"ok": True, "job": trabajo.a_dict()}
+            elif ruta == "/api/jobs/sensibilidad":
+                trabajo = sweeps.enviar_barrido(jobs.COLA)
+                respuesta = {"ok": True, "job": trabajo.a_dict()}
+            else:
+                respuesta = calcular(cuerpo)
+            self._json(respuesta)
         except (ValueError, KeyError) as exc:
             self._error(str(exc))
         except Exception as exc:  # el dashboard no debe morir por un pedido raro
@@ -251,6 +394,24 @@ class Handler(BaseHTTPRequestHandler):
 #: que el del mapa (que es una apertura radiando), así que la UI lo presenta aparte.
 COCLEA_FREQUENCY_HZ = 1.0e5
 COCLEA_RADIUS_M = 20.0e-3
+
+
+def _esfera_job(trabajo, datos):
+    """Adaptador para la cola: `jobs` llama `fn(trabajo, *args)` y `resolver` espera
+    `(datos, trabajo)`. Sin esto el job recibe su propio objeto como si fuera el pedido."""
+    return elastic_sphere.resolver(datos, trabajo)
+
+
+def _barrido_apertura_job(trabajo, datos):
+    """Adaptador de la cola: `jobs` llama `fn(trabajo, datos)` y el barrido espera `(datos, trabajo)`.
+    Sin esto el barrido recibe el objeto `Trabajo` como si fuera el pedido y muere con
+    `'Trabajo' object has no attribute 'get'`."""
+    return sweeps.barrido_apertura(datos, trabajo)
+
+
+def _esfera_barrido_job(trabajo, datos):
+    """Adaptador de la cola para el barrido en `ka` (misma firma invertida que `_esfera_job`)."""
+    return elastic_sweep.barrido_ka(datos, trabajo)
 
 
 def calcular_coclea(payload: dict) -> dict:
