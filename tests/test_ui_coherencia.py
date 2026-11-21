@@ -153,6 +153,25 @@ def test_los_estaticos_no_se_cachean():
     assert "no-store" in fuente
 
 
+def test_las_fuentes_movidasNo_se_descartan_al_volver_al_arreglo():
+    """Bug reportado: "muevo las fuentes, vuelvo al arreglo y no quedan donde las moví".
+
+    Eran tres fugas: (a) tocar n o d hacía `S.fuentes = null` en silencio, (b) el tab decidía qué se
+    enviaba, así que en "arreglo" el campo se recalculaba ignorando lo movido, y (c) las asas y los
+    marcadores se dibujaban con las posiciones del arreglo aunque el campo viniera de las fuentes.
+    """
+    js = (ESTATICOS / "app.js").read_text(encoding="utf-8")
+    # (a) no se borra: se marca para regenerar al volver a «fuentes»
+    assert "S.fuentes = null;   // el arreglo manda de nuevo" not in js
+    assert "S.regenerarAlVolver" in js
+    # (b) el envío depende de si hay fuentes movidas, no del tab
+    assert "S.fuentes && (S.modo === 'manual' || S.fuentesMovidas)" in js
+    # (c) asas y marcadores siguen la misma regla
+    assert js.count("(S.modo === 'manual' || S.fuentesMovidas)") >= 3
+    # y el aviso no vive en `#estado`, que la respuesta del campo reescribe
+    assert 'id="avisoUX"' in (ESTATICOS / "index.html").read_text(encoding="utf-8")
+
+
 def test_las_vistas_guardan_su_resultado_para_no_repetir_el_solve():
     """La persistencia es lo que permite volver a una pestaña sin pagar otro solve (la esfera precisa
     son ~30 s). Se comprueba que cada vista cara tenga su `vistaGuardar` y su `vistaCargar`."""

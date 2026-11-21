@@ -16,6 +16,11 @@ const S = {
   grid: 120,
   fuentes: null,          // null = el servidor arma el arreglo
   ultimo: null,
+  // Se movió, agregó o quitó una fuente a mano. Sirve para NO descartarlas en silencio cuando el
+  // usuario vuelve al modo arreglo o toca los parámetros del arreglo: las posiciones se conservan y
+  // el aviso dice qué pasa con ellas.
+  fuentesMovidas: false,
+  regenerarAlVolver: false,   // cambió n o d: al volver a «fuentes» se regeneran desde el arreglo
   // Comparación de dos configuraciones: el uso central del dashboard es "muevo un transductor y
   // quiero ver QUÉ cambió". Restar mapas en dB responde eso; mirar dos mapas de a uno, no.
   referencia: null,       // {p2_db, x_mm, y_mm, meta} congelado con "fijar referencia"
@@ -346,7 +351,11 @@ async function enviar() {
     grid: { x0, x1: xmax, y0: -ym, y1: ym,
             nx: arrastre ? 80 : S.grid, ny: arrastre ? 80 : S.grid },
   };
-  if (S.modo === 'manual' && S.fuentes) {
+  // Si el usuario movió fuentes, se calcula CON ESAS FUENTES sin importar qué pestaña esté abierta.
+  // Antes el tab decidía qué se enviaba, así que volver a "arreglo" mostraba otro campo y parecía que
+  // las posiciones se habían perdido. Lo único que devuelve al arreglo puro es el botón explícito
+  // "← desde arreglo".
+  if (S.fuentes && (S.modo === 'manual' || S.fuentesMovidas)) {
     cuerpo.sources = S.fuentes;
   } else {
     cuerpo.n_elements = S.n;
@@ -405,7 +414,10 @@ function pintar(r) {
     aviso.hidden = true;
   }
 
-  const fuentes = (S.modo === 'manual' && S.fuentes)
+  // Los marcadores del mapa van donde se está CALCULANDO (misma regla que las asas): si el campo sale
+  // de fuentes movidas, dibujarlos en las posiciones del arreglo mostraba un elemento en un sitio y su
+  // contribución en otro.
+  const fuentes = (S.fuentes && (S.modo === 'manual' || S.fuentesMovidas))
     ? S.fuentes.map((f) => ({ x: 0, y: f.y * 1e3 }))
     : (() => {                       // arreglo: reconstruyo las posiciones para dibujarlas
         const paso = S.d / S.n, out = [];
@@ -595,7 +607,12 @@ function filaFuente(src, i) {
   const td = document.createElement('td');
   const del = document.createElement('button');
   del.textContent = '×'; del.title = 'quitar';
-  del.addEventListener('click', () => { S.fuentes.splice(i, 1); pintarFuentes(); pedir(); });
+  del.addEventListener('click', () => {
+    S.fuentes.splice(i, 1);
+    S.fuentesMovidas = true;
+    pintarFuentes();
+    pedir();
+  });
   td.appendChild(del);
   tr.appendChild(td);
   return tr;
@@ -620,12 +637,60 @@ function generarDesdeArreglo() {
   pintarFuentes();
 }
 
+/* Devuelve `{n, d}` si las fuentes se pueden describir como un arreglo equiespaciado, o null.
+ * Es lo que permite que al volver al modo arreglo se CONSERVEN las posiciones movidas: en vez de
+ * descartarlas y recalcular desde los parámetros viejos, se ajustan los parámetros a lo que quedó. */
+function arregloDesdeFuentes() {
+  const fs = S.fuentes || [];
+  if (fs.length < 2) return null;
+  const ys = fs.map((f) => f.y).sort((a, b) => a - b);
+  const paso = (ys[ys.length - 1] - ys[0]) / (ys.length - 1);
+  if (!(paso > 0)) return null;
+  for (let i = 1; i < ys.length; i += 1) {
+    if (Math.abs((ys[i] - ys[i - 1]) - paso) > 0.02 * paso) return null;   // no equiespaciado
+  }
+  return { n: fs.length, d: Math.round(fs.length * paso * 1e3) };          // d en mm
+}
+
+/* Aviso de UX en su propio elemento. NO usa `#estado`: la respuesta del campo lo reescribe en cada
+ * corrida ("32 fuentes · baffle · …") y el aviso desaparecía antes de poder leerlo. */
+function avisar(texto) {
+  const caja = $('avisoUX');
+  if (!caja) return;
+  caja.textContent = texto;
+  caja.hidden = false;
+  clearTimeout(avisar.t);
+  avisar.t = setTimeout(() => { caja.hidden = true; }, 12000);
+}
+
 function cambiarModo(modo) {
   S.modo = modo;
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('activo', t.dataset.modo === modo));
   $('ctrlArray').hidden = modo !== 'array';
   $('ctrlManual').hidden = modo !== 'manual';
-  if (modo === 'manual' && !S.fuentes) generarDesdeArreglo();
+
+  if (modo === 'manual') {
+    // si cambió el arreglo mientras se veían fuentes a mano, se regeneran UNA vez y se avisa
+    if (S.regenerarAlVolver || !S.fuentes) {
+      generarDesdeArreglo();
+      S.regenerarAlVolver = false;
+      if (S.fuentesMovidas) avisar('se regeneraron las fuentes desde el arreglo: n o apertura cambiaron');
+      S.fuentesMovidas = false;
+    }
+  } else if (modo === 'array' && S.fuentesMovidas) {
+    // Volver al arreglo NO descarta lo movido: se sigue calculando con tus fuentes y se dice.
+    const a = arregloDesdeFuentes();
+    if (a) {
+      S.n = a.n;
+      S.d = a.d;
+      sincronizarEtiquetas();
+      avisar(`se sigue usando lo que moviste (${a.n} fuentes); «← desde arreglo» vuelve al arreglo `
+        + 'de parámetros');
+    } else {
+      avisar('se sigue usando lo que moviste. El arreglo de parámetros no puede representarlo '
+        + '(espacia por igual): «← desde arreglo» lo descarta');
+    }
+  }
   pintarFuentes();
   pedir();
 }
@@ -635,7 +700,13 @@ document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () 
 const enlazar = (id, clave, escala = 1) => {
   $(id).addEventListener('input', (e) => {
     S[clave] = clave === 'material' ? e.target.value : parseFloat(e.target.value) * escala;
-    if (clave === 'n' || clave === 'd') S.fuentes = null;   // el arreglo manda de nuevo
+    // Antes esto hacía `S.fuentes = null`, o sea que tocar la cantidad de elementos o la apertura
+    // BORRABA en silencio las fuentes que el usuario había movido. Ahora se marcan para regenerar sólo
+    // cuando vuelva a «fuentes», y el aviso lo dice.
+    if (clave === 'n' || clave === 'd') {
+      if (S.fuentes && S.modo === 'manual') S.regenerarAlVolver = true;
+      else S.fuentes = null;
+    }
     sincronizarEtiquetas(); pintarFuentes(); pedir();
   });
 };
@@ -655,12 +726,20 @@ $('model').addEventListener('change', (e) => {
 });
 $('res').addEventListener('change', (e) => { S.grid = parseInt(e.target.value, 10); pedir(); });
 $('btnManual').addEventListener('click', () => cambiarModo('manual'));
-$('btnArray').addEventListener('click', () => { generarDesdeArreglo(); pedir(); });
+$('btnArray').addEventListener('click', () => {
+  // el unico camino que descarta lo movido, y es a pedido: se avisa en vez de hacerlo en silencio
+  if (S.fuentesMovidas) avisar('fuentes regeneradas desde el arreglo: se descartaron las posiciones movidas');
+  generarDesdeArreglo();
+  S.fuentesMovidas = false;
+  S.regenerarAlVolver = false;
+  pedir();
+});
 $('btnAdd').addEventListener('click', () => {
   const ult = S.fuentes && S.fuentes.length ? S.fuentes[S.fuentes.length - 1] : null;
   const ancho = ult ? ult.width : (S.d / S.n) / 1e3;
   const y = ult ? ult.y + 2 * ancho : 0;
   S.fuentes.push({ y, width: ancho, amp: 1, phase: 0 });
+  S.fuentesMovidas = true;
   pintarFuentes(); pedir();
 });
 
@@ -698,7 +777,12 @@ function pintarAsas() {
   if (!l || !l.xaxis || !l.yaxis) return;
   // En modo arreglo también hay asas: mueven el FOCO en y (el haz se inclina). Antes sólo existían en
   // modo "fuentes" y en arreglo no había nada que arrastrar, que es lo que Diego encontró.
-  const fuentes = S.modo === 'manual' && S.fuentes
+  // Las asas se dibujan donde se está CALCULANDO, no donde diría el otro modo: si el usuario movió
+  // fuentes y volvió a la pestaña "arreglo", el campo sigue saliendo de esas fuentes, así que las asas
+  // tienen que estar ahí. Dibujarlas en las posiciones del arreglo mostraba el asa en un lugar y el
+  // haz en otro.
+  const usandoFuentes = Boolean(S.fuentes && (S.modo === 'manual' || S.fuentesMovidas));
+  const fuentes = usandoFuentes
     ? S.fuentes.map((f) => ({ ymm: f.y * 1e3, etiqueta: 'fuente' }))
     : posicionesDelArreglo().map((y) => ({ ymm: y, etiqueta: 'elemento' }));
   const n = fuentes.length;
@@ -718,7 +802,7 @@ function pintarAsas() {
     const y = pxDeY(l, fuentes[i].ymm);
     el.style.left = `${x}px`;
     el.style.top = `${y}px`;
-    el.dataset.tip = S.modo === 'manual'
+    el.dataset.tip = usandoFuentes
       ? `fuente ${i + 1}: y = ${fuentes[i].ymm.toFixed(2)} mm`
       : `elemento ${i + 1} del arreglo: y = ${fuentes[i].ymm.toFixed(2)} mm`
         + ' (arrastrar mueve el foco en y)';
@@ -764,6 +848,7 @@ function moverArrastre(ev) {
     sincronizarEtiquetas();
   } else {
     S.fuentes[arrastre.i].y = ymm / 1e3;
+    S.fuentesMovidas = true;
   }
   // las asas se reubican todas: en arreglo el que se mueve es el foco, no una sola asa
   pintarAsas();
