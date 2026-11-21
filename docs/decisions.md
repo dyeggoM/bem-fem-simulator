@@ -905,6 +905,61 @@ exacto (medido). Lo que sí está es el camino de obstáculo rígido (`neumann_f
 `dp_dn_incident = −∂p_i/∂n`), sin test todavía. Lo único verificado es el sanity: en medio homogéneo
 `p_s = 0` **exacto**, que descarta términos incidentes espurios.
 
+**Intento de cerrar esa brecha: no salió, y quedó revertido.** Se probaron dos formas del término de
+contraste (`−(k²−k_b²)/ρ·p_i·v` y la exacta `∫(1/ρ)∇p_i·∇v − (k²/ρ)p_i·v`, que además cubre el
+contraste de `ρ`), y después restringirlo a los elementos con contraste. Nada validó:
+
+- Con el operador ya idéntico entre las dos formulaciones (verificado: `‖A_total − A_dispersado‖ = 0.0`
+  en la misma malla), la relación `b_abc = A·p_i + b_contraste` **no se cumple**: difiere 92 % de
+  `b_abc`, repartido por igual en los 2 624 nodos (no sólo en las caras ABC).
+- Sobre el estratificado, donde R y T están validados al 2.91 %/2.11 %: el dispersado da
+  `|R| = 0.96` sin restringir (vs 0.33 analítico, y con los dos signos igual) y `|R| = 76` restringido
+  a la zona de contraste. `dispersado + incidente` contra campo total: 95 %–134 % de diferencia.
+
+Diagnóstico que deja: el término **no** es el problema — la ecuación del dispersado tiene que usar el
+operador del **fondo** (`k_b`, `ρ_b`) en todo el dominio, no el `k` local del elemento, y entonces el
+contraste entra entero en el lado derecho. El código actual ensambla el operador con `element_k`
+local (correcto para el campo total, no para la diferencia), y eso es incompatible con cualquier
+forma del término que se agregue al lado derecho. Rehacerlo pide: operador con `k_b`, RHS con
+contraste, y una referencia de validación externa (serie de esfera) antes de volver a mirar números.
+
 **Lo que falta para llamar a esto "cóclea 3D"**: el término de contraste para dispersores penetrables
 (y su validación contra algún caso con solución conocida), elasticidad 3D, y la geometría de CT. Cada
 uno es una fase, no un detalle.
+
+## D33 — La UI es cliente de los solvers, no un segundo simulador
+
+**Decisión.** El dashboard pasa de "explorador de campo de una apertura" a **banco de simulación**
+con tres piezas: una *escena* (regiones + materiales + fuentes + malla), un *job* (una corrida de un
+solver concreto sobre esa escena) y un *resultado* sellado con el criterio contra el que se validó.
+Todo número que muestre la UI sale de un módulo de la librería que tiene test. Si falta algo en la
+librería, primero se agrega ahí con su criterio medible y después se enchufa.
+
+**Por qué no seguir con el motor propio del dashboard.** El motor actual (D27) no es FEM ni BEM: es la
+integral de Rayleigh sobre aperturas con baffle. Es *exacto dentro de su modelo* —coincide con
+`aperture.pressure` a 9.6e-16— y por eso sirve para explorar fuentes rápido, pero no puede representar
+heterogeneidades, interfaces, dispersores ni elasticidad. Todo lo que se midió en las fases 0–6 vive
+en módulos que la UI no toca. Dejar que la UI calcule por su cuenta sería tener dos simuladores y un
+solo conjunto de validaciones.
+
+**Consecuencias medidas.**
+
+- **Síncrono hasta 2D, asíncrono desde 3D.** Un solve 2D con 5 k elementos tarda ~1 s y el motor de
+  campo actual 117 ms–2 s (60×60–120×120, D27): el `POST` síncrono alcanza para U1–U3. Un 3D de
+  18 081 nodos tarda 5.3 s y no escala (un cubo de 3 λ a ppw 12 no termina en 10 min), así que U4
+  obliga a cola de trabajos con progreso y cancelación, más un tope de elementos con mensaje antes
+  de arrancar en vez de colgar la máquina.
+- **3D se muestra por rebanadas**, no como volumen: a 18 k nodos el campo es un sólido y el trazado
+  completo no aporta lectura. Los cortes axial/lateral que ya existen se reusan.
+- **Escena en JSON, malla reproducible.** Guardar y cargar tiene que devolver la *misma* malla, no
+  una equivalente: si cambia el conteo de elementos cambian los números y se pierde la comparación
+  entre corridas.
+- **Sin editor CAD.** Cajas, rectángulos, círculos y arcos cubren las fases 0–6. Un CAD es una
+  promesa que hoy no se puede sostener.
+- **Sello de trazabilidad.** El sello (criterio, número de referencia, margen) se calcula en la
+  corrida. Si se escribe como constante en el JS, en tres meses nadie sabe qué era confiable: es
+  exactamente el error que el test de `test_cochlea_damping.py` evita del lado de la librería.
+
+**Costo asumido.** La UI no va a poder mostrar nada que la librería no sepa calcular, y eso incluye
+huecos conocidos: dispersión penetrable 3D (D32), elasticidad 3D y geometría de CT. Van a aparecer
+en la UI como *no disponible*, no como un resultado aproximado.
