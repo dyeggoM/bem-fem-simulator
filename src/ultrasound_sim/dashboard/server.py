@@ -27,7 +27,9 @@ import numpy as np
 from .. import cochlea, materials as mats
 from . import bem_field
 from . import field as campo
-from . import cochlea_field, jobs, scatterer, scene, sweeps, validacion, volume3d
+from . import (
+    cochlea_field, elastic_sphere, jobs, scatterer, scene, sweeps, validacion, volume3d,
+)
 
 ESTATICOS = Path(__file__).resolve().parent / "static"
 MATERIALES = {
@@ -240,6 +242,18 @@ class Handler(BaseHTTPRequestHandler):
                 self._error(f"job desconocido: {job_id}", HTTPStatus.NOT_FOUND)
             else:
                 self._json(estado)
+        elif partes.path == "/api/esfera/cost":
+            consulta_e = {k: v[0] for k, v in parse_qs(partes.query).items()}
+            try:
+                self._json({"ok": True, **elastic_sphere.costo(consulta_e)})
+            except (ValueError, KeyError) as exc:
+                self._error(str(exc))
+        elif partes.path == "/api/esfera/opciones":
+            self._json({
+                "ok": True,
+                "modos": {k: v["etiqueta"] for k, v in elastic_sphere.MODOS.items()},
+                "materiales": list(elastic_sphere.MATERIALES),
+            })
         elif partes.path == "/api/sweeps":
             self._json({
                 "barridos": [{
@@ -278,7 +292,7 @@ class Handler(BaseHTTPRequestHandler):
                         "/api/scatterer/solve", "/api/scatterer/cost",
                         "/api/cochlea/field", "/api/cochlea/field/cost",
                         "/api/jobs/sensibilidad", "/api/jobs/q_coclea",
-                        "/api/jobs/barrido_escena",
+                        "/api/jobs/barrido_escena", "/api/jobs/esfera",
                         "/api/volume3d/cost", "/api/volume3d/solve"):
             self._error("no encontrado", HTTPStatus.NOT_FOUND)
             return
@@ -311,6 +325,12 @@ class Handler(BaseHTTPRequestHandler):
                 respuesta = volume3d.estimar_volumen(cuerpo)
             elif ruta == "/api/volume3d/solve":
                 respuesta = volume3d.resolver_volumen(cuerpo)
+            elif ruta == "/api/jobs/esfera":
+                trabajo = jobs.COLA.enviar(
+                    "esfera", f"esfera elástica (ka {cuerpo.get('ka', 1.0)})",
+                    _esfera_job, cuerpo,
+                )
+                respuesta = {"ok": True, "job": trabajo.a_dict()}
             elif ruta == "/api/jobs/barrido_escena":
                 escena = cuerpo.get("escena") or {}
                 if not isinstance(escena, dict):
@@ -355,6 +375,12 @@ class Handler(BaseHTTPRequestHandler):
 #: que el del mapa (que es una apertura radiando), así que la UI lo presenta aparte.
 COCLEA_FREQUENCY_HZ = 1.0e5
 COCLEA_RADIUS_M = 20.0e-3
+
+
+def _esfera_job(trabajo, datos):
+    """Adaptador para la cola: `jobs` llama `fn(trabajo, *args)` y `resolver` espera
+    `(datos, trabajo)`. Sin esto el job recibe su propio objeto como si fuera el pedido."""
+    return elastic_sphere.resolver(datos, trabajo)
 
 
 def calcular_coclea(payload: dict) -> dict:

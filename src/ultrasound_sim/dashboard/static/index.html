@@ -23,6 +23,7 @@
       <button class="vista-btn" data-vista="cochlea">cóclea</button>
       <button class="vista-btn" data-vista="barridos">barridos</button>
       <button class="vista-btn" data-vista="volumen">3D</button>
+      <button class="vista-btn" data-vista="esfera">esfera elástica</button>
     </nav>
 
     <div id="vistaCampo">
@@ -500,6 +501,65 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
     </div>
   </main>
 
+
+    <div id="vistaEsfera" hidden>
+
+      <section>
+        <label>Material del sólido
+          <span class="tip" title="Un sólido elástico sostiene ondas de corte: la respuesta depende de c_s, no sólo de la impedancia. Es lo que diferencia esta vista de la esfera penetrable de la pestaña 3D (que por dentro sigue siendo fluido).">?</span>
+        </label>
+        <select id="esfMaterial">
+          <option value="acero" selected>acero (5900/3200 m/s)</option>
+          <option value="hueso">hueso (3500/1900 m/s)</option>
+          <option value="aluminio">aluminio (6320/3130 m/s)</option>
+          <option value="tungsteno">tungsteno (5200/2800 m/s)</option>
+          <option value="tejido (casi fluido)">tejido, casi fluido (1540/30 m/s)</option>
+        </select>
+      </section>
+
+      <section>
+        <label>ka = k₀·a <b id="esfKaVal">1.00</b>
+          <span class="tip" title="Producto del número de onda del agua por el radio de la esfera. Es el parámetro que gobierna la dispersión: ka mucho menor que 1 es régimen de Rayleigh (la esfera casi no perturba), ka ~1 es donde el patrón angular empieza a tener lóbulos.">?</span>
+        </label>
+        <input type="range" id="esfKa" min="0.30" max="3.00" step="0.05" value="1.00">
+      </section>
+
+      <section>
+        <label>Frecuencia <b id="esfFreqVal">100 kHz</b></label>
+        <input type="range" id="esfFreq" min="20" max="400" step="10" value="100">
+      </section>
+
+      <section>
+        <label>Malla
+          <span class="tip" title="La rápida usa un dominio de 2.5 radios: el ABC no alcanza y deja ~9 % de error, así que su sello va a salir FUERA. La precisa usa 4 radios y es el número que se reporta (4.21 % medido).">?</span>
+        </label>
+        <select id="esfModo">
+          <option value="precisa" selected>precisa (dominio 4a, ~30 s)</option>
+          <option value="rapida">rápida (dominio 2.5a, ~2 s)</option>
+        </select>
+        <p class="hint" id="esfCosto">—</p>
+      </section>
+
+      <section>
+        <label>Restricción de modos rígidos
+          <span class="tip" title="El sólido libre tiene seis modos de cuerpo rígido sin rigidez elástica. Con una onda plana la fuerza neta exacta es cero, así que el desplazamiento medio debe ser cero; sin imponerlo, el residuo numérico excita la traslación y el error pasa de 4 % a 18 %. Se puede apagar, pero NO con un cuerpo transparente (tejido casi fluido): ahí la onda sí ejerce fuerza neta y la restricción mete dispersión falsa.">?</span>
+        </label>
+        <select id="esfRigidos">
+          <option value="si" selected>imponer traslación media nula (recomendado)</option>
+          <option value="no">no imponer (para comparar)</option>
+        </select>
+      </section>
+
+      <div class="fila-botones">
+        <button class="btn" id="btnEsfera">resolver esfera</button>
+        <button class="btn mini" id="btnEsferaCancelar" disabled>cancelar</button>
+      </div>
+      <div class="progreso"><div class="progreso-barra" id="esfProgreso"></div></div>
+      <p class="pie" id="esfEstado">sin lanzar</p>
+      <p class="hint" id="esfSello"></p>
+      <p class="hint" id="esfMetricas"></p>
+    </div>
+
   <main class="vista" id="vistaEscenaMain" hidden>
     <div class="mapa-wrap">
       <div id="mapaEscena" class="mapa"></div>
@@ -546,6 +606,17 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
     </div>
   </main>
 
+
+  <main class="vista" id="vistaEsferaMain" hidden>
+    <div class="mapa-wrap">
+      <div id="mapaEsf" class="mapa"></div>
+    </div>
+    <div class="cortes">
+      <div id="angEsf" class="corte ancho"></div>
+      <div id="faseEsf" class="corte ancho"></div>
+    </div>
+  </main>
+
 </div>
 <script src="/static/app.js"></script>
 <script src="/static/escena.js"></script>
@@ -553,5 +624,6 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
 <script src="/static/cochlea.js"></script>
 <script src="/static/barridos.js"></script>
 <script src="/static/volumen.js"></script>
+<script src="/static/esfera.js"></script>
 </body>
 </html>

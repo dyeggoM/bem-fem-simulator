@@ -244,6 +244,7 @@ const VISTAS = {
   cochlea: { panel: 'vistaCochlea', main: 'vistaCochleaMain' },
   barridos: { panel: 'vistaBarridos', main: 'vistaBarridosMain' },
   volumen: { panel: 'vistaVolumen', main: 'vistaVolumenMain' },
+  esfera: { panel: 'vistaEsfera', main: 'vistaEsferaMain' },
 };
 
 function escCambiarVista(vista) {
@@ -258,6 +259,7 @@ function escCambiarVista(vista) {
   if (vista === 'cochlea' && typeof window.cocfIniciar === 'function') window.cocfIniciar();
   if (vista === 'barridos' && typeof window.barIniciar === 'function') window.barIniciar();
   if (vista === 'volumen' && typeof window.volIniciar === 'function') window.volIniciar();
+  if (vista === 'esfera' && typeof window.esfIniciar === 'function') window.esfIniciar();
   // el aviso naranja y la línea de estado son del explorador de campo ("32 fuentes · baffle…",
   // habla del foco de la apertura): en la vista de escena confunden. Se ocultan por CSS
   // (`body.vista-escena`), no por `hidden`: `app.js` los re-muestra cuando llega su respuesta.
@@ -266,6 +268,7 @@ function escCambiarVista(vista) {
   document.body.classList.toggle('vista-cochlea', vista === 'cochlea');
   document.body.classList.toggle('vista-barridos', vista === 'barridos');
   document.body.classList.toggle('vista-volumen', vista === 'volumen');
+  document.body.classList.toggle('vista-esfera', vista === 'esfera');
   if (vista === 'escena') {
     if (!ESC.materiales.length) escCargarMateriales().then(escEstimar);
     else if (!ESC.resuelto) escEstimar();

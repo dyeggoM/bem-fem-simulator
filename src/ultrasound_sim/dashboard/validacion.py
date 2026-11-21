@@ -141,6 +141,12 @@ CRITERIOS: dict[str, Criterio] = {
         referencia=0.0, tolerancia=0.02, modo="abs", unidad="amplitud",
         fuente="Fase 1 / D38",
     ),
+    "volumen_esfera_elastica": Criterio(
+        id="volumen_esfera_elastica",
+        descripcion="error del campo dispersado por una esfera elástica contra la serie de Faran",
+        referencia=0.0, tolerancia=0.06, modo="abs", unidad="L2 relativo",
+        fuente="Faran (1951) / D46: el acoplado da 4.21 % a ka = 1 en dominio 4a con h = a/4.5",
+    ),
     "barrido_d30": Criterio(
         id="barrido_d30",
         descripcion="peor desvío del ranking de sensibilidad contra los pesos de D30",

@@ -1664,3 +1664,47 @@ silenciosamente a un número que se reporte.
 **Dirichlet-to-Neumann exacta** sobre la esfera exterior (expansión en armónicos esféricos con
 `hₗ′(k b)/hₗ(k b)` por modo, en vez del ABC local): es exacta para una frontera esférica y permitiría
 `b = 2.5a`. No está implementada; queda como el siguiente paso si el costo de 32 s molesta en la UI.
+
+## D47 — U7: la esfera elástica en la UI, y el hallazgo del sólido de bajo contraste
+
+**Qué se entregó.** Pestaña **"esfera elástica"**: material, `ka`, frecuencia, dos mallas (rápida y
+precisa) y el interruptor de la restricción de modos rígidos, todo con tooltip. El servidor resuelve
+con `coupled3d` y contrasta contra Faran en la misma corrida; la UI pinta el campo dispersado en el
+plano x-z, el módulo `|p_s|` contra θ y la **diferencia de fase** (no las dos fases: sus saltos de
+±180° se leen como discontinuidades del modelo y no lo son). El sello sale del registro
+(`volumen_esfera_elastica`, 6 %), no de una constante en el JS.
+
+**Error contra Faran por material**, malla precisa (dominio 4a, `h = a/4.5`, 21 398 nodos, ~40 s):
+
+- acero: **4.29 %** (razón de amplitudes 0.969)
+- aluminio: **3.99 %** (0.972)
+- tungsteno: **4.71 %** (0.966)
+- **hueso: 13.16 %** (1.058)
+
+**El hueso no es un problema de malla: es de modelo.** Se probó apagar la restricción de rígidos y
+empeora a **54.61 %** (contra 19.52 % del acero), así que la restricción no es la culpable — sigue
+siendo imprescindible. Lo que pasa es que el hueso tiene un contraste de impedancia de **4.6** contra
+**30.7** del acero: con contraste bajo, el cuerpo **se mueve parcialmente con el fluido**, y la
+condición de traslación media nula deja de ser exacta. Es la misma frontera que apareció con la
+esfera transparente (donde la restricción mete dispersión falsa de 1.6 Pa) pero en un régimen
+intermedio, y por eso hay que decirlo en vez de ajustar el umbral hasta que entre.
+
+**Lo que arreglaría eso, y no es una malla más fina.** Formular el sólido también en **campo
+dispersado** (`u_s = u − u_i`, con `u_i` la incidente del fluido prolongada al interior): así el caso
+transparente da `u_s = 0` **exactamente**, sin restricción, y los modos rígidos sólo se excitan por el
+contraste real. Arrastra el mismo tipo de término que D41 (hay que aplicar el **operador completo** a
+la incidente restringido al sólido, no `−(k²−k_b²)`), así que se hace con la misma disciplina: primero
+la derivación, después el test de que el caso transparente da exactamente cero.
+
+**Mientras tanto, la UI dice la verdad.** El sello marca `fuera` para el hueso con el número medido y
+la fuente; no se subió el umbral a 13 % para que la tabla se viera verde. Un criterio que se ajusta
+hasta que pasa deja de ser un criterio.
+
+**Dos arreglos de plataforma que salieron de esto:**
+
+- **Gmsh desde un hilo.** `gmsh.initialize()` reemplaza el manejador de SIGINT, y eso revienta en el
+  hilo del worker de la cola: *"signal only works in main thread"*. Se pasa `interruptible=False`.
+  Sin eso la vista no funcionaba desde la UI y sí desde la consola — el peor tipo de bug.
+- **Interpolación para el mapa.** Probar los 8 672 tetraedros por cada uno de los 6 561 puntos del
+  mapa tardaba **15.1 s** (el solve son 1.8 s). Con un KD-tree y 32 vecinos baja a **1.08 s**, y se
+  verificó que da exactamente lo mismo que la búsqueda exhaustiva.

@@ -143,7 +143,11 @@ def sphere_shell_tet_mesh(
 
     import gmsh
 
-    gmsh.initialize()
+    # `interruptible=False` NO es un detalle: con el default, `gmsh.initialize()` reemplaza el
+    # manejador de SIGINT con `signal.signal`, y eso revienta cuando la malla se arma desde el hilo
+    # del worker de la cola de trabajos ("signal only works in main thread"). Desde la UI el solve
+    # corre en un job, así que sin esto la vista no funciona.
+    gmsh.initialize(interruptible=False)
     try:
         gmsh.option.setNumber("General.Terminal", 0)
         gmsh.model.add("esfera_sumergida")

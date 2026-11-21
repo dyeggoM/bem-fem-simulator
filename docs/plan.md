@@ -361,6 +361,20 @@ agrega a la librería con su criterio, después se enchufa.
   resonancia. El sello marca "fuera" a ppw 12 porque el error de T llega a *5.90 %* arriba de 350 kHz
   (a ppw 20 baja a *2.08 %*): es la malla, no el barrido, y el barrido lo dice en vez de promediar.
   Falta de esta fase: el barrido de las 15 configuraciones de D25 y la exportación a CSV desde la UI.
+- **U7 — Esfera elástica. ENTREGADA (D47).** Pestaña nueva: material (acero, hueso, aluminio,
+  tungsteno, tejido casi fluido), `ka`, frecuencia, dos mallas y el interruptor de la restricción de
+  modos rígidos con su tooltip. El servidor resuelve con `coupled3d` y contrasta contra **Faran** en
+  la misma corrida; la UI pinta el campo dispersado en el plano x-z, `|p_s|` contra θ y la
+  **diferencia de fase**. Criterio nuevo `volumen_esfera_elastica` (6 %).
+  Medido a `ka = 1`, dominio 4a, `h = a/4.5` (21 398 nodos, ~40 s): **acero 4.29 %**, aluminio
+  *3.99 %*, tungsteno *4.71 %*, **hueso 13.16 %**.
+  *El hueso es un error de MODELO, no de malla*: su contraste de impedancia es 4.6 contra 30.7 del
+  acero, así que el cuerpo se mueve parcialmente con el fluido y la condición de traslación media
+  nula deja de ser exacta. Apagar la restricción lo empeora a 54.6 %, o sea que sigue siendo
+  imprescindible. El sello lo marca `fuera` con el número y la fuente: **no se subió el umbral para
+  que la tabla se viera verde**.
+  *Lo que lo arreglaría*: formular el sólido también en campo dispersado (`u_s = u − u_i`), con el
+  operador completo aplicado a la incidente (misma disciplina que D41). No está hecho.
 - **U6 — Trazabilidad. ENTREGADA.** `dashboard/validacion.py` con un registro de *10 criterios*, cada
   uno con su descripción, referencia, tolerancia, unidad y **fuente** (fase o ADR). Cada endpoint
   devuelve `sello` ya evaluado —`validado` / `fuera` / `sin_referencia`— y la UI sólo lo pinta. El
