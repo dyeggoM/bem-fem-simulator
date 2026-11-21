@@ -179,3 +179,27 @@ body.vista-volumen #estado { display:none !important; }
 }
 .hist-fila:hover { background: rgba(88, 166, 255, 0.08); }
 .hist-fila input { margin: 0; cursor: pointer; }
+
+
+/* vista "criterios": la tabla del registro de validación. Es una tabla de verdad, así que se lee
+   de un vistazo: estado a la izquierda, número medido al lado de su tolerancia, fuente al final. */
+.criterios-wrap { overflow: auto; padding: 14px 16px; display: block; }
+.criterios-titulo { font-size: 13px; font-weight: 600; color: #d7dde5; margin: 0 0 4px; }
+.tabla-criterios table { width: 100%; border-collapse: collapse; font-size: 10.5px; margin-top: 10px; }
+.tabla-criterios th {
+  text-align: left; font-weight: 600; color: #8b95a1; padding: 5px 7px;
+  border-bottom: 1px solid #2e3746; white-space: nowrap; position: sticky; top: 0;
+  background: #0f141b;
+}
+.tabla-criterios td { padding: 5px 7px; border-bottom: 1px solid #1b2129; vertical-align: top; }
+.tabla-criterios tr:hover td { background: rgba(88, 166, 255, 0.05); }
+.crit-id { font-family: ui-monospace, monospace; color: #a5b3c2; white-space: nowrap; }
+.crit-estado { font-weight: 600; white-space: nowrap; }
+.crit-ok .crit-estado { color: #3fb950; }
+.crit-mal .crit-estado { color: #f85149; }
+.crit-ojo .crit-estado { color: #d29922; }
+.crit-gris .crit-estado { color: #6b7684; }
+.crit-medido { font-family: ui-monospace, monospace; color: #d7dde5; white-space: nowrap; }
+.crit-tol { color: #8b95a1; white-space: nowrap; }
+.crit-fecha { color: #6b7684; font-size: 9px; }
+.crit-fuente { color: #6b7684; max-width: 260px; }

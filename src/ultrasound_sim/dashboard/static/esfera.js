@@ -56,6 +56,22 @@ window.esfIniciar = function () {
     ESF.inicializado = true;
   }
   esfEstimar();
+  // resultado de la sesión anterior: repintarlo en vez de dejar la vista en blanco y obligar a
+  // volver a esperar los ~30 s del modo preciso
+  const previo = window.vistaCargar('esfera');
+  if (previo && !ESF.ultimo) {
+    try {
+      // `persistir = false`: restaurar no es resolver. Si se volviera a guardar, la fecha se
+      // renovaría en cada recarga y el TTL de 12 h no vencería nunca, que es justo lo que evita que
+      // un resultado viejo se muestre como reciente.
+      esfPintar(previo.resultado, false);
+      esf$('esfEstado').textContent =
+        'restaurado de ' + new Date(previo.fecha).toLocaleString('es');
+    } catch (e) {
+      console.warn('no se pudo restaurar la esfera:', e && e.message);
+      window.vistaBorrar('esfera');
+    }
+  }
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -260,9 +276,10 @@ async function esfCancelar() {
   await fetch(`/api/jobs/${ESF.jobId}/cancel`, { method: 'POST' });
 }
 
-function esfPintar(r) {
+function esfPintar(r, persistir = true) {
   const m = r.metrica;
   ESF.ultimo = r;   // queda disponible para exportar y para volver a pintar al cambiar superposiciones
+  if (persistir) window.vistaGuardar('esfera', r);
 
   // ---- mapa |p_s| en el plano x-z (el interior de la esfera va enmascarado, no rellenado)
   const mapa = r.mapa;
@@ -385,6 +402,6 @@ function esfPintar(r) {
       ' El modo rápido usa un dominio de 2.5a: el error es del ABC, no del solver (D46). '
       + 'Para un número que se reporte, usá la malla precisa.';
   }
-  esf$('esfEstado').textContent = 'listo';
+  if (persistir) esf$('esfEstado').textContent = 'listo';
   esfPintarHistorial();
 }

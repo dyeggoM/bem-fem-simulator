@@ -45,6 +45,126 @@ function pedir() {
   temporizador = setTimeout(enviar, 150);
 }
 
+/* ---------------------------------------------------------------------------------------------
+ * Persistencia del último resultado de una vista.
+ *
+ * Las vistas caras (esfera precisa ~30 s, escena, volumen, cóclea) pierden el resultado al recargar
+ * o al cambiar de pestaña y volver. Guardarlo en localStorage deja volver a mirarlo sin volver a
+ * resolver — que es la diferencia entre usar el dashboard para explorar y usarlo para una sola foto.
+ *
+ * Se guarda por vista y con la fecha, así el usuario ve de cuándo es lo que está mirando. Si el
+ * resultado no entra en la cuota, se descarta en silencio y se avisa por consola: nunca se rompe la
+ * vista por no poder cachear.
+ * ------------------------------------------------------------------------------------------- */
+
+const VISTA_CLAVE = 'usim.vista.';
+const VISTA_TTL_MS = 12 * 60 * 60 * 1000;   // 12 h: un resultado de ayer no debería parecer de ahora
+
+window.vistaGuardar = function vistaGuardar(vista, resultado) {
+  try {
+    localStorage.setItem(VISTA_CLAVE + vista, JSON.stringify({
+      fecha: new Date().toISOString(), resultado,
+    }));
+    return true;
+  } catch (e) {
+    try { localStorage.removeItem(VISTA_CLAVE + vista); } catch { /* nada */ }
+    console.warn(`[${vista}] no se pudo guardar el resultado (cuota):`, e && e.message);
+    return false;
+  }
+};
+
+window.vistaCargar = function vistaCargar(vista) {
+  try {
+    const crudo = localStorage.getItem(VISTA_CLAVE + vista);
+    if (!crudo) return null;
+    const datos = JSON.parse(crudo);
+    if (!datos || !datos.resultado) return null;
+    const edad = Date.now() - Date.parse(datos.fecha);
+    if (!Number.isFinite(edad) || edad > VISTA_TTL_MS) {
+      localStorage.removeItem(VISTA_CLAVE + vista);
+      return null;
+    }
+    return datos;
+  } catch {
+    return null;
+  }
+};
+
+window.vistaBorrar = function vistaBorrar(vista) {
+  try { localStorage.removeItem(VISTA_CLAVE + vista); } catch { /* nada */ }
+};
+
+/* ---------------------------------------------------------------------------------------------
+ * Exportación de la vista activa.
+ *
+ * No sabe nada de la física ni del estado de cada vista: agarra las gráficas Plotly que están
+ * VISIBLES en el DOM y las baja. Así funciona igual en las siete vistas y no hay que mantener siete
+ * exportadores en paralelo (que es como se desincronizan).
+ *
+ * Qué baja:
+ *   - un PNG por gráfica, con el nombre del contenedor para poder ordenarlos;
+ *   - un JSON con las trazas completas (x, y, nombre, tipo) y el layout, que es lo que permite
+ *     re-graficar o comparar sin volver a resolver.
+ * ------------------------------------------------------------------------------------------- */
+
+function contenedoresVisibles() {
+  return [...document.querySelectorAll('.js-plotly-plot')].filter((gd) => {
+    if (!gd || !gd.data || !gd.data.length) return false;
+    const r = gd.getBoundingClientRect();
+    return r.width > 20 && r.height > 20;   // una pestaña oculta mide 0
+  });
+}
+
+function nombreDeGrafica(gd, i) {
+  return gd.id || gd.parentElement.id || `grafica_${i + 1}`;
+}
+
+function descargarBlob(nombre, blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nombre;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+window.exportarVista = async function exportarVista() {
+  const boton = document.getElementById('btnExportarVista');
+  const graficas = contenedoresVisibles();
+  if (!graficas.length) {
+    if (boton) boton.textContent = 'no hay gráficas visibles';
+    setTimeout(() => { if (boton) boton.textContent = 'exportar vista'; }, 2500);
+    return;
+  }
+  if (boton) { boton.disabled = true; boton.textContent = 'exportando…'; }
+  const vista = document.querySelector('.vista-btn.activo');
+  const sello = (vista ? vista.dataset.vista : 'vista') + '_' + new Date()
+    .toISOString().slice(0, 19).replace(/[:T]/g, '-');
+
+  const trazas = [];
+  for (let i = 0; i < graficas.length; i += 1) {
+    const gd = graficas[i];
+    const nombre = nombreDeGrafica(gd, i);
+    trazas.push({ grafica: nombre, layout: { title: gd.layout && gd.layout.title }, datos: gd.data });
+    try {
+      const url = await Plotly.toImage(gd, { format: 'png', width: 1400, height: Math.max(500,
+        Math.round(1400 * (gd.getBoundingClientRect().height / Math.max(1, gd.getBoundingClientRect().width)))) });
+      const blob = await (await fetch(url)).blob();
+      descargarBlob(`${sello}__${nombre}.png`, blob);
+    } catch (e) {
+      trazas.push({ grafica: nombre, error_png: String(e && e.message ? e.message : e) });
+    }
+  }
+  descargarBlob(`${sello}__trazas.json`,
+    new Blob([JSON.stringify({ formato: 'ultrasound-sim/dashboard/vista/1',
+      fecha: new Date().toISOString(), vista: vista ? vista.dataset.vista : null, graficas: trazas },
+    null, 2)], { type: 'application/json' }));
+
+  if (boton) { boton.disabled = false; boton.textContent = 'exportar vista'; }
+};
+
 async function enviar() {
   if (control) control.abort();
   control = new AbortController();
@@ -510,6 +630,7 @@ function aplicar(cfg) {
   }
 }
 
+$('btnExportarVista').addEventListener('click', () => window.exportarVista());
 $('btnGuardar').addEventListener('click', () => {
   const texto = JSON.stringify(instantanea(), null, 2);
   const url = URL.createObjectURL(new Blob([texto], { type: 'application/json' }));

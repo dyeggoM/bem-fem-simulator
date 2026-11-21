@@ -140,6 +140,7 @@ async function escResolver() {
     ESC.resuelto = r;
     escPintarResultado(r);
     escDibujar(r);
+    window.vistaGuardar('escena', r);   // volver a la pestaña no debe costar otro solve
     esc$('escEstado').textContent =
       `resuelto: ${r.grilla.n_elementos} elementos, ${r.grilla.n_nodos} nodos · ` +
       `malla ${escFmt(r.tiempos.malla_s, 3)} s + solve ${escFmt(r.tiempos.solve_s, 3)} s`;
@@ -245,6 +246,7 @@ const VISTAS = {
   barridos: { panel: 'vistaBarridos', main: 'vistaBarridosMain' },
   volumen: { panel: 'vistaVolumen', main: 'vistaVolumenMain' },
   esfera: { panel: 'vistaEsfera', main: 'vistaEsferaMain' },
+  criterios: { panel: null, main: 'vistaCriteriosMain' },
 };
 
 function escCambiarVista(vista) {
@@ -260,6 +262,7 @@ function escCambiarVista(vista) {
   if (vista === 'barridos' && typeof window.barIniciar === 'function') window.barIniciar();
   if (vista === 'volumen' && typeof window.volIniciar === 'function') window.volIniciar();
   if (vista === 'esfera' && typeof window.esfIniciar === 'function') window.esfIniciar();
+  if (vista === 'criterios' && typeof window.critIniciar === 'function') window.critIniciar();
   // el aviso naranja y la línea de estado son del explorador de campo ("32 fuentes · baffle…",
   // habla del foco de la apertura): en la vista de escena confunden. Se ocultan por CSS
   // (`body.vista-escena`), no por `hidden`: `app.js` los re-muestra cuando llega su respuesta.
@@ -270,6 +273,22 @@ function escCambiarVista(vista) {
   document.body.classList.toggle('vista-volumen', vista === 'volumen');
   document.body.classList.toggle('vista-esfera', vista === 'esfera');
   if (vista === 'escena') {
+    // resultado de la sesión anterior: se repinta antes de estimar, así volver a la pestaña no
+    // obliga a resolver de nuevo
+    const previo = ESC.resuelto ? null : window.vistaCargar('escena');
+    if (previo) {
+      try {
+        ESC.resuelto = previo.resultado;
+        escPintarResultado(previo.resultado);
+        escDibujar(previo.resultado);
+        esc$('escEstado').textContent =
+          'restaurado de ' + new Date(previo.fecha).toLocaleString('es');
+      } catch (e) {
+        console.warn('no se pudo restaurar la escena:', e && e.message);
+        window.vistaBorrar('escena');
+        ESC.resuelto = null;
+      }
+    }
     if (!ESC.materiales.length) escCargarMateriales().then(escEstimar);
     else if (!ESC.resuelto) escEstimar();
     setTimeout(() => window.dispatchEvent(new Event('resize')), 30);

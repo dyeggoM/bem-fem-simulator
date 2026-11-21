@@ -24,6 +24,9 @@
       <button class="vista-btn" data-vista="barridos">barridos</button>
       <button class="vista-btn" data-vista="volumen">3D</button>
       <button class="vista-btn" data-vista="esfera">esfera elástica</button>
+      <button class="vista-btn" data-vista="criterios">criterios</button>
+      <button class="btn mini" id="btnExportarVista"
+        title="Baja un PNG de cada gráfica visible y un JSON con sus trazas. Sirve igual en todas las vistas: no depende de lo que cada una tenga montado, lee las gráficas que están en pantalla.">exportar vista</button>
     </nav>
 
     <div id="vistaCampo">
@@ -646,6 +649,16 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
     </div>
   </main>
 
+  <main class="vista" id="vistaCriteriosMain" hidden>
+    <div class="mapa-wrap criterios-wrap">
+      <h2 class="criterios-titulo">Registro de criterios
+        <span class="tip" title="Cada criterio vive en el servidor (validacion.py) con su tolerancia y su fuente. Un resultado se sella contra este registro: la UI no tiene umbrales propios. 'sin medir' significa que en esta sesión no se corrió la vista que lo produce; 'sin_referencia' significa que se midió pero la referencia no cubre esa configuración.">?</span>
+      </h2>
+      <p class="hint" id="criteriosResumen">—</p>
+      <div id="tablaCriterios" class="tabla-criterios"></div>
+    </div>
+  </main>
+
 </div>
 <script src="/static/app.js"></script>
 <script src="/static/escena.js"></script>
@@ -654,5 +667,6 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
 <script src="/static/barridos.js"></script>
 <script src="/static/volumen.js"></script>
 <script src="/static/esfera.js"></script>
+<script src="/static/criterios.js"></script>
 </body>
 </html>

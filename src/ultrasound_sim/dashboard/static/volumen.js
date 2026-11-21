@@ -89,6 +89,7 @@ async function volResolver() {
     VOL.resuelto = r;
     volPintar(r);
     volDibujar(r);
+    window.vistaGuardar('volumen', r);   // el solve 3D es el más caro: no repetirlo al volver
     vol$('volEstado').textContent =
       `resuelto: ${r.malla.n_nodos} nodos, ${r.malla.n_elementos} tets · ` +
       `malla ${volFmt(r.tiempos.malla_s, 2)} s + solve ${volFmt(r.tiempos.solve_s, 2)} s`;
@@ -224,6 +225,20 @@ function volIniciar() {
   volPintarCapas();
   volModo();
   if (!VOL.resuelto) volEstimar();
+  // resultado de la sesión anterior: repintarlo en vez de dejar la vista vacía
+  const previo = window.vistaCargar('volumen');
+  if (previo && !VOL.resuelto) {
+    try {
+      VOL.resuelto = previo.resultado;
+      volPintar(previo.resultado);
+      volDibujar(previo.resultado);
+      vol$('volEstado').textContent =
+        'restaurado de ' + new Date(previo.fecha).toLocaleString('es');
+    } catch (e) {
+      console.warn('no se pudo restaurar el 3D:', e && e.message);
+      window.vistaBorrar('volumen');
+    }
+  }
   setTimeout(() => window.dispatchEvent(new Event('resize')), 30);
 }
 window.volIniciar = volIniciar;

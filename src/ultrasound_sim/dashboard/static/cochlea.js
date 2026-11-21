@@ -71,6 +71,7 @@ async function cocfResolver() {
     COCF.resuelto = r;
     cocfPintar(r);
     cocfDibujar(r);
+    window.vistaGuardar('cochlea', r);
     cocf$('cocFieldEstado').textContent =
       `resuelto: ${r.malla.n_elementos} elementos · malla ${cocfFmt(r.tiempos.malla_s, 2)} s + ` +
       `solve ${cocfFmt(r.tiempos.solve_s, 2)} s`;
@@ -163,6 +164,22 @@ function cocfDibujar(r) {
 /* --------------------------------------------------------------- enlaces */
 
 function cocfIniciar() {
+  if (!COCF.resuelto) {
+    const previo = window.vistaCargar('cochlea');
+    if (previo) {
+      try {
+        COCF.resuelto = previo.resultado;
+        cocfPintar(previo.resultado);
+        cocfDibujar(previo.resultado);
+        cocf$('cocFieldEstado').textContent =
+          'restaurado de ' + new Date(previo.fecha).toLocaleString('es');
+      } catch (e) {
+        console.warn('no se pudo restaurar la cóclea:', e && e.message);
+        window.vistaBorrar('cochlea');
+        COCF.resuelto = null;
+      }
+    }
+  }
   if (!COCF.resuelto) cocfEstimar();
   setTimeout(() => window.dispatchEvent(new Event('resize')), 30);
 }

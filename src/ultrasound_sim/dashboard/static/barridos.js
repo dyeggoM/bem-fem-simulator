@@ -81,6 +81,8 @@ function barSeguir() {
         clearInterval(BAR.temporizador);
         BAR.resultado = j.resultado;
         barPintar(j.resultado, j.segundos);
+        // 30 puntos de escena son ~30 solves: guardarlo para no repetirlos al volver a la pestaña
+        window.vistaGuardar('barridos', { resultado: j.resultado, segundos: j.segundos });
         bar$('btnBarrido').disabled = false;
         bar$('btnCancelar').disabled = true;
       } else if (j.estado === 'error' || j.estado === 'cancelado') {
@@ -165,6 +167,18 @@ function barPintar(r, segundos) {
 }
 
 function barIniciar() {
+  const previo = window.vistaCargar('barridos');
+  if (previo && !BAR.resultado && previo.resultado && previo.resultado.resultado) {
+    try {
+      BAR.resultado = previo.resultado.resultado;
+      barPintar(previo.resultado.resultado, previo.resultado.segundos);
+      bar$('barEstado').textContent =
+        'restaurado de ' + new Date(previo.fecha).toLocaleString('es');
+    } catch (e) {
+      console.warn('no se pudo restaurar el barrido:', e && e.message);
+      window.vistaBorrar('barridos');
+    }
+  }
   if (!BAR.jobId) barInfo();
   setTimeout(() => window.dispatchEvent(new Event('resize')), 30);
 }
