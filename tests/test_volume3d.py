@@ -124,6 +124,52 @@ def test_la_fuente_no_queda_sobre_la_abc():
     assert np.linalg.norm(malla.nodes[idx] - centro) < 0.1 * (xs[-1] - xs[0])
 
 
+ESFERA = {
+    "frecuencia_hz": 100.0e3,
+    "ppw": 12,
+    "alto_m": 30.0e-3,
+    "fuente": "esfera",
+    "ka": 1.0,
+    "material_esfera": "hueso",
+    "capas": [{"material": "agua", "espesor_m": 45.0e-3}],
+}
+
+
+def test_el_modo_esfera_compara_contra_anderson_y_sella():
+    """Dispersión penetrable 3D contra la serie de ondas parciales de Anderson (1950)."""
+    r = volume3d.resolver_volumen(ESFERA)
+    m = r["metricas"]
+    print(f"\n  ka={m['ka']}: error {m['error_serie_pct']:.2f} % contra Anderson · "
+          f"{m['elementos_en_esfera']} elementos en la esfera · {m['puntos_comparados']} puntos")
+    assert m["error_serie_pct"] < 5.0
+    assert m["elementos_en_esfera"] > 20, "la malla no resuelve la esfera"
+    assert m["puntos_comparados"] > 500
+    assert r["sello"]["estado"] == "validado"
+    ids = {c["id"] for c in r["sello"]["criterios"]}
+    assert ids == {"volumen_esfera_serie"}
+
+
+def test_el_modo_esfera_muestra_el_campo_dispersado_y_no_el_total():
+    """Si se graficara el total, la incidente (|p| ≈ 1) taparía la perturbación.
+
+    El síntoma medido fue un mapa casi uniforme con un rango de 0.3 dB; mostrando el dispersado el
+    rango pasa a ser de decenas de dB.
+    """
+    r = volume3d.resolver_volumen(ESFERA)
+    valores = [v for fila in r["rebanadas"]["xz"]["db"] for v in fila]
+    assert max(valores) - min(valores) > 15.0, (
+        "el mapa tiene rango dinámico de campo total, no de campo dispersado"
+    )
+
+
+def test_el_modo_esfera_requiere_que_la_malla_caiga_dentro():
+    """Con ppw bajo y ka chico no entra ningún elemento en la esfera: se rechaza, no se resuelve."""
+    chico = dict(ESFERA, ppw=6.0, ka=0.2)
+    with pytest.raises(ValueError) as exc:
+        volume3d.resolver_volumen(chico)
+    assert "dentro de la esfera" in str(exc.value)
+
+
 def test_el_modo_plano_da_ryt_dentro_del_2_por_ciento():
     r = volume3d.resolver_volumen(PLANO)
     m = r["metricas"]

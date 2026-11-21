@@ -123,6 +123,12 @@ CRITERIOS: dict[str, Criterio] = {
         referencia=0.0, tolerancia=0.10, modo="abs", unidad="L2 relativo",
         fuente="D32 (8.4 % a ppw 8 en caja de 1.1 λ) / D38: la UI da 7.0 % a ppw 10",
     ),
+    "volumen_esfera_serie": Criterio(
+        id="volumen_esfera_serie",
+        descripcion="error del campo total 3D contra la serie de Anderson (esfera fluida)",
+        referencia=0.0, tolerancia=0.05, modo="abs", unidad="L2 relativo",
+        fuente="Anderson (1950) / D41: el FEM da 3.34 % a ka = 1 y ppw 12",
+    ),
     "volumen_rt_r": Criterio(
         id="volumen_rt_r",
         descripcion="error de R de la escena 3D contra la matriz de transferencia",

@@ -76,15 +76,17 @@ def validar_volumen(datos: dict[str, Any]) -> dict[str, Any]:
     alto = _en_rango("alto_m", _num(datos, "alto_m", 1.5e-3))
 
     fuente = str(datos.get("fuente", "puntual"))
-    if fuente not in ("plano", "puntual"):
-        raise ValueError(f"fuente desconocida: {fuente!r}; opciones ['plano', 'puntual']")
+    if fuente not in ("plano", "puntual", "esfera"):
+        raise ValueError(
+            f"fuente desconocida: {fuente!r}; opciones ['plano', 'puntual', 'esfera']"
+        )
 
     crudas = datos.get("capas")
     if not isinstance(crudas, list):
         raise ValueError("el pedido necesita una lista 'capas'")
     _, alto_capas = _LIMITES["capas"]
-    # con fuente puntual el medio tiene que ser homogéneo: una sola capa es válida
-    bajo = 1 if fuente == "puntual" else _LIMITES["capas"][0]
+    # puntual y esfera van en un medio homogéneo: una sola capa es válida
+    bajo = 1 if fuente in ("puntual", "esfera") else _LIMITES["capas"][0]
     if not (bajo <= len(crudas) <= alto_capas):
         raise ValueError(f"'capas' tiene que tener entre {bajo} y {alto_capas} elementos")
 
@@ -100,15 +102,36 @@ def validar_volumen(datos: dict[str, Any]) -> dict[str, Any]:
         espesor = _en_rango("espesor_m", _num(capa, "espesor_m", 0.0))
         capas.append((str(nombre), espesor))
 
+    abc = str(datos.get("abc", "abc1"))
+    if abc not in ABC_DISPONIBLES:
+        raise ValueError(f"abc desconocido: {abc!r}; opciones {list(ABC_DISPONIBLES)}")
+
+    if fuente == "esfera":
+        ka = _num(datos, "ka", 1.0)
+        if not (0.2 <= ka <= 6.0):
+            raise ValueError(f"ka = {ka:g} fuera de [0.2, 6]")
+        material_esfera = str(datos.get("material_esfera", "hueso"))
+        if material_esfera not in MATERIALES:
+            raise ValueError(
+                f"material de la esfera desconocido: {material_esfera!r}; "
+                f"opciones {sorted(MATERIALES)}"
+            )
+        return {
+            "frecuencia_hz": frecuencia,
+            "ppw": ppw,
+            "alto_m": alto,
+            "capas": tuple(capas),
+            "abc": abc,
+            "fuente": "esfera",
+            "ka": ka,
+            "material_esfera": material_esfera,
+        }
+
     if fuente == "puntual" and len({c.get("material") for c in crudas}) > 1:
         raise ValueError(
             "la fuente puntual de U4 va en un medio homogéneo: con capas de distinto material el "
             "Green 3D deja de ser la referencia y el contraste de R/T se mide con 'plano'"
         )
-
-    abc = str(datos.get("abc", "abc1"))
-    if abc not in ABC_DISPONIBLES:
-        raise ValueError(f"abc desconocido: {abc!r}; opciones {list(ABC_DISPONIBLES)}")
 
     angulo = abs(_num(datos, "angulo_deg", 0.0))
     if angulo > 1e-9:
@@ -136,11 +159,10 @@ def _malla(p: dict[str, Any]):
     for espesor, paso in zip(espesores, pasos):
         n = max(1, int(np.ceil(espesor / paso)))
         xs.extend(np.linspace(xs[-1], xs[-1] + espesor, n + 1)[1:].tolist())
-    if p["fuente"] == "puntual":
-        # Con fuente puntual la caja va CENTRADA en el origen. Si arrancara en x = 0, la fuente
-        # (el nodo más cercano al origen) caería sobre la cara de la ABC y el campo sería un
-        # desastre: medido 48 % de error contra el Green, y no bajaba al refinar porque no era
-        # discretización — era la fuente pegada al absorbente.
+    if p["fuente"] in ("puntual", "esfera"):
+        # La caja va CENTRADA en el origen. El caso puntual lo necesita porque la fuente es el nodo
+        # más cercano al origen y quedaría sobre la ABC (medido: 48 % de error que no bajaba al
+        # refinar). La esfera lo necesita por simetría: su centro tiene que ser el origen.
         centro = xs[-1] / 2.0
         xs = [x - centro for x in xs]
 
@@ -214,8 +236,67 @@ def resolver_volumen(datos: dict[str, Any]) -> dict[str, Any]:
     err = float("nan")
     amplitud = float("nan")
     anillo = np.zeros(malla.nodes.shape[0], dtype=bool)
+    radio = 0.0
+    dentro = np.zeros(malla.tets.shape[0], dtype=bool)
+    ok = np.zeros(1, dtype=bool)
 
-    if p["fuente"] == "puntual":
+    if p["fuente"] == "esfera":
+        # Dispersión penetrable: el contraste es una esfera de otro material. Necesita el operador
+        # local y el término de contraste con el fondo (D41), no el campo total.
+        from ..analytic import sphere as esfera_analitica
+        from scipy.interpolate import LinearNDInterpolator
+
+        material_esfera = MATERIALES[p["material_esfera"]]
+        k0 = materiales[0].wavenumber(f)
+        rho0 = materiales[0].rho
+        radio = p["ka"] / abs(k0)
+        centroides = malla.nodes[malla.tets].mean(axis=1)
+        dentro = np.linalg.norm(centroides, axis=1) < radio
+        if not dentro.any():
+            raise ValueError(
+                f"ningún elemento cayó dentro de la esfera de radio {radio * 1e3:.2f} mm: "
+                f"subí ppw (hoy {p['ppw']:g}) para que la malla la resuelva"
+            )
+        k_el = np.where(dentro, material_esfera.wavenumber(f), k0)
+        rho_el = np.where(dentro, material_esfera.rho, rho0)
+        abc = caras
+        p_inc = h3.plane_wave(f, materiales[0], (0.0, 0.0, 1.0))
+        p_s = h3.solve_scattered(
+            malla.nodes, malla.tets, k_el, abc_faces=abc, element_rho=rho_el,
+            background_k=k0, background_rho=rho0, p_inc=p_inc,
+        )
+        total = h3.total_field(p_s, p_inc, malla.nodes)
+        # Los mapas muestran el campo DISPERSADO, no el total: en el total manda la incidente
+        # (|p| ≈ 1 en todas partes) y una perturbación del 5 % es invisible en una escala de 30 dB.
+        # La métrica sí se mide sobre el total, que es lo que da la serie de Anderson.
+        campo = p_s
+        dt_solve = time.perf_counter() - t_solve
+
+        # error contra la serie de Anderson sobre r = 1.5a
+        th = np.linspace(0.0, np.pi, 48)
+        ph = np.linspace(0.0, 2.0 * np.pi, 20, endpoint=False)
+        TH, PH = np.meshgrid(th, ph, indexing="ij")
+        rr = 1.5 * radio
+        pts = np.column_stack([
+            (rr * np.sin(TH) * np.cos(PH)).ravel(),
+            (rr * np.sin(TH) * np.sin(PH)).ravel(),
+            (rr * np.cos(TH)).ravel(),
+        ])
+        serie = esfera_analitica.fluid_sphere_scattering(
+            f, materiales[0], material_esfera, radio, pts
+        )
+        interp = LinearNDInterpolator(
+            malla.nodes, np.column_stack([np.real(total), np.imag(total)]), fill_value=np.nan
+        )
+        vals = interp(pts)
+        ok = ~np.isnan(vals[:, 0])
+        fem = vals[ok, 0] + 1j * vals[ok, 1]
+        ref = np.asarray(serie["total"])[ok]
+        err = (float(np.linalg.norm(fem - ref) / np.linalg.norm(ref))
+               if ok.sum() > 8 else float("nan"))
+        amplitud = float(np.abs(p_s).max())
+        anillo = np.zeros(malla.nodes.shape[0], dtype=bool)
+    elif p["fuente"] == "puntual":
         # Una fuente puntual radia en todas las direcciones: si las caras laterales fueran rígidas,
         # la onda se reflejaría ahí y el mapa sería un patrón de cavidad, no un Green 3D. Por eso
         # acá la ABC va en las SEIS caras.
@@ -278,7 +359,19 @@ def resolver_volumen(datos: dict[str, Any]) -> dict[str, Any]:
     sel_der = (nodos_x > x_ini_ultima + tol) & (nodos_x < x_ini_ultima + ventana)
 
     metricas: dict[str, Any] = {}
-    if p["fuente"] == "puntual":
+    if p["fuente"] == "esfera":
+        metricas = {
+            "error_serie_pct": 100.0 * err if np.isfinite(err) else None,
+            "radio_mm": radio * 1e3,
+            "ka": p["ka"],
+            "material_esfera": p["material_esfera"],
+            "elementos_en_esfera": int(dentro.sum()),
+            "amplitud_dispersada": amplitud,
+            "puntos_comparados": int(ok.sum()),
+            "nota": "referencia: ondas parciales de Anderson (1950) para esfera fluida, evaluada "
+                    "sobre r = 1.5a",
+        }
+    elif p["fuente"] == "puntual":
         metricas = {
             "error_green_pct": 100.0 * err if np.isfinite(err) else None,
             "amplitud_green": amplitud if np.isfinite(amplitud) else None,
@@ -303,7 +396,12 @@ def resolver_volumen(datos: dict[str, Any]) -> dict[str, Any]:
     elif p["fuente"] == "plano":
         metricas["aviso"] = "capas demasiado finas para la ventana de ajuste (0.5 λ)"
 
-    if p["fuente"] == "puntual":
+    if p["fuente"] == "esfera":
+        sello = validacion.sello_conjunto(
+            {"volumen_esfera_serie": (None if metricas.get("error_serie_pct") is None
+                                      else metricas["error_serie_pct"] / 100.0)}
+        )
+    elif p["fuente"] == "puntual":
         sello = validacion.sello_conjunto(
             {"volumen_green": (None if metricas.get("error_green_pct") is None
                                else metricas["error_green_pct"] / 100.0)}

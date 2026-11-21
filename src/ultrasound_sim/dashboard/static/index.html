@@ -403,6 +403,7 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
           <select id="volFuente">
             <option value="puntual" selected>puntual (monopolo)</option>
             <option value="plano">onda plana con capas</option>
+            <option value="esfera">esfera penetrable (Anderson)</option>
           </select>
         </label>
         <label>Frecuencia <b id="volFreqVal">100 kHz</b></label>
@@ -416,6 +417,21 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
       <section id="volCapasBox" hidden>
         <label>Capas <span class="mini">(eje x)</span></label>
         <div id="volCapas"></div>
+      </section>
+
+      <section id="volEsferaBox" hidden>
+        <label>Esfera
+          <span class="tip" title="El FEM resuelve el campo dispersado con el término de contraste (D41) y se compara con la serie de ondas parciales de Anderson (1950) sobre r = 1.5a. El agua es el medio; la esfera es del material elegido, tratado como fluido.">?</span>
+        </label>
+        <label>Material de la esfera
+          <select id="volMatEsfera">
+            <option value="hueso">hueso (c 3500, ρ 1950)</option>
+            <option value="tejido">tejido blando</option>
+            <option value="perilinfa">perilinfa</option>
+          </select>
+        </label>
+        <label>ka = 2πa/λ <b id="volKaVal">1.0</b></label>
+        <input type="range" id="volKa" min="0.2" max="4" step="0.1" value="1">
       </section>
 
       <section>
@@ -440,6 +456,8 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
           <div class="chip"><span>R analítico</span><b id="volRan">—</b></div>
           <div class="chip"><span>error R</span><b id="volErrR">—</b></div>
           <div class="chip"><span>error T</span><b id="volErrT">—</b></div>
+          <div class="chip"><span>error Anderson</span><b id="volSerie">—</b></div>
+          <div class="chip"><span>radio</span><b id="volRadio">—</b></div>
         </div>
         <p class="hint" id="volSello"></p>
       </section>

@@ -20,6 +20,8 @@ const VOL = {
     { material: 'hueso', espesor_mm: 8 },
     { material: 'agua', espesor_mm: 22 },
   ],
+  ka: 1.0,
+  matEsfera: 'hueso',
   resuelto: null,
   ocupado: false,
 };
@@ -30,16 +32,22 @@ const vol$ = (id) => document.getElementById(id);
 const volFmt = (v, d = 2) => (v === null || v === undefined || Number.isNaN(v) ? '—' : Number(v).toFixed(d));
 
 function volPayload() {
-  const capas = VOL.fuente === 'puntual'
+  const homogenea = VOL.fuente === 'puntual' || VOL.fuente === 'esfera';
+  const capas = homogenea
     ? [{ material: 'agua', espesor_m: VOL.alto * 1e-3 }]
     : VOL.capas.map((c) => ({ material: c.material, espesor_m: c.espesor_mm * 1e-3 }));
-  return {
+  const cuerpo = {
     frecuencia_hz: VOL.freq * 1e3,
     ppw: VOL.ppw,
     alto_m: VOL.alto * 1e-3,
     fuente: VOL.fuente,
     capas,
   };
+  if (VOL.fuente === 'esfera') {
+    cuerpo.ka = VOL.ka;
+    cuerpo.material_esfera = VOL.matEsfera;
+  }
+  return cuerpo;
 }
 
 async function volPost(ruta, cuerpo) {
@@ -97,8 +105,11 @@ function volPintar(r) {
   vol$('volTiempo').textContent = `${volFmt(r.tiempos.solve_s, 2)} s`;
   const esPuntual = r.escena.fuente === 'puntual';
 
+  const esEsfera = r.escena.fuente === 'esfera';
   vol$('volGreen').textContent = esPuntual ? `${volFmt(m.error_green_pct, 1)} %` : '—';
   vol$('volAmp').textContent = esPuntual ? volFmt(m.amplitud_green, 3) : '—';
+  vol$('volSerie').textContent = esEsfera ? `${volFmt(m.error_serie_pct, 2)} %` : '—';
+  vol$('volRadio').textContent = esEsfera ? `${volFmt(m.radio_mm, 2)} mm` : '—';
   vol$('volR').textContent = esPuntual ? '—' : volFmt(m.R, 4);
   vol$('volRan').textContent = esPuntual ? '—' : volFmt(m.R_analitico, 4);
   vol$('volErrR').textContent = esPuntual ? '—' : `abs ${volFmt(m.error_R_abs, 4)}`;
@@ -113,44 +124,59 @@ const VOL_CONFIG = { displayModeBar: false, responsive: true, displaylogo: false
 
 function volDibujar(r) {
   const s = r.rebanadas;
+
+  // En la esfera la onda viaja en +z: el plano que muestra los lóbulos es el x-z, y el x-y (a z=0,
+  // perpendicular a la propagación) sale casi simétrico — una mancha oscura central. Por eso en ese
+  // modo se invierte cuál es el mapa principal.
+  const esEsfera = r.escena.fuente === 'esfera';
+  const principal = esEsfera
+    ? { x: s.xz.x_mm, y: s.xz.z_mm, z: s.xz.db, titulo: `campo dispersado, plano de propagación (${s.xz.donde})`,
+        ejeY: 'z (mm)', colorbar: true }
+    : { x: s.xy.x_mm, y: s.xy.y_mm, z: s.xy.db, titulo: `rebanada x-y (${s.xy.donde})`,
+        ejeY: 'y (mm)', colorbar: true };
+  const secundaria = esEsfera
+    ? { x: s.xy.x_mm, y: s.xy.y_mm, z: s.xy.db, titulo: `rebanada x-y — perpendicular a la propagación (${s.xy.donde})`,
+        ejeY: 'y (mm)' }
+    : { x: s.xz.x_mm, y: s.xz.z_mm, z: s.xz.db, titulo: `rebanada x-z (${s.xz.donde})`,
+        ejeY: 'z (mm)' };
+
   const interfases = s.interfaces_mm.map((x) => ({
     type: 'line', x0: x, x1: x, yref: 'paper', y0: 0, y1: 1,
     line: { color: '#58a6ff', width: 1, dash: 'dot' },
   }));
 
   Plotly.react('mapaVolumen', [{
-    type: 'heatmap', x: s.xy.x_mm, y: s.xy.y_mm, z: s.xy.db,
+    type: 'heatmap', x: principal.x, y: principal.y, z: principal.z,
     colorscale: 'Inferno', zmin: -30, zmax: 0,
     colorbar: { title: { text: 'dB rel. pico', side: 'top' }, thickness: 11, len: 0.8,
                 tickfont: { size: 9, color: '#8b95a1' }, outlinewidth: 0 },
     hovertemplate: 'x %{x:.1f} mm<br>y %{y:.1f} mm<br>%{z:.1f} dB<extra></extra>',
   }], {
     margin: { l: 52, r: 8, t: 26, b: 40 },
-    title: { text: `rebanada x-y (${s.xy.donde})`, font: { size: 10, color: '#8b95a1' } },
+    title: { text: principal.titulo, font: { size: 10, color: '#8b95a1' } },
     paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
     font: { color: '#8b95a1', size: 10 },
     // aspecto 1:1: sin esto el div ancho estira 30 mm sobre 740 px y una onda esférica se ve
     // como un lóbulo horizontal. El campo ES simétrico (el Green cierra al 7 %); era el render.
     xaxis: { title: { text: 'x (mm)' }, gridcolor: '#21262d', zeroline: false,
              scaleanchor: 'y', scaleratio: 1, constrain: 'domain' },
-    yaxis: { title: { text: 'y (mm)' }, gridcolor: '#21262d', zeroline: false },
+    yaxis: { title: { text: principal.ejeY }, gridcolor: '#21262d', zeroline: false },
     shapes: interfases,
   }, VOL_CONFIG);
 
-  const ejeZ = s.xz.z_mm;
   Plotly.react('corteVolumen', [{
-    type: 'heatmap', x: s.xz.x_mm, y: ejeZ, z: s.xz.db,
+    type: 'heatmap', x: secundaria.x, y: secundaria.y, z: secundaria.z,
     colorscale: 'Inferno', zmin: -30, zmax: 0, showscale: false,
-    hovertemplate: 'x %{x:.1f} mm<br>z %{y:.1f} mm<br>%{z:.1f} dB<extra></extra>',
+    hovertemplate: 'x %{x:.1f} mm<br>y %{y:.1f} mm<br>%{z:.1f} dB<extra></extra>',
   }], {
     ...VOL_CONFIG,
     margin: { l: 52, r: 8, t: 24, b: 34 },
-    title: { text: `rebanada x-z (${s.xz.donde})`, font: { size: 10, color: '#8b95a1' } },
+    title: { text: secundaria.titulo, font: { size: 10, color: '#8b95a1' } },
     paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
     font: { color: '#8b95a1', size: 9 },
     xaxis: { title: { text: 'x (mm)' }, gridcolor: '#21262d',
              scaleanchor: 'y', scaleratio: 1, constrain: 'domain' },
-    yaxis: { title: { text: 'z (mm)' }, gridcolor: '#21262d' },
+    yaxis: { title: { text: secundaria.ejeY }, gridcolor: '#21262d' },
     shapes: interfases.map((f) => ({ ...f, yref: 'paper' })),
   });
 }
@@ -191,6 +217,7 @@ function volPintarCapas() {
 
 function volModo() {
   vol$('volCapasBox').hidden = VOL.fuente !== 'plano';
+  vol$('volEsferaBox').hidden = VOL.fuente !== 'esfera';
 }
 
 function volIniciar() {
@@ -218,5 +245,10 @@ vol$('volAlto').addEventListener('input', (e) => {
   VOL.alto = parseInt(e.target.value, 10);
   vol$('volAltoVal').textContent = `${VOL.alto} mm`;
 });
+vol$('volKa').addEventListener('input', (e) => {
+  VOL.ka = parseFloat(e.target.value);
+  vol$('volKaVal').textContent = volFmt(VOL.ka, 1);
+});
+vol$('volMatEsfera').addEventListener('change', (e) => { VOL.matEsfera = e.target.value; });
 vol$('btnVolEstimar').addEventListener('click', volEstimar);
 vol$('btnVolumen').addEventListener('click', volResolver);

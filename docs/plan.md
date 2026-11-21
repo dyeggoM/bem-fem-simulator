@@ -47,7 +47,13 @@ Resumen de lo que está *cerrado con número medido*, no de lo que está escrito
   término de contraste corregido la reproduce: **3.34 % (ka = 1)** y **2.73 % (ka = 2)** a ppw 12, con
   convergencia **5.72 % → 1.93 %** al ir de ppw 8 a 16. El bug de D32 era el cociente de densidades
   invertido en el contraste, más el fondo ausente en el término de rigidez.
-  Queda **Faran (1951)** para la esfera elástica, que es el paso siguiente y ya tiene su referencia.
+  **En la UI**: la pestaña 3D tiene un tercer modo *esfera penetrable* (material y `ka` editables) que
+  muestra el **campo dispersado** en el plano de propagación y sella contra Anderson
+  (*2.94 % a ka = 1*, 9 261 nodos, 1.2 s). Se muestra el dispersado y no el total porque en el total
+  manda la incidente y la perturbación desaparece en la escala de dB.
+  Queda **Faran (1951)** para la esfera elástica: es el paso siguiente y ya tiene su referencia, pero
+  la serie es bastante más larga (dos potenciales P/S y tres condiciones de borde) y conviene
+  escribirla con su derivación, no de memoria.
 - **Tensor elástico de la cápsula ótica — no hay dato citable.** Peterson y Dechow (2003) dan
   propiedades direccionales de cortical externa del temporal, no de la cápsula. Se sigue con isótropo
   `VERIFY` y los parámetros expuestos en la UI.

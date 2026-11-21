@@ -1323,3 +1323,32 @@ de la frontera.
 
 **Siguiente paso con referencia ya disponible**: Faran (1951) para la esfera **elástica** sumergida
 (ondas P y S), que es el mismo tipo de serie con dos potenciales en el sólido.
+
+## D42 — La esfera penetrable en la UI, y por qué el mapa mostraba casi nada
+
+**Qué se entregó.** Un tercer modo en la pestaña 3D: *esfera penetrable*, con material de la esfera y
+`ka` editables. Resuelve el campo dispersado con el término de contraste de D41 y sella contra la
+serie de Anderson. Medido: **2.94 %** de error a ka = 1 (9 261 nodos, 180 elementos en la esfera,
+960 puntos de comparación), *1.2 s*. Criterio nuevo en el registro: `volumen_esfera_serie`, 5 %.
+
+**Hallazgo 1 — el mapa del campo total no muestra nada.** El primer intento graficó `|p_total|`: como
+la onda incidente vale ≈ 1 en todo el dominio, la perturbación de la esfera (del orden del 5 %) es
+invisible en una escala de 30 dB — el mapa salía **casi uniforme, con 0.3 dB de rango**. Mostrando el
+**campo dispersado** el rango pasa a decenas de dB. Es la tercera vez que aparece el mismo patrón
+(campo uniforme con agua/tejido en 2D, esfera en 3D): *cuando el campo total está dominado por la
+incidente, lo que hay que graficar es el dispersado*.
+
+**Hallazgo 2 — el plano equivocado.** Con la propagación en `z`, el corte `x-y` (a `z = 0`) es
+perpendicular al haz y sale casi simétrico: una mancha oscura central. Los lóbulos viven en el plano
+`x-z`. En el modo esfera se invirtió cuál es el mapa principal, y el título dice cuál es cuál.
+
+**Lo que el mapa NO demuestra, y por qué igual sirve.** A ka = 1 con una esfera de contraste moderado
+el campo dispersado está dominado por el modo monopolar: se ve un lóbulo central que decae
+radialmente, no la asimetría dipolar de una esfera rígida. Eso es física, no un defecto — pero
+tampoco es la validación: **la validación son los 960 puntos comparados contra la serie** (2.94 %),
+que es un chequeo muchísimo más fuerte que mirar un mapa. La lección es que el sello numérico y la
+imagen tienen que coincidir en lo que afirman, y cuando no, manda el número.
+
+**Costo y tope.** 1.2 s con 9 261 nodos en una caja de 30 mm (2 λ). La malla tiene que resolver la
+esfera: con `ppw = 6` y `ka = 0.2` no cae ningún elemento adentro y el pedido se **rechaza** con un
+mensaje que dice qué subir, en vez de resolver una caja homogénea y devolver un error del 100 %.
