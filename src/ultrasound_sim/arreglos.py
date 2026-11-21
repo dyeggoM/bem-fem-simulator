@@ -27,6 +27,8 @@ import io
 import json
 from typing import Any
 
+import numpy as np
+
 __all__ = ["ErrorArreglo", "cargar_arreglo", "exportar_arreglo", "COLUMNAS"]
 
 
@@ -34,12 +36,17 @@ class ErrorArreglo(ValueError):
     """El archivo no describe un arreglo de fuentes usable."""
 
 
-COLUMNAS = ("y_mm", "ancho_mm", "amp", "fase_rad")
+#: La fase se **exporta en grados**, que es como se lee en la tabla y en un datasheet. Al cargar se
+#: aceptan las dos unidades, con la unidad en el nombre de la columna: `fase_deg` o `fase_rad`. El
+#: alias pelado (`fase`, `phase`) se interpreta como **radianes** para no cambiar el significado de los
+#: archivos que ya existen.
+COLUMNAS = ("y_mm", "ancho_mm", "amp", "fase_deg")
 
 _ALIAS = {
     "y_mm": ("y_mm", "y", "posicion_mm", "posición_mm"),
     "ancho_mm": ("ancho_mm", "width_mm", "width", "ancho"),
     "amp": ("amp", "amplitud", "amplitude", "amp_rel"),
+    "fase_deg": ("fase_deg", "phase_deg", "fase_grados", "fase_grado", "phase_degrees"),
     "fase_rad": ("fase_rad", "phase", "phase_rad", "fase"),
 }
 
@@ -123,13 +130,20 @@ def cargar_arreglo(texto: str, formato: str | None = None) -> list[dict]:
         y_mm = _a_float(_clave(fila, "y_mm"), "y_mm", i + 1)
         ancho_mm = _a_float(_clave(fila, "ancho_mm"), "ancho_mm", i + 1)
         amp = _a_float(_clave(fila, "amp"), "amp", i + 1)
-        fase = _a_float(_clave(fila, "fase_rad"), "fase_rad", i + 1)
+        # grados si la columna lo dice; si no, radianes (compatibilidad con los archivos anteriores)
+        en_grados = _clave(fila, "fase_deg")
+        fase = (_a_float(en_grados, "fase_deg", i + 1) * np.pi / 180.0
+                if en_grados is not None and str(en_grados).strip() != ""
+                else _a_float(_clave(fila, "fase_rad"), "fase_rad", i + 1))
         if not (ancho_mm > 0.0):
             raise ErrorArreglo(f"fila {i + 1}: ancho_mm = {ancho_mm} tiene que ser > 0")
         if not (amp > 0.0):
             raise ErrorArreglo(
                 f"fila {i + 1}: amp = {amp} tiene que ser > 0 (una amplitud negativa es una fase de π)"
             )
+        # la fase se envuelve a (−π, π]: una fase de foco en grados puede venir como −5674.6°, que es la
+        # misma fase módulo 360° pero ilegible. El campo no cambia (el solver usa exp(i·fase)).
+        fase = float(np.angle(np.exp(1j * fase)))
         fuentes.append({"y": y_mm * 1e-3, "width": ancho_mm * 1e-3, "amp": amp, "phase": fase})
 
     _validar_solapes(fuentes)
@@ -146,5 +160,6 @@ def exportar_arreglo(fuentes) -> str:
         ancho = f["width"] if isinstance(f, dict) else getattr(f, "width")
         amp = f["amp"] if isinstance(f, dict) else getattr(f, "amp")
         fase = f["phase"] if isinstance(f, dict) else getattr(f, "phase")
-        escritor.writerow([f"{y * 1e3:.4f}", f"{ancho * 1e3:.4f}", f"{amp:.6g}", f"{fase:.6g}"])
+        fase_grados = fase * 180.0 / np.pi
+        escritor.writerow([f"{y * 1e3:.4f}", f"{ancho * 1e3:.4f}", f"{amp:.6g}", f"{fase_grados:.3f}"])
     return salida.getvalue()

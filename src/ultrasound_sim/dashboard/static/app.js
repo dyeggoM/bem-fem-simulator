@@ -63,6 +63,15 @@ function pedir() {
   temporizador = setTimeout(enviar, 150);
 }
 
+/* Una fase de foco vale −k·r, que con r en metros y k en 1/m da decenas de radianes: mostrarla en
+ * grados daba «−5674.6°». Es la misma fase módulo 360, pero ilegible. Se envuelve a (−180°, 180°].
+ * El campo no cambia: el solver usa exp(i·fase). */
+function faseNormalizada(rad) {
+  let g = rad * 180 / Math.PI;
+  g -= 360 * Math.floor((g + 180) / 360);
+  return g;
+}
+
 /* ---------------------------------------------------------------------------------------------
  * Entradas y salidas del arreglo de fuentes (U10).
  *
@@ -101,7 +110,7 @@ window.campoFuentesActuales = function campoFuentesActuales() {
     const y = -S.d / 2 + paso * (j + 0.5);
     salida.push({
       y_mm: y, ancho_mm: paso, amp: 1,
-      fase_rad: -k * Math.hypot(S.fx, S.fy - y) / 1e3,
+      fase_rad: faseNormalizada(-k * Math.hypot(S.fx, S.fy - y) / 1e3) * Math.PI / 180,
     });
   }
   return salida;
@@ -690,7 +699,8 @@ function filaFuente(src, i) {
     { k: 'y_mm', v: (src.y * 1e3).toFixed(2), paso: '0.1' },
     { k: 'width_mm', v: (src.width * 1e3).toFixed(2), paso: '0.1' },
     { k: 'amp', v: src.amp.toFixed(2), paso: '0.05' },
-    { k: 'phase', v: src.phase.toFixed(1), paso: '0.1' },
+    // la fase se edita y se muestra en GRADOS: en radianes un desfase de 90° es 1.5708 y no se lee
+    { k: 'phase', v: faseNormalizada(src.phase).toFixed(1), paso: '1' },
   ];
   for (const c of campos) {
     const td = document.createElement('td');
@@ -705,7 +715,7 @@ function filaFuente(src, i) {
         if (v <= 0) { inp.value = (f.width * 1e3).toFixed(2); return; }
         f.width = v / 1e3;
       } else if (c.k === 'amp') f.amp = v;
-      else f.phase = v;
+      else f.phase = v * Math.PI / 180;   // el estado y el solver trabajan en radianes
       pedir();
     });
     // al editar una fila se resalta su asa en el mapa: es la forma de saber cuál de las 32 es
@@ -766,7 +776,7 @@ function generarDesdeArreglo() {
   for (let j = 0; j < S.n; j += 1) {
     const y = -S.d / 2 + paso * (j + 0.5);
     arr.push({ y: y / 1e3, width: paso / 1e3, amp: 1,
-               phase: -k * Math.hypot(S.fx, S.fy - y) / 1e3 });
+               phase: faseNormalizada(-k * Math.hypot(S.fx, S.fy - y) / 1e3) * Math.PI / 180 });
   }
   S.fuentes = arr;
   pintarFuentes();
