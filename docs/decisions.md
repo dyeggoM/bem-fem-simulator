@@ -1932,3 +1932,37 @@ Y el `fijar_rigidos` con default booleano era una trampa: pedir `formulacion="di
 nada reventaba con un error que hablaba de la restricción. Ahora su default es `None` y se resuelve
 solo según la formulación (`True` en total, `False` en dispersada); el error queda sólo para quien
 pida explícitamente las dos cosas contradictorias.
+
+#### D49 — apéndice 2: la tabla completa de la formulación dispersada, y el patrón
+
+Barrido completo a `ka = 1`, dominio 4a, `h = a/4.5`. Se compara la formulación dispersada contra la
+total+restricción, que es la que hoy está sellada:
+
+| material | contraste `ρc_p` | dispersada | total+restricción |
+|---|---|---|---|
+| tungsteno | 66.9 | **10.70 %** (razón 0.914) | 4.71 % |
+| acero | 30.7 | **19.49 %** (0.847) | 4.29 % |
+| aluminio | 11.4 | **44.14 %** (0.673) | 3.99 % |
+| hueso | 4.6 | **54.53 %** (0.628) | 13.16 % |
+
+**El patrón: el error de la dispersada crece al bajar el contraste**, en el orden exacto de la
+impedancia. Eso es coherente con la explicación de D49 y la precisa: el término de contraste
+`(K_sólido − K_fluido)u_i` es una **diferencia de operadores grandes**, y el error de interpolación de
+`u_i` en el interior no se hace pequeño al bajar el contraste. El campo dispersado verdadero sí se
+achica con el contraste, así que el error espurio —que no se achica— domina cada vez más. De ahí que
+tungsteno (contraste 66.9) sea el mejor caso de la dispersada y hueso (4.6) el peor.
+
+**Lo que esto NO dice.** No dice que la dispersada esté mal implementada: su límite transparente
+converge como `c_s²` y las dos matrices coinciden exactamente cuando los materiales son iguales. Dice
+que **esta malla no resuelve el término de contraste** para contrastes moderados, y que el número
+"bueno" de la total+restricción se sostiene por una cancelación entre el dipolo suprimido y el error
+de discretización. Ninguna de las dos es una validación limpia del caso elástico, y así queda escrito.
+
+**Nota de método.** La corrida de tests que se lanzó en paralelo con este barrido **se cortó por
+timeout** (900 s, código 124): los dos jobs se peleaban la CPU, no era un fallo del código. Se repitió
+en solitario para tener el veredicto.
+
+**Insumo para el siguiente paso**: la ley `3/(2g+1)` (Bruus 2012) permite predecir la traslación
+dipolar y separarla del resto del campo. Con la tabla de arriba, la hipótesis a testear es que la
+traslación sale bien y el error está en el resto del campo (que es lo que el contraste moderado
+amplifica). Eso decide si hay que refinar el sólido, el fluido, o cambiar de formulación.
