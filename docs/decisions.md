@@ -2303,3 +2303,47 @@ una malla no conforme lo rompe en silencio.
 kernel occ nativo desde el STL (no soportado por gmsh para STL) o bien acople con nodos no coincidentes
 (mortar). Lo segundo es lo correcto numéricamente y es un desarrollo propio, no un ajuste. Queda como el
 siguiente paso de U9.
+
+## D56 — El acople de N regiones valida contra la teoría de capas (0.13 % en piel + hueso)
+
+**Qué se hizo.** `fem/multicapa.py` resuelve **N regiones** (fluidos y sólidos elásticos mezclados) en una
+malla conforme, sin tocar `solve_coupled` ni ninguna fórmula: reusa sus primitivas y agrega sólo el
+ensamblado por grupo.
+
+La observación que hace que esto sea chico: con malla conforme y P1, las interfaces entre dos regiones del
+**mismo tipo** no necesitan bloque. Los dos lados comparten los mismos gdl, así que la continuidad de `u`
+(sólido-sólido) y de `p` (fluido-fluido) es automática, el equilibrio de tracciones sale de la forma
+débil al ensamblar cada región con **su** rigidez, y la continuidad de `(1/ρ)·∂p/∂n` sale sola porque cada
+elemento lleva su `1/ρ`. La única interfaz que necesita bloque explícito es **fluido-sólido**, donde las
+incógnitas son distintas.
+
+**Lo medido** (agua | placa | agua, incidencia normal, ABC sólo en entrada y salida):
+
+| caso | FEM | exacto | error |
+|---|---|---|---|
+| sin capa (onda plana sola) | 1.00184 | 1 | 0.18 % |
+| capa con las propiedades del agua | 1.00187 | 1 | 0.19 % |
+| placa de hueso 2.5 mm (λ/20) | 0.5892 | 0.5807 | **1.45 %** |
+| piel 2 mm + hueso 5 mm (λ/18) | 0.9960 | 0.9947 | **0.13 %** |
+
+Y el error **baja al refinar**: 5.33 % (λ/10) → **1.45 % (λ/20)** en la placa. Eso es lo que distingue
+discretización de un error de formulación disfrazado.
+
+**Dos errores propios, que quedan anotados porque los dos eran silenciosos.**
+
+1. **ABC en las paredes laterales.** La primera versión la aplicaba a **toda** la frontera de fluido. Ahí
+   la onda plana tiene `∂p/∂n = 0` y la ABC impone `∂p/∂n = i·k·p`: una condición espuria que refleja. El
+   caso base daba |p| entre 0.82 y 1.37 y **no mejoraba al refinar** (λ/12: 0.819; λ/20: 0.848) — esa
+   insensibilidad a `h` era la pista de que no era discretización. Con ABC sólo en entrada y salida da
+   1.002. En un ducto con onda normal, las paredes son rígidas, no absorbentes.
+
+2. **`1+R` no es la presión transmitida.** En la fórmula de matriz de transferencia del test devolvía
+   `1+R`, que es la presión total en la **primera** interfaz. Para una capa de cuarto de onda eso da
+   **1.814** donde el FEM da 0.581: es el transformador de impedancia, la presión en la cara de entrada
+   sube, pero no es lo que sale del otro lado. Lo correcto es `p_N = M11·p0 + M12·u0`. La señal fue que
+   `|t| > 1` sin pérdidas es imposible; el test tenía el error, no el solver.
+
+**Lo que esto habilita**: la cadena piel → hueso → cóclea ya se puede resolver con materiales distintos por
+región. Lo que sigue es conectarla al dashboard y contrastarla contra la transmisión craneal **medida**
+(31 ± 7 % parietal a 500 kHz, Riis 2022), que es más exigente que la fórmula de capas porque incluye
+geometría, curvatura y pérdidas.
