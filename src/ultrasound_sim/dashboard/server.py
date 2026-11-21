@@ -253,6 +253,8 @@ class Handler(BaseHTTPRequestHandler):
                 "ok": True,
                 "modos": {k: v["etiqueta"] for k, v in elastic_sphere.MODOS.items()},
                 "materiales": list(elastic_sphere.MATERIALES),
+                "formulaciones": {k: v["etiqueta"] for k, v in elastic_sphere.FORMULACIONES.items()},
+                "notas_formulacion": {k: v["nota"] for k, v in elastic_sphere.FORMULACIONES.items()},
             })
         elif partes.path == "/api/sweeps":
             self._json({

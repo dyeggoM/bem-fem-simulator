@@ -550,6 +550,16 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
         </select>
       </section>
 
+      <section>
+        <label>Formulación del sólido
+          <span class="tip" title="Son dos maneras de escribir la misma ecuación, y NO dan lo mismo en esta malla. TOTAL resuelve el desplazamiento completo; es la que está sellada (4.29 % en acero) pero suprime una respuesta dipolar física, así que ese número está en parte cancelado (D48). DISPERSADA resuelve u_s = u - u_i aplicando el operador de contraste: es la correcta en el continuo — da la traslación 3/(2g+1) al 1-2 % y el caso transparente exacto — pero es una resta de términos grandes y contra Faran da 19.49 % en acero y 44.14 % en aluminio (D49). Si ves 19 % en acero con la dispersada, no es un bug: es el estado del arte de esta implementación.">?</span>
+        </label>
+        <select id="esfFormulacion">
+          <option value="total" selected>total + traslación nula (sellada, 4.29 % acero)</option>
+          <option value="dispersada">dispersada (correcta, 19.49 % acero)</option>
+        </select>
+      </section>
+
       <div class="fila-botones">
         <button class="btn" id="btnEsfera">resolver esfera</button>
         <button class="btn mini" id="btnEsferaCancelar" disabled>cancelar</button>
@@ -558,6 +568,25 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
       <p class="pie" id="esfEstado">sin lanzar</p>
       <p class="hint" id="esfSello"></p>
       <p class="hint" id="esfMetricas"></p>
+
+      <section>
+        <label>Resultados</label>
+        <div class="fila-botones">
+          <button class="btn mini" id="btnEsfJson">descargar JSON</button>
+          <button class="btn mini" id="btnEsfCsv">descargar CSV (θ)</button>
+          <button class="btn mini" id="btnEsfGuardar">guardar en el historial</button>
+        </div>
+        <p class="hint" id="esfDescarga">Corré una simulación para poder exportar. El JSON lleva todo
+          (curvas, mapa, métricas y sello); el CSV lleva sólo |p_s|(θ) del FEM y de Faran, que es lo
+          que se compara en una hoja de cálculo.</p>
+      </section>
+
+      <section>
+        <label>Historial de esta sesión
+          <span class="tip" title="Se guarda en el navegador (localStorage), no en el servidor. Sirve para comparar corridas: al marcar una, sus curvas se superponen punteadas en las gráficas de arriba. Se conservan las últimas 12.">?</span>
+        </label>
+        <div id="esfHistorial" class="historial"><p class="hint">todavía no guardaste ninguna corrida</p></div>
+      </section>
     </div>
 
   <main class="vista" id="vistaEscenaMain" hidden>

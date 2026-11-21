@@ -144,7 +144,11 @@ CRITERIOS: dict[str, Criterio] = {
     "volumen_esfera_elastica": Criterio(
         id="volumen_esfera_elastica",
         descripcion="error del campo dispersado por una esfera elástica contra la serie de Faran",
-        referencia=0.0, tolerancia=0.06, modo="abs", unidad="L2 relativo",
+        # `máx. relativo` y no `L2`: la métrica que recibe este criterio es el máximo de la diferencia
+        # sobre la curva angular, no una norma L2. Decía "L2" y medía Linf, que es la clase de texto
+        # que hace que un número parezca otra cosa (D49, apéndice 3: el máximo es además frágil
+        # porque un lóbulo corrido por el facetado lo infla sin que la amplitud esté mal).
+        referencia=0.0, tolerancia=0.06, modo="abs", unidad="máx. relativo",
         fuente="Faran (1951) / D46: el acoplado da 4.21 % a ka = 1 en dominio 4a con h = a/4.5",
     ),
     "barrido_d30": Criterio(

@@ -46,6 +46,19 @@ def test_parametros_fuera_de_rango_se_rechazan():
         elastic_sphere.resolver({"material": "plastilina"})
 
 
+def test_la_formulacion_es_un_contrato_de_la_vista():
+    """D49: la vista deja elegir entre la formulación total y la dispersada, y la elección **no** es
+    cosmética. Se verifica el contrato: se rechaza un nombre que no existe y la dispersada no arrastra
+    la restricción (que ahí suprimiría justo el dipolo que la formulación recupera)."""
+    with pytest.raises(ValueError):
+        elastic_sphere.resolver({"formulacion": "magica", "modo": "rapida"})
+    assert set(elastic_sphere.FORMULACIONES) == {"total", "dispersada"}
+    # las dos etiquetas tienen que llevar el número medido: si alguien las deja sin dato, el usuario
+    # elige a ciegas entre dos formulaciones que difieren en un factor 5
+    for clave, f in elastic_sphere.FORMULACIONES.items():
+        assert "%" in f["etiqueta"], f"{clave} no dice su error medido"
+
+
 @pytest.fixture(scope="module")
 def corrida_rapida():
     """Una sola corrida del modo rápido (~4 s) para los tests que miran la salida."""
@@ -153,6 +166,27 @@ def test_un_campo_dispersado_debil_no_se_sella_por_su_error_relativo():
           f"· sello {r['sello']['estado']}")
     assert r["sello"]["estado"] == "sin_referencia"
     assert m["error_absoluto"] < 0.05          # menos del 5 % de la incidente (1 Pa)
+
+def test_la_dispersada_no_usa_la_restriccion_y_lo_reporta():
+    """Corrida corta en la formulación dispersada: `fijar_rigidos` no aplica y la ficha tiene que
+    decirlo con `False`, no con un `True` que no se usó."""
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        r = elastic_sphere.resolver(
+            {"modo": "rapida", "ka": 1.0, "material": "acero", "puntos_angulo": 41,
+             "formulacion": "dispersada", "fijar_rigidos": True}
+        )
+    m = r["metrica"]
+    print(f"\n  dispersada: {100*m['error_relativo']:.2f} % · formulación {m['formulacion']}"
+          f" · fijar_rigidos {m['fijar_rigidos']}")
+    assert m["formulacion"] == "dispersada"
+    assert m["fijar_rigidos"] is False
+    assert m["error_absoluto"] > 0
+    # la dispersada es peor en esta malla (D49) y el sello no puede decir lo contrario
+    assert m["error_relativo"] > 0.10
+
 
 def test_la_resolucion_de_la_onda_de_corte_se_reporta():
     """La malla se elige con la longitud de onda del FLUIDO, pero un sólido blando tiene `λ_s = c_s/f`

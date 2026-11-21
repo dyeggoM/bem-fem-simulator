@@ -5,7 +5,14 @@
  * cliente es el costo estimado, que también viene del servidor (`/api/esfera/cost`).
  */
 
-const ESF = { ka: 1.0, freq_khz: 100, modo: 'precisa', jobId: null, timer: null, listo: false };
+const ESF = {
+  ka: 1.0, freq_khz: 100, modo: 'precisa', jobId: null, timer: null, listo: false,
+  ultimo: null,        // el resultado completo de la última corrida, para exportar
+  historial: [],       // corridas guardadas en localStorage
+  superpuestas: new Set(),  // índices del historial que se dibujan encima
+};
+const ESF_CLAVE = 'esf.historial.v1';
+const ESF_MAX_HISTORIAL = 12;
 
 function esf$(id) { return document.getElementById(id); }
 
@@ -30,12 +37,151 @@ window.esfIniciar = function () {
       esfEstimar();
     });
     esf$('esfModo').addEventListener('change', (e) => { ESF.modo = e.target.value; esfEstimar(); });
+    // En la dispersada no hay modos rígidos que restringir: pedirlos sería contradictorio y el
+    // servidor lo rechaza. Se deshabilita el selector en vez de dejar que el usuario elija en vano.
+    esf$('esfFormulacion').addEventListener('change', (e) => {
+      const dispersada = e.target.value === 'dispersada';
+      esf$('esfRigidos').disabled = dispersada;
+      esf$('esfRigidos').title = dispersada
+        ? 'No aplica: en la formulación dispersada el desplazamiento medio de u_s ya es el de la física.'
+        : '';
+    });
     esf$('btnEsfera').addEventListener('click', esfLanzar);
     esf$('btnEsferaCancelar').addEventListener('click', esfCancelar);
+    esf$('btnEsfJson').addEventListener('click', () => esfDescargarJson());
+    esf$('btnEsfCsv').addEventListener('click', () => esfDescargarCsv());
+    esf$('btnEsfGuardar').addEventListener('click', esfGuardar);
+    esfCargarHistorial();
+    esfPintarHistorial();
     ESF.inicializado = true;
   }
   esfEstimar();
 };
+
+// ---------------------------------------------------------------------------------------------
+// exportación
+// ---------------------------------------------------------------------------------------------
+function esfDescargar(nombre, texto, tipo) {
+  const blob = new Blob([texto], { type: tipo });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nombre;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function esfNombreBase() {
+  const m = ESF.ultimo.metrica;
+  const sello = ESF.ultimo.sello.estado;
+  return `esfera_${m.material}_ka${m.ka.toFixed(2)}_${m.formulacion}_${m.modo}_${sello}`.replace(
+    /[^a-zA-Z0-9._-]+/g, '_');
+}
+
+function esfDescargarJson() {
+  if (!ESF.ultimo) { esf$('esfDescarga').textContent = 'todavía no hay resultados: lanzá una corrida.'; return; }
+  // se agrega la fecha y la versión del formato: un JSON sin fecha no se puede ordenar después
+  const salida = {
+    formato: 'ultrasound-sim/dashboard/esfera/1',
+    fecha: new Date().toISOString(),
+    ...ESF.ultimo,
+  };
+  esfDescargar(`${esfNombreBase()}.json`, JSON.stringify(salida, null, 2), 'application/json');
+  esf$('esfDescarga').textContent = `descargado ${esfNombreBase()}.json`;
+}
+
+function esfDescargarCsv() {
+  if (!ESF.ultimo) { esf$('esfDescarga').textContent = 'todavía no hay resultados: lanzá una corrida.'; return; }
+  const a = ESF.ultimo.angulos;
+  const filas = ['theta_deg,abs_p_s_fem,abs_p_s_faran,delta_fase_deg'];
+  for (let i = 0; i < a.theta_deg.length; i += 1) {
+    const d = ((a.fem_fase_deg[i] - a.faran_fase_deg[i] + 540) % 360) - 180;
+    filas.push(`${a.theta_deg[i].toFixed(4)},${a.fem_modulo[i].toExponential(8)},`
+      + `${a.faran_modulo[i].toExponential(8)},${d.toFixed(4)}`);
+  }
+  esfDescargar(`${esfNombreBase()}.csv`, filas.join('\n'), 'text/csv');
+  esf$('esfDescarga').textContent = `descargado ${esfNombreBase()}.csv (${a.theta_deg.length} puntos)`;
+}
+
+// ---------------------------------------------------------------------------------------------
+// historial (localStorage: no hay backend de resultados y no hace falta para comparar en sesión)
+// ---------------------------------------------------------------------------------------------
+function esfCargarHistorial() {
+  try {
+    ESF.historial = JSON.parse(localStorage.getItem(ESF_CLAVE) || '[]');
+    if (!Array.isArray(ESF.historial)) ESF.historial = [];
+  } catch { ESF.historial = []; }
+}
+
+function esfGuardarHistorial() {
+  try {
+    localStorage.setItem(ESF_CLAVE, JSON.stringify(ESF.historial));
+  } catch {
+    // el navegador puede rechazar por cuota: se avisa y se recorta a la mitad
+    ESF.historial = ESF.historial.slice(0, Math.ceil(ESF_MAX_HISTORIAL / 2));
+    try { localStorage.setItem(ESF_CLAVE, JSON.stringify(ESF.historial)); } catch { /* nada */ }
+  }
+}
+
+function esfGuardar() {
+  if (!ESF.ultimo) { esf$('esfDescarga').textContent = 'todavía no hay resultados: lanzá una corrida.'; return; }
+  const m = ESF.ultimo.metrica;
+  ESF.historial.unshift({
+    fecha: new Date().toISOString(),
+    material: m.material, formulacion: m.formulacion, modo: m.modo, ka: m.ka,
+    error_rel: m.error_relativo, error_abs: m.error_absoluto,
+    razon: m.razon_amplitudes, contraste: m.contraste_impedancia,
+    sello: ESF.ultimo.sello.estado,
+    theta_deg: ESF.ultimo.angulos.theta_deg,
+    fem_modulo: ESF.ultimo.angulos.fem_modulo,
+  });
+  ESF.historial = ESF.historial.slice(0, ESF_MAX_HISTORIAL);
+  esfGuardarHistorial();
+  ESF.superpuestas.clear();
+  esfPintarHistorial();
+}
+
+function esfPintarHistorial() {
+  const caja = esf$('esfHistorial');
+  if (!caja) return;
+  if (!ESF.historial.length) {
+    caja.innerHTML = '<p class="hint">todavía no guardaste ninguna corrida</p>';
+    return;
+  }
+  caja.innerHTML = '';
+  ESF.historial.forEach((h, i) => {
+    const fila = document.createElement('label');
+    fila.className = 'hist-fila';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = ESF.superpuestas.has(i);
+    cb.addEventListener('change', () => {
+      if (cb.checked) ESF.superpuestas.add(i); else ESF.superpuestas.delete(i);
+      if (ESF.ultimo) esfPintar(ESF.ultimo);
+    });
+    const t = document.createElement('span');
+    const cuando = h.fecha.slice(11, 19);
+    t.textContent = `${cuando} · ${h.material} · ${h.formulacion} · ka ${h.ka.toFixed(2)}`
+      + ` · ${(100 * h.error_rel).toFixed(2)} % · ${h.sello}`;
+    fila.appendChild(cb);
+    fila.appendChild(t);
+    caja.appendChild(fila);
+  });
+  const limpiar = document.createElement('button');
+  limpiar.className = 'btn mini';
+  limpiar.textContent = 'borrar historial';
+  limpiar.addEventListener('click', esfBorrarHistorial);
+  caja.appendChild(limpiar);
+}
+
+function esfBorrarHistorial() {
+  ESF.historial = [];
+  ESF.superpuestas.clear();
+  esfGuardarHistorial();
+  esfPintarHistorial();
+}
 
 async function esfEstimar() {
   try {
@@ -63,6 +209,7 @@ async function esfLanzar() {
     ka: ESF.ka, frecuencia_hz: ESF.freq_khz * 1e3, modo: ESF.modo,
     material: esf$('esfMaterial').value,
     fijar_rigidos: esf$('esfRigidos').value === 'si',
+    formulacion: esf$('esfFormulacion').value,
     puntos_angulo: 121,
   };
   try {
@@ -115,6 +262,7 @@ async function esfCancelar() {
 
 function esfPintar(r) {
   const m = r.metrica;
+  ESF.ultimo = r;   // queda disponible para exportar y para volver a pintar al cambiar superposiciones
 
   // ---- mapa |p_s| en el plano x-z (el interior de la esfera va enmascarado, no rellenado)
   const mapa = r.mapa;
@@ -137,7 +285,17 @@ function esfPintar(r) {
 
   // ---- módulo contra ángulo: FEM contra Faran
   const a = r.angulos;
+  // corridas guardadas que el usuario marcó: van punteadas y finas para no tapar la actual
+  const trazasHist = [...ESF.superpuestas]
+    .map((i) => ESF.historial[i])
+    .filter(Boolean)
+    .map((h, k) => ({
+      type: 'scatter', mode: 'lines', name: `guardada ${h.fecha.slice(11, 19)} ${h.material} ${h.formulacion}`,
+      x: h.theta_deg, y: h.fem_modulo,
+      line: { color: `hsl(${(k * 67 + 280) % 360} 70% 62%)`, width: 1.1, dash: 'dot' },
+    }));
   Plotly.react('angEsf', [
+    ...trazasHist,
     { type: 'scatter', mode: 'lines+markers', name: 'FEM acoplado', x: a.theta_deg, y: a.fem_modulo,
       line: { color: '#58a6ff', width: 1.6 }, marker: { size: 3 } },
     { type: 'scatter', mode: 'lines', name: 'Faran (exacto)', x: a.theta_deg, y: a.faran_modulo,
@@ -168,10 +326,15 @@ function esfPintar(r) {
   });
 
   const resid = m.residuo_rigido === null ? '—' : m.residuo_rigido.toExponential(1);
+  const formul = m.formulacion === 'dispersada'
+    ? 'dispersada (u_s = u − u_i, operador de contraste)'
+    : 'total + traslación media nula';
   esf$('esfMetricas').textContent =
-    `${m.material} · contraste ${m.contraste_impedancia.toFixed(2)}× · ka ${m.ka.toFixed(2)} · `
+    `${m.material} · ${formul} · contraste ${m.contraste_impedancia.toFixed(2)}× · ka ${m.ka.toFixed(2)} · `
     + `radio ${m.radio_mm.toFixed(2)} mm · ${m.nodos.toLocaleString('es')} nodos `
     + `(${m.elementos_solidos} tets sólidos) · ${m.segundos.toFixed(1)} s · `
+    + `error máx. ${(100 * m.error_relativo).toFixed(2)} % · L2 `
+    + `${(100 * (m.error_l2_relativo ?? m.error_relativo)).toFixed(2)} % · `
     + `razón de amplitudes ${m.razon_amplitudes.toFixed(3)} · error absoluto `
     + `${m.error_absoluto.toExponential(2)} Pa (incidente = 1 Pa) · `
     + `fuerza neta no cancelada ${resid} N`
@@ -196,6 +359,17 @@ function esfPintar(r) {
       + ' el fluido, la condición de traslación media nula deja de valer y se desactiva sola. El'
       + ' error RELATIVO no es un indicador útil porque el campo dispersado es muy débil: mirá el'
       + ' error absoluto, que es contra la incidente de 1 Pa.';
+  } else if (sello.estado === 'fuera' && m.formulacion === 'dispersada') {
+    // D49: la formulación correcta es peor contra Faran en esta malla, y el patrón medido es que el
+    // error crece al bajar el contraste (tungsteno 10.70 %, acero 19.49 %, aluminio 44.14 %, hueso
+    // 54.53 %): el término de contraste es una diferencia de operadores grandes y el error de
+    // interpolación de la incidente no se achica al bajar el contraste.
+    esf$('esfSello').textContent +=
+      ' Esto es la formulación dispersada: es la correcta en el continuo (traslación 3/(2g+1) al'
+      + ' 1-2 %, caso transparente exacto) pero su término de contraste es una resta de operadores'
+      + ' grandes y el error de interpolación de la incidente no se achica al bajar el contraste.'
+      + ' Medido: tungsteno 10.70 %, acero 19.49 %, aluminio 44.14 %, hueso 54.53 % (D49). El número'
+      + ' que se reporta hoy es el de la formulación total.';
   } else if (sello.estado === 'fuera' && m.fijar_rigidos) {
     // D48: la restricción suprime una respuesta dipolar que Faran SÍ incluye (Feuillade y Clay 1999,
     // "Anderson (1950) revisited", §IV). El error crece con 3/(2·g+1), g = ρ_sólido/ρ_fluido: chico
@@ -212,4 +386,5 @@ function esfPintar(r) {
       + 'Para un número que se reporte, usá la malla precisa.';
   }
   esf$('esfEstado').textContent = 'listo';
+  esfPintarHistorial();
 }

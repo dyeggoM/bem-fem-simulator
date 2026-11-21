@@ -2007,3 +2007,39 @@ cambiando la formulación. Se lanza la convergencia en `h` para el acero con la 
 formulación total+restricción, cuya traslación es 0 por construcción. A `ka = 0.1` eso se ve como un
 error del 100 % en la traslación y a `ka = 1` se disimula en el 4.29 %. Queda calificado: **el sello no
 distingue "acertó" de "canceló"**, y eso es una limitación del criterio, no del método.
+
+#### D49 — apéndice 3: **no es resolución de malla**, y la métrica de máximo es frágil
+
+Convergencia en `h` de la formulación dispersada, acero a `ka = 1`, dominio 4a:
+
+| `h` | nodos | error |
+|---|---|---|
+| a/4.5 | 21 398 | 19.49 % |
+| a/6 | 47 574 | **18.84 %** |
+
+Doblar el número de nodos baja el error **0.65 puntos** (orden aparente ≈ 0.14). Eso **descarta** la
+hipótesis que había escrito en el apéndice anterior ("es resolución del resto del campo"): refinar no
+lo arregla. El error es **sistemático de la formulación o de la métrica**, no de discretización.
+
+Dos sospechosos, y el segundo es el que ahora me parece más probable:
+
+1. **El término de contraste está mal en algo que no depende de `h`.** La identidad
+   `(K_f − ω²M_f)u_i = −∮p_i(n·v)` es exacta en el continuo para cualquier `v` (se verificó con la
+   integración por partes y el caso transparente converge como `c_s²`), así que si hay un error acá
+   tiene que ser en el acoplamiento de superficie, no en el volumen.
+
+2. **La métrica es frágil.** El error se mide como el **máximo sobre la curva angular** de la
+   diferencia contra Faran. La esfera del FEM es **facetada**: con `h = a/6` hay ~6 facetas por radio,
+   o sea del orden de 10° de paso angular, y eso **desplaza los lóbulos** en lugar de atenuarlos. Un
+   lóbulo corrido unos grados da un error grande en el máximo aunque la magnitud global esté bien — y
+   ese error no baja al refinar `h` tan rápido como baja el error de amplitud. Es el mismo tipo de
+   trampa que el promedio de D43, al revés: el máximo premia el detalle más frágil.
+
+**Lo que hay que hacer antes de tocar el código**: medir el error en **puntos fijos** (o en norma L2
+sobre la curva, o en el coeficiente `C_0` de la serie) además del máximo. Si el error de los puntos
+fijos baja con `h` y el máximo no, el problema es la métrica y la implementación está bien. Si ninguno
+baja, es la formulación. Esa distinción decide el trabajo siguiente y todavía no la tengo.
+
+**Mientras tanto**, la UI muestra las dos formulaciones con su número medido y la advertencia de que
+la correcta da peor: no se esconde el resultado incómodo ni se presenta el 4.29 % como si fuera una
+validación limpia.

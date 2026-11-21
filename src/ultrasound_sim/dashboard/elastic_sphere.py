@@ -63,6 +63,21 @@ _LIMITES = {"frecuencia_hz": (20e3, 400e3), "ka": (0.3, 3.0), "puntos_angulo": (
 #: deja como interruptor de seguridad mientras se reemplaza la formulación.
 CONTRASTE_MINIMO = 2.5
 
+#: Las dos formulaciones del sólido, con el número medido que las distingue. No es una preferencia:
+#: la dispersada es la correcta en el continuo (da la traslación `3/(2g+1)` al 1-2 % y el caso
+#: transparente exacto) pero es una resta de términos grandes y **contra Faran es peor** (19.49 % en
+#: acero contra 4.29 %). La total+restricción es incorrecta pero numéricamente cómoda. D49.
+FORMULACIONES: dict[str, dict[str, Any]] = {
+    "total": {
+        "etiqueta": "total + traslación nula (la sellada: 4.29 % en acero)",
+        "nota": "Suprime el dipolo físico (D48); el 4 % está en parte cancelado, no ganado.",
+    },
+    "dispersada": {
+        "etiqueta": "dispersada (la correcta: traslación exacta, 19.49 % en acero)",
+        "nota": "Correcta en el continuo y mal condicionada en esta malla (D49).",
+    },
+}
+
 #: Debajo de este `|p_s|` máximo (relativo a la incidente, que vale 1) el error *relativo* deja de ser
 #: un indicador útil: el denominador se achica pero el error absoluto no. Ahí el sello pasa a
 #: `sin_referencia` y se informa el error absoluto, en vez de reportar "23 %" de algo que vale 1/50.
@@ -94,6 +109,13 @@ def _ka(datos: dict) -> float:
     if not (lo <= ka <= hi):
         raise ValueError(f"ka fuera de [{lo}, {hi}]: {ka}")
     return ka
+
+
+def _formulacion(datos: dict) -> str:
+    nombre = str(datos.get("formulacion", "total"))
+    if nombre not in FORMULACIONES:
+        raise ValueError(f"formulacion desconocida {nombre!r}; hay {sorted(FORMULACIONES)}")
+    return nombre
 
 
 def _material(datos: dict) -> dict[str, float]:
@@ -146,7 +168,10 @@ def resolver(datos: dict, trabajo=None) -> dict[str, Any]:
     nombre_modo, modo = _modo(datos)
     nombre_material = str(datos.get("material", "acero"))
     prop = _material(datos)
-    fijar = bool(datos.get("fijar_rigidos", True))
+    nombre_formulacion = _formulacion(datos)
+    # en la dispersada no hay nada que restringir: el desplazamiento medio de `u_s` ya es el de la
+    # física, y forzarlo suprimiría justo el dipolo que la formulación recupera
+    fijar = bool(datos.get("fijar_rigidos", True)) if nombre_formulacion == "total" else False
     automatico = False
 
     agua = WATER
@@ -168,7 +193,7 @@ def resolver(datos: dict, trabajo=None) -> dict[str, Any]:
     # el campo sale **53×** el exacto (5264 % de error) con la restricción, y 1.13× sin ella (23 %).
     # Se desactiva sola y se informa, en vez de dejar que el usuario pida un número que no existe.
     contraste = (prop["rho"] * prop["c_p"]) / (agua.rho * float(agua.c))
-    if fijar and contraste < CONTRASTE_MINIMO:
+    if nombre_formulacion == "total" and fijar and contraste < CONTRASTE_MINIMO:
         fijar = False
         automatico = True
 
@@ -177,7 +202,11 @@ def resolver(datos: dict, trabajo=None) -> dict[str, Any]:
     paso(0.35, f"resolviendo el acoplado ({mall.n_nodes} nodos)")
 
     try:
-        res = coupled3d.resolver(mall, agua, solido, f, abc_order=2, fijar_rigidos=fijar)
+        res = coupled3d.resolver(
+            mall, agua, solido, f, abc_order=2,
+            fijar_rigidos=(fijar if nombre_formulacion == "total" else None),
+            formulacion=nombre_formulacion,
+        )
     except Exception as exc:  # noqa: BLE001
         raise RuntimeError(f"el solve acoplado falló: {exc}") from exc
 
@@ -192,7 +221,13 @@ def resolver(datos: dict, trabajo=None) -> dict[str, Any]:
     fem = coupled3d._interpolar(mall, res["p_s"], puntos)
 
     util = np.abs(exacto) > 1e-3 * np.abs(exacto).max()
+    # Dos métricas del mismo campo, y no son intercambiables. El MÁXIMO es el que sella (criterio),
+    # pero es frágil: la esfera del FEM es facetada y eso corre los lóbulos unos grados, lo que infla
+    # el máximo sin que la amplitud esté mal (D49, apéndice 3: refinar 2.2× sólo bajó 19.49 → 18.84 %).
+    # La L2 pesa toda la curva y no depende de un punto. Se reportan las dos.
     error = float(np.abs(fem[util] - exacto[util]).max() / np.abs(exacto[util]).max())
+    delta = np.abs(fem[util] - exacto[util])
+    error_l2 = float(np.sqrt(np.sum(delta**2) / np.sum(np.abs(exacto[util]) ** 2)))
     razon = float(np.abs(fem).max() / np.abs(exacto).max())
     # error absoluto, con la incidente (1 Pa) como escala: es el que sigue teniendo sentido cuando el
     # campo dispersado es muy débil
@@ -220,7 +255,8 @@ def resolver(datos: dict, trabajo=None) -> dict[str, Any]:
     return {
         "ok": True,
         "metrica": {
-            "error_relativo": error, "error_absoluto": error_abs, "razon_amplitudes": razon,
+            "error_relativo": error, "error_l2_relativo": error_l2,
+            "error_absoluto": error_abs, "razon_amplitudes": razon,
             "ka": float(coef["ka"]), "contraste_impedancia": contraste,
             "restriccion_automatica": automatico,
             "elementos_por_lambda_corte": float(elementos_por_corte),
@@ -230,7 +266,7 @@ def resolver(datos: dict, trabajo=None) -> dict[str, Any]:
             "elementos_solidos": int(len(mall.tets_solid)),
             "elementos_fluidos": int(len(mall.tets_fluid)),
             "segundos": time.time() - t0, "modo": nombre_modo,
-            "fijar_rigidos": fijar,
+            "fijar_rigidos": fijar, "formulacion": nombre_formulacion,
             "residuo_rigido": None if res["residuo_rigido"] is None
             else float(np.abs(res["residuo_rigido"]).max()),
         },

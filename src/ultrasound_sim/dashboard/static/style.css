@@ -168,3 +168,14 @@ body.vista-volumen #estado { display:none !important; }
 .fila-botones .hint { margin:0; }
 .chips { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
 .mini { font-weight:400; text-transform:none; letter-spacing:0; opacity:.75; }
+
+
+/* historial de corridas (vista esfera elástica): una fila por corrida guardada, con el checkbox que
+   la superpone en las gráficas. La lista puede crecer, así que scrollea en vez de empujar el layout. */
+.historial { display: flex; flex-direction: column; gap: 4px; max-height: 210px; overflow-y: auto; }
+.hist-fila {
+  display: flex; align-items: center; gap: 7px; font-size: 10.5px; color: #8b95a1;
+  padding: 3px 5px; border-radius: 4px; cursor: pointer;
+}
+.hist-fila:hover { background: rgba(88, 166, 255, 0.08); }
+.hist-fila input { margin: 0; cursor: pointer; }
