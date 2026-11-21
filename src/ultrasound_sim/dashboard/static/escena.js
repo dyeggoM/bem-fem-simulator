@@ -245,14 +245,10 @@ function escCambiarVista(vista) {
   const mainEscena = esc$('vistaEscenaMain');
   if (mainCampo) mainCampo.hidden = vista !== 'campo';
   mainEscena.hidden = vista !== 'escena';
-  // la línea de estado de abajo es del explorador de campo ("32 fuentes · baffle…"): en la vista
-  // de escena confunde, así que se oculta
-  const pieCampo = esc$('estado');
-  if (pieCampo) pieCampo.hidden = vista === 'escena';
-  // el aviso naranja también es del explorador de campo (habla del foco de la apertura): en la
-  // vista de escena es peor que no tenerlo
-  const avisoCampo = esc$('aviso');
-  if (avisoCampo) avisoCampo.hidden = vista === 'escena';
+  // el aviso naranja y la línea de estado son del explorador de campo ("32 fuentes · baffle…",
+  // habla del foco de la apertura): en la vista de escena confunden. Se ocultan por CSS
+  // (`body.vista-escena`), no por `hidden`: `app.js` los re-muestra cuando llega su respuesta.
+  document.body.classList.toggle('vista-escena', vista === 'escena');
   if (vista === 'escena') {
     if (!ESC.materiales.length) escCargarMateriales().then(escEstimar);
     else if (!ESC.resuelto) escEstimar();
