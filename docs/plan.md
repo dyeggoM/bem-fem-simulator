@@ -8,6 +8,41 @@ Simulador de propagación de ultrasonido en tejido blando, hueso y fluidos cocle
 métodos numéricos independientes** (FEM y BEM) para poder contrastarlos: la discrepancia entre ambos
 es la señal de un error o de una suposición mal puesta.
 
+
+## Estado entregado (al 2026-11-20)
+
+Resumen de lo que está *cerrado con número medido*, no de lo que está escrito:
+
+- **Fase 0 (1D)** — campo FEM vs analítico *0.399 %* L2; R/T de interfaz única contra impedancias.
+- **Fase 1 (FEM 2D + ABC)** — R y T contra analítico *0.511 %*; |R| 0.93678 vs 0.93726; reflexión
+  espuria de la ABC *−73 dB* (criterio: < −40 dB).
+- **Fase 2 (hueso elástico acoplado)** — |T| *0.079 %*; balance |R|²+|T|² 0.999017 / 1.000075;
+  Snell 52.53° vs 52.94°; resonancia de espesor +0.012 % (acero), +0.041 % (hueso).
+- **Fase 3 (BEM 2D)** — cilindro rígido vs serie de Bessel *0.05 %* (ka=1) y *0.14 %* (ka=2);
+  formulaciones `standard` / `burton_miller` / `chief` seleccionables.
+- **Fase 4 (contraste BEM vs FEM)** — |FEM−BEM| *0.97 %* (ka=1), *0.59 %* (ka=2); |BEM−serie|
+  0.05 %/0.14 %. Encontró el error de formulación D12, que ninguna prueba unitaria veía.
+- **Fase 4B (fuentes, arreglos, focalización)** — 15 configuraciones (`out/focusing_study.csv`);
+  los cuatro arreglos quedan dentro del 2 % de la apertura continua (aire 40k +1.3 %, 250k +0.4 %,
+  500k +1.6 %, 1M +1.8 %); el Langevin monolítico no (+13.4 %). Criterio corregido: lo que manda es
+  la cantidad de elementos, no el `pitch/λ` (λ/4 basta para el 2 %).
+- **Fase 5a (corte de cóclea)** — malla converge +0.6 %, sin flujo espurio (1e-15), cáscara vs placa
+  −1.52 %/−0.52 %. Dos criterios *no alcanzables y diagnosticados* (xfail con razón): la cápsula es
+  una cavidad cerrada sin pérdidas, no hay un `T` que converja al de una placa.
+- **Fase 5b-2 (membrana basilar)** — `Q` de la cavidad *287 → < 5*; absorción `P_memb/P_inc` 0.733;
+  balance de energía *0.46 %*. Re-barrido de sensibilidad (D30): espesor 53 %, `c_p` 16 %,
+  atenuación 9.6 %, `c_s` 8.2 %, `Z_r` 0.3 %.
+- **Fase 6a (núcleo 3D)** — onda plana *3.53 %* a ppw 20, orden medido 1.88/1.94/1.97; ABC vs pared
+  rígida 9.57 % vs 100 %; fuente puntual reproduce el Green 3D (amplitud 0.9903); pistón vs
+  Rayleigh-Sommerfeld *0.0000 %*; R/T estratificado 3D *2.91 %* / *2.11 %* contra la matriz de
+  transferencia. Techo: el costo, no la física.
+- **UI (D27/D31)** — dashboard local con motor de campo, editor de fuentes con arrastre, panel de
+  cóclea y métricas; 250 tests en verde (1 xfail documentado).
+
+**Pendiente y por qué**: dispersión penetrable 3D (el operador del dispersado tiene que ser el del
+fondo; ver D32), elasticidad 3D, geometría de CT, referencia externa Elmer/openCFS, y la UI de
+trabajo (abajo).
+
 ## Física y decisiones de modelado (del plan de Diego)
 
 1. **Los fluidos mandan primero.** Perilinfa/endolinfa se comportan como agua: acústica escalar,
@@ -165,6 +200,88 @@ es la señal de un error o de una suposición mal puesta.
   **5.3 s** por solve; un cubo de 3 λ a ppw 12 no termina en 10 min. Falta para "cóclea 3D": R/T
   estratificado en 3D, dispersión contra obstáculo, elasticidad 3D y geometría de CT.
 - **Fase 7 — Opcional**: híbrido FEM-BEM, pulsos en tiempo, GUI (frontend C# si se quiere).
+
+
+## Fase 8 — UI de trabajo: del explorador de campo al banco de simulación
+
+### Qué hay hoy, y dónde está el hueco
+
+La UI actual (D27/D31) responde *"¿cómo se ve el campo de esta apertura?"*. No responde *"corré este
+problema FEM/BEM y mostrame qué salió"*. Concretamente:
+
+| lo que hay | lo que falta para trabajar |
+|---|---|
+| motor de campo tipo Rayleigh sobre aperturas (2D) | correr `fem.helmholtz2d`, `fem.elastic2d`, `fem.coupled2d`, `bem.helmholtz2d`, `fem.helmholtz3d` |
+| una sola región implícita (baffle o espacio libre) | escena: regiones con material, interfaces, dispersores |
+| sliders de apertura y foco | geometría y malla editables, con vista previa de la malla |
+| campo en un plano fijo | campo de cualquier solver, cortes, y 3D con rebanadas |
+| un solve por click, síncrono | trabajos con progreso y cancelación (un 3D tarda minutos) |
+| panel de cóclea con 3 parámetros | la escena de cóclea completa (cápsula + scalae + membrana + ventanas) |
+| sin barridos | barrido de frecuencia/geometría en cola, con CSV y comparación entre corridas |
+
+El punto delicado no es pintar más cosas: es que **la UI no puede inventar física**. Cada resultado
+tiene que decir contra qué número ya validado se comprobó.
+
+### Principio rector
+
+La UI es un **cliente de los solvers que ya existen**, no un segundo simulador. Todo número que
+muestre sale de un módulo con test. Si la UI necesita algo que la librería no tiene, primero se
+agrega a la librería con su criterio, después se enchufa.
+
+### Las fases
+
+- **U1 — Escena 2D + FEM acústico.** Editor de regiones rectangulares (material por región),
+  vista previa de malla con el conteo y el costo estimado, selector de formulación
+  (total/dispersado), ABC-1/BGT-2, frecuencia, y mapa de |p| + cortes.
+  *Aceptación*: desde la UI, la capa agua/tejido/agua reproduce R y T de la Fase 1 dentro de **2 %**
+  (la librería da 0.511 % — la UI no debe empeorarlo más de lo que explica su propia malla), y la
+  escena guarda/carga en JSON con la malla reproducible bit a bit.
+  *Bloqueante técnico*: el servidor es síncrono hoy; un solve 2D de 5 k elementos tarda ~1 s, así que
+  U1 puede quedar síncrona. Recién 3D obliga a trabajos asíncronos.
+- **U2 — Dispersores y BEM.** Elegir dispersor (círculo/elipse/polígono), ecuación de frontera
+  (`standard`/`burton_miller`/`chief`), y el **mismo problema por los dos métodos lado a lado**.
+  *Aceptación*: el cilindro rígido contra la serie de Bessel da < 2 % mostrado en pantalla, y el panel
+  de contraste FEM/BEM muestra la discrepancia y el tiempo de cada uno (referencia: 0.97 %/0.59 %,
+  FEM 12–41 ms vs BEM 203–242 ms).
+  Es la fase que más rinde: es el uso que Diego pidió desde el principio —comparar métodos y ver
+  dónde no coinciden.
+- **U3 — Cóclea de trabajo.** La escena completa de 5a+5b: cápsula con espesor, dos scalae, membrana
+  basilar con sus tres parámetros, ventanas. Vista del campo interior, `t_interior`, balance de
+  energía y `Q` en vivo.
+  *Aceptación*: reproduce `t_interior = 0.53187` dentro de 1 %, energía dentro de 0.46 % y `Q < 5`
+  (los números de D29/D30), y los tres sliders ya expuestos siguen moviendo el resultado con los
+  pesos medidos (53 %/8 %/10 %).
+- **U4 — 3D.** Escena de cajas (o malla externa), solver P1 con ABC-1/BGT-2, y visualización por
+  **rebanadas** (no volumen completo: con 18 k nodos el campo es un sólido y Plotly no lo pinta bien).
+  *Aceptación*: reproduce D32 desde la UI —onda plana 3.53 % a ppw 20, pistón 0.0000 % contra
+  Rayleigh-Sommerfeld, R/T estratificado 2.91 %/2.11 %— con el conteo de nodos y el tiempo a la vista.
+  *Bloqueante*: acá sí hace falta cola de trabajos (`POST` devuelve job id, el front consulta estado y
+  progreso, hay cancelar) y un tope duro de elementos con mensaje claro en vez de colgar la máquina.
+- **U5 — Barridos y comparación.** Barrido de frecuencia, de espesor o de número de elementos sobre
+  la escena actual, en cola, con progreso, CSV y superposición de curvas de varias corridas.
+  *Aceptación*: repetir el barrido de 15 configuraciones de D25 desde la UI y que el CSV coincida con
+  `out/focusing_study.csv` dentro de la tolerancia de malla; y el barrido de sensibilidad de D30
+  (85 puntos) con los mismos pesos.
+- **U6 — Trazabilidad.** Cada resultado lleva su "sello": qué criterio, contra qué número de
+  referencia y con cuánto margen. Un resultado sin sello se marca como *no verificado*.
+  *Aceptación*: la UI rechaza mostrar un número como validado si el test que lo respalda no corrió
+  para esa configuración —el sello sale de la corrida, no de una constante escrita a mano en el JS.
+  Esta fase es la que evita que dentro de tres meses no sepamos qué era confiable.
+
+### Orden y dependencias
+
+U1 → U2 → U3 → U5, con U4 en paralelo cuando la cola de trabajos esté (que la introduce U4 misma).
+U6 es transversal pero se hace al final de U3, cuando ya hay suficientes números para sellar.
+
+Razón del orden: U1 da la infraestructura de escena que todo lo demás reusa; U2 entrega el uso
+principal declarado (contrastar métodos) con el costo más bajo; U3 y U5 son lo que convierte esto en
+herramienta de investigación; U4 es lo más caro y lo más expuesto al techo de cómputo.
+
+### Lo que la UI *no* va a hacer
+
+- No va a correr barridos paramétricos largos en el navegador: eso es `scripts/` + CSV.
+- No va a prometer 3D a 1 MHz: el techo P1 está medido y la UI lo va a mostrar antes de arrancar.
+- No va a tener editor CAD: cajas, rectángulos, círculos y arcos cubren lo que el modelo necesita hoy.
 
 ## Herramientas
 
