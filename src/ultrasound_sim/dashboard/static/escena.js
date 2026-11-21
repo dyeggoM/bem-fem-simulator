@@ -242,6 +242,7 @@ const VISTAS = {
   campo: { panel: 'vistaCampo', main: 'mainCampo' },
   escena: { panel: 'vistaEscena', main: 'vistaEscenaMain' },
   dispersor: { panel: 'vistaDispersor', main: 'vistaDispersorMain' },
+  cochlea: { panel: 'vistaCochlea', main: 'vistaCochleaMain' },
 };
 
 function escCambiarVista(vista) {
@@ -253,11 +254,13 @@ function escCambiarVista(vista) {
     if (main) main.hidden = nombre !== vista;
   }
   if (vista === 'dispersor' && typeof window.disIniciar === 'function') window.disIniciar();
+  if (vista === 'cochlea' && typeof window.cocfIniciar === 'function') window.cocfIniciar();
   // el aviso naranja y la línea de estado son del explorador de campo ("32 fuentes · baffle…",
   // habla del foco de la apertura): en la vista de escena confunden. Se ocultan por CSS
   // (`body.vista-escena`), no por `hidden`: `app.js` los re-muestra cuando llega su respuesta.
   document.body.classList.toggle('vista-escena', vista === 'escena');
   document.body.classList.toggle('vista-dispersor', vista === 'dispersor');
+  document.body.classList.toggle('vista-cochlea', vista === 'cochlea');
   if (vista === 'escena') {
     if (!ESC.materiales.length) escCargarMateriales().then(escEstimar);
     else if (!ESC.resuelto) escEstimar();

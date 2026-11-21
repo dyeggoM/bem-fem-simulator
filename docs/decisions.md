@@ -1037,3 +1037,44 @@ cuadratura por defecto para las 64 curvas. Bajar `quad_order` a 4 para el mapa l
 *0.00 %* de diferencia contra `quad_order=12` — los puntos del mapa están lejos de la superficie y el
 integrando es suave. La cuadratura alta se reserva para las 64 curvas de comparación, donde 0.05 %
 importa.
+
+## D36 — U3: la cóclea en la UI, y dos cuentas que no cerraban
+
+**Qué se entregó.** Una pestaña "cóclea" con el corte transversal completo (cápsula elástica,
+perilinfa, membrana basilar, ventana redonda) resuelto por el mismo `solve_cross_section` de la
+Fase 5, más de lo que tenía el panel de D31: el **mapa del campo interior** (|p| interpolado sobre
+el disco a partir de los nodos de fluido), un corte por el centro, y el balance de energía. Los tres
+sliders (espesor, `c_s`, α) siguen con sus pesos medidos en el tooltip (53 %, 8 %, 10 %), y se
+sumaron dos interruptores: membrana y ventana.
+
+**Aceptación cumplida**: `t_interior = 0.53187` contra 0.53187 de D30 (**desvío 0.00 %**), armónico
+`n = 0` 0.17913, membrana absorbiendo 72.9 %, balance de energía 0.09 %. Sin membrana el mismo
+corte da `t_interior` 0.97218 y absorción exactamente 0: el interruptor cambia la física.
+
+**Hallazgo 1 — inventé un balance que no existe.** Sumé `power_scattered_fraction` +
+`power_membrane_fraction` + `power_window_real_fraction` esperando 1 y me dio **1.85**. No estaba
+mal el código: estaba mal la cuenta. `power_scattered_fraction` (1.12 en el caso base) es
+`P_disp/P_inc` medido en otro radio y con otra normalización, y no se suma con la absorción. La
+identidad que sí documenta `CrossSectionSolution` es **`P_total + P_membrana = 0`** cuando la
+membrana es el único sumidero: da 0.00085, o sea cierra al **0.09 %**. La UI reporta esa y no la
+inventada. Lección: cuando un "balance" no cierra, primero se lee la definición de cada término, no
+se busca el bug en el solver.
+
+**Hallazgo 2 — segundo tipo de objeto que revienta el JSON.** Después de `NaN` (D35) apareció
+`window_impedance`, que es `complex`: `json.dumps` lanza `Object of type complex is not JSON
+serializable` y el navegador no recibe nada. Ahora hay un saneador (`_json_limpio`) que convierte
+complejos a `{re, im}`, numpy a tipos nativos y no finitos a `null`. Los dos casos comparten causa
+—serializar un resultado científico tal cual— así que el saneo es un solo paso antes de responder,
+y el test fija `json.dumps(..., allow_nan=False)` como contrato.
+
+**Lo que se decidió no hacer.** `Q` (ancho de banda de la resonancia de la cavidad) es la métrica
+que D29 usó para mostrar que la membrana rompe la resonancia (287 → <5), pero medirla exige un
+barrido de frecuencia: ~9 solves de 4.3 s, con la malla reconstruida en cada punto. Eso es un
+trabajo en cola (U5), no un botón de esta pantalla, así que la UI dice "necesita barrido de
+frecuencia (U5)" en vez de mostrar un número que no midió.
+
+**Nota sobre el aspecto circular.** Acá sí se usa `scaleanchor` (a diferencia de D27, donde
+rompía el mapa): en D27 el `div` colapsaba a 2 px de alto y Plotly fallaba; con el alto resuelto
+(271 px medidos) el anclaje funciona y el disco sale circular, que con dos circunferencias
+concéntricas no es cosmético. Si en algún layout vuelve a colapsar, el síntoma va a ser
+"Something went wrong with axis scaling" y la salida es sacar el anclaje, no tocar el solver.

@@ -20,6 +20,7 @@
       <button class="vista-btn activo" data-vista="campo">campo</button>
       <button class="vista-btn" data-vista="escena">escena FEM</button>
       <button class="vista-btn" data-vista="dispersor">dispersor BEM</button>
+      <button class="vista-btn" data-vista="cochlea">cóclea</button>
     </nav>
 
     <div id="vistaCampo">
@@ -277,6 +278,64 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
       <p class="pie" id="disEstado">sin resolver</p>
     </div><!-- /vistaDispersor -->
 
+    <div id="vistaCochlea" hidden>
+      <section>
+        <label>Corte transversal</label>
+        <p class="hint">Cápsula elástica + perilinfa, con la membrana basilar y la ventana redonda.
+        Es la escena de la Fase 5 resuelta por el solver acoplado; el mapa es el campo interior.</p>
+      </section>
+
+      <section>
+        <label for="cocFieldEsp">espesor de la cápsula <b id="cocFieldEspVal">2.0 mm</b>
+          <span class="tip" title="Peso medido en la sensibilidad (D30): 53 % — es el parámetro que más mueve t_interior.">?</span>
+        </label>
+        <input type="range" id="cocFieldEsp" min="0.5" max="8" step="0.5" value="2">
+
+        <label for="cocFieldCs">c_s del hueso <b id="cocFieldCsVal">1900 m/s</b>
+          <span class="tip" title="Peso medido (D30): 8 %. c_p y ρ quedan fijos en el ballpark VERIFY de D20.">?</span>
+        </label>
+        <input type="range" id="cocFieldCs" min="1000" max="2500" step="50" value="1900">
+
+        <label for="cocFieldAlpha">atenuación α <b id="cocFieldAlphaVal">0 Np/m</b>
+          <span class="tip" title="Peso medido (D30): 10 %. Se aplica al hueso; la perilinfa queda sin pérdidas.">?</span>
+        </label>
+        <input type="range" id="cocFieldAlpha" min="0" max="40" step="1" value="0">
+      </section>
+
+      <section>
+        <label>Componentes
+          <label class="check"><input type="checkbox" id="cocFieldMemb" checked> membrana basilar</label>
+          <label class="check"><input type="checkbox" id="cocFieldVent" checked> ventana redonda</label>
+        </label>
+      </section>
+
+      <section>
+        <div class="chips">
+          <div class="chip"><span>nodos</span><b id="cocFieldNodos">—</b></div>
+          <div class="chip"><span>estimado</span><b id="cocFieldEstimado">—</b></div>
+        </div>
+        <div class="fila-botones">
+          <button class="btn mini" id="btnCocFieldEstimar">estimar</button>
+          <button class="btn" id="btnCocField">resolver corte</button>
+        </div>
+      </section>
+
+      <section>
+        <label>Resultado</label>
+        <div class="chips">
+          <div class="chip"><span>t interior</span><b id="cocFieldT">—</b></div>
+          <div class="chip"><span>armónico n=0</span><b id="cocFieldN0">—</b></div>
+          <div class="chip"><span>absorbe membrana</span><b id="cocFieldAbs">—</b></div>
+          <div class="chip"><span>ventana (real)</span><b id="cocFieldVentana">—</b></div>
+          <div class="chip"><span>balance energía</span><b id="cocFieldBalance">—</b></div>
+          <div class="chip"><span>cálculo</span><b id="cocFieldTiempo">—</b></div>
+        </div>
+        <p class="hint" id="cocFieldSello"></p>
+      </section>
+
+      <p class="pie" id="cocFieldEstado">sin resolver</p>
+    </div><!-- /vistaCochlea -->
+
     <p class="aviso" id="aviso" hidden></p>
     <p class="pie" id="estado">listo</p>
   </aside>
@@ -302,6 +361,15 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
     </div>
   </main>
 
+  <main class="vista" id="vistaCochleaMain" hidden>
+    <div class="mapa-wrap">
+      <div id="mapaCochlea" class="mapa"></div>
+    </div>
+    <div class="cortes">
+      <div id="corteCochlea" class="corte ancho"></div>
+    </div>
+  </main>
+
   <main class="vista" id="vistaDispersorMain" hidden>
     <div class="mapa-wrap">
       <div id="mapaDisp" class="mapa"></div>
@@ -315,5 +383,6 @@ debajo de 270 kHz: las tres leyes de D19 dan 3.78 (White 2006), 6.24 (Pichardo 2
 <script src="/static/app.js"></script>
 <script src="/static/escena.js"></script>
 <script src="/static/dispersor.js"></script>
+<script src="/static/cochlea.js"></script>
 </body>
 </html>

@@ -27,7 +27,7 @@ import numpy as np
 from .. import cochlea, materials as mats
 from . import bem_field
 from . import field as campo
-from . import scatterer, scene
+from . import cochlea_field, scatterer, scene
 
 ESTATICOS = Path(__file__).resolve().parent / "static"
 MATERIALES = {
@@ -243,7 +243,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         ruta = urlparse(self.path).path
         if ruta not in ("/api/field", "/api/cochlea", "/api/scene/solve", "/api/scene/cost",
-                        "/api/scatterer/solve", "/api/scatterer/cost"):
+                        "/api/scatterer/solve", "/api/scatterer/cost",
+                        "/api/cochlea/field", "/api/cochlea/field/cost"):
             self._error("no encontrado", HTTPStatus.NOT_FOUND)
             return
         largo = int(self.headers.get("Content-Length") or 0)
@@ -267,6 +268,10 @@ class Handler(BaseHTTPRequestHandler):
                 respuesta = scatterer.estimar_dispersor(cuerpo)
             elif ruta == "/api/scatterer/solve":
                 respuesta = scatterer.resolver_dispersor(cuerpo)
+            elif ruta == "/api/cochlea/field/cost":
+                respuesta = cochlea_field.estimar_cochlea(cuerpo)
+            elif ruta == "/api/cochlea/field":
+                respuesta = cochlea_field.resolver_cochlea(cuerpo)
             else:
                 respuesta = calcular(cuerpo)
             self._json(respuesta)

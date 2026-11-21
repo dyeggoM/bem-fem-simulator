@@ -395,6 +395,50 @@ def test_api_scatterer_rechaza_ecuacion_desconocida(servidor):
     assert exc.value.code == 400
 
 
+# ------------------------------------------------------------------ cóclea (U3)
+
+
+def test_api_cochlea_field_cost(servidor):
+    r = _post(servidor + "/api/cochlea/field/cost", {"thickness_mm": 2.0})
+    assert r["ok"] is True
+    assert r["malla"]["n_nodos"] > 10_000
+    assert "metricas" not in r
+
+
+def test_api_cochlea_field_devuelve_mapa_y_metricas(servidor):
+    r = _post(servidor + "/api/cochlea/field", {"thickness_mm": 2.0, "c_s": 1900.0})
+    assert r["ok"] is True
+    m = r["metricas"]
+    assert m["t_interior"] == pytest.approx(0.53187, rel=0.01)
+    assert m["balance_energia"] < 0.01
+    assert len(r["mapa"]["db"]) == len(r["mapa"]["x_mm"])
+
+
+def test_api_cochlea_field_emite_json_sin_complejos(servidor):
+    """`sol.as_dict()` trae `window_impedance` complejo: si no se sanea, el navegador no recibe nada."""
+    datos = json.dumps({"thickness_mm": 2.0}).encode("utf-8")
+    req = urllib.request.Request(
+        servidor + "/api/cochlea/field", data=datos, headers={"content-type": "application/json"}
+    )
+    with urllib.request.urlopen(req, timeout=180) as r:
+        crudo = r.read()
+    assert b"NaN" not in crudo
+    cuerpo = json.loads(crudo)
+    assert cuerpo["detalle"]["window_impedance"]["re"] > 0
+    assert cuerpo["detalle"]["window_impedance"]["im"] == 0.0
+
+
+def test_la_pagina_expone_la_vista_de_cochlea():
+    html = (ESTATICOS / "index.html").read_text(encoding="utf-8")
+    for pieza in ('data-vista="cochlea"', 'id="vistaCochlea"', 'id="mapaCochlea"',
+                  'id="cocFieldT"', 'id="cocFieldBalance"', 'id="cocFieldMemb"', 'cochlea.js'):
+        assert pieza in html, f"falta {pieza} en index.html"
+    js = (ESTATICOS / "cochlea.js").read_text(encoding="utf-8")
+    for pieza in ("function cocfResolver", "function cocfDibujar", "/api/cochlea/field",
+                  "REF_T_INTERIOR", "0.53187"):
+        assert pieza in js, f"falta {pieza} en cochlea.js"
+
+
 def test_la_pagina_expone_la_vista_de_dispersor():
     html = (ESTATICOS / "index.html").read_text(encoding="utf-8")
     for pieza in ('data-vista="dispersor"', 'id="vistaDispersor"', 'id="mapaDisp"',

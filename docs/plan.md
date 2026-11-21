@@ -259,7 +259,16 @@ agrega a la librería con su criterio, después se enchufa.
   FEM 12–41 ms vs BEM 203–242 ms).
   Es la fase que más rinde: es el uso que Diego pidió desde el principio —comparar métodos y ver
   dónde no coinciden.
-- **U3 — Cóclea de trabajo.** La escena completa de 5a+5b: cápsula con espesor, dos scalae, membrana
+- **U3 — Cóclea de trabajo. ENTREGADA.** `dashboard/cochlea_field.py` + pestaña "cóclea": el corte
+  completo de la Fase 5 (cápsula elástica, perilinfa, membrana basilar, ventana redonda) resuelto
+  por `cochlea.solve_cross_section`, con el **mapa del campo interior** interpolado sobre el disco,
+  corte por el centro, y las métricas de D29/D30 en vivo. Medido: `t_interior = 0.53187` (D30:
+  0.53187, desvío *0.00 %*), armónico n=0 0.17913, membrana absorbe *72.9 %*, balance de energía
+  *0.09 %*. Sin membrana: `t_interior` 0.97218 y absorción exactamente 0 (el interruptor mueve la
+  física, no un parámetro cosmético). Costo *4.3 s* (malla 0.47 s + solve 4.3 s).
+  **Q no se muestra**: medirlo pide un barrido de frecuencia (~9 solves) y eso es U5 — la UI lo dice
+  en vez de inventar un número.
+  La escena completa de 5a+5b: cápsula con espesor, dos scalae, membrana
   basilar con sus tres parámetros, ventanas. Vista del campo interior, `t_interior`, balance de
   energía y `Q` en vivo.
   *Aceptación*: reproduce `t_interior = 0.53187` dentro de 1 %, energía dentro de 0.46 % y `Q < 5`

@@ -121,7 +121,12 @@ table.fuentes button:hover { color:var(--no); }
 body.vista-escena #aviso,
 body.vista-escena #estado,
 body.vista-dispersor #aviso,
-body.vista-dispersor #estado { display:none !important; }
+body.vista-dispersor #estado,
+body.vista-cochlea #aviso,
+body.vista-cochlea #estado { display:none !important; }
+
+.check { display:flex; align-items:center; gap:6px; margin-top:6px; font-size:11.5px; color:var(--dim); }
+.check input { margin:0; }
 
 /* `flex-basis` le gana a `height` en un flex de columna: con `flex:1 1 100%` la gráfica angosta
    colapsaba a 12 px (medido en el navegador). Con `auto` respeta el alto de la regla responsive. */
