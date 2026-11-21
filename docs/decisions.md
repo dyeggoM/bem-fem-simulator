@@ -1616,3 +1616,51 @@ repos de `docs/referencias.md`).
 15 % a `ka = 0.5`, 19 % a `ka = 1`. El 41 % de `ka = 0.2` **no dice nada del acoplamiento**: con
 `ka = 0.2` el dominio exterior queda en `k₀b = 0.5`, o sea media longitud de onda para el ABC. Es el
 mismo error de antes (mirar un número sin preguntar qué lo domina).
+
+### D46 — tercer apéndice: de dónde salen los 9 puntos, y el dominio pasa a 4a
+
+**El experimento.** Fluido solo con el desplazamiento exacto de Faran en la interfaz (9.73 % de base),
+moviendo **una cosa por vez**. Ese camino aísla dominio y malla del sólido, y cuesta 2 s en vez de 30.
+
+**Dominio (`h = a/4.5` fijo):**
+
+- `b = 2.5a` (`k₀b = 2.5`): **9.30 %** — 5 934 nodos, 2.0 s
+- `b = 4.0a` (`k₀b = 4.0`): **4.06 %** — 21 398 nodos, 24 s
+- `b = 6.0a` (`k₀b = 6.0`): **3.96 %** — 67 113 nodos, 303 s
+
+O sea: **el ABC se lleva ~5 puntos de los 9**, y a 4a ya está por debajo del piso de malla. Ir a 6a
+mejora 0.1 puntos por **12× el costo**. El ABC local no es el problema: el problema era ponerle un
+dominio de `k₀b = 2.5`, que es media longitud de onda.
+
+**Malla (en `b = 4a`):**
+
+- `h = a/3`: 10.24 % (área de interfaz 0.9807 de la esfera)
+- `h = a/4.5`: **4.06 %** (0.9913) — orden aparente 2.28
+- `h = a/6`: **3.03 %** (0.9945) — orden 1.02
+
+El orden **baja a 1** al refinar, y el área de la interfaz converge despacio: a partir de acá el que
+manda es el **facetado** (el poliedro inscripto tiene área y radio menores que la esfera). Refinar más
+no arregla eso — lo arreglan elementos de frontera curva, y por eso `docs/referencias.md` apunta a
+deal.II/FEniCSx para ese paso.
+
+**Acoplado completo, con el sólido resuelto:**
+
+| configuración | error | nodos | tiempo |
+|---|---|---|---|
+| 2.5a, h=a/3.5 | 10.20 % | 2 858 | 1.3 s |
+| 3.0a, h=a/4.5 | 7.62 % | 9 755 | 13.9 s |
+| **4.0a, h=a/4.5** | **4.21 %** | 21 398 | 32 s |
+| 4.0a, h=a/6 | 3.01 % | 47 574 | 211 s |
+
+Comparado con el fluido solo y datos exactos a 4a (4.06 %), el **sólido aporta 0.15 puntos**: la
+resolución elástica dejó de ser el cuello de botella.
+
+**Decisión de API.** `sphere_shell_tet_mesh` toma `outer_radius` y `spacing` por defecto
+(`4·radius` y `radius/4.5`) y **avisa** si el radio exterior baja de `3·radius`, con el número medido
+en el mensaje. Un dominio chico sigue permitido —para una vista rápida sirve— pero ya no puede pasar
+silenciosamente a un número que se reporte.
+
+**Lo que queda sobre la mesa.** Si se quiere el 4 % **al costo de 1.3 s**, el camino es una condición
+**Dirichlet-to-Neumann exacta** sobre la esfera exterior (expansión en armónicos esféricos con
+`hₗ′(k b)/hₗ(k b)` por modo, en vez del ABC local): es exacta para una frontera esférica y permitiría
+`b = 2.5a`. No está implementada; queda como el siguiente paso si el costo de 32 s molesta en la UI.

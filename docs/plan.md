@@ -68,9 +68,15 @@ Resumen de lo que está *cerrado con número medido*, no de lo que está escrito
   arregló con una restricción de Lagrange de traslación media nula, cuyos multiplicadores **son** la
   fuerza espuria y se devuelven como diagnóstico (*7.6e-8 N*). Convergencia al refinar: *10.20 %*
   (h=a/3.5) → *9.70 %* (a/4.5) → *9.21 %* (a/5.5).
-  **El piso que queda no es del sólido**: el fluido solo, con el desplazamiento exacto de Faran
-  impuesto en la interfaz, da *9.73 %* — el mismo número. O sea que lo que resta es superficie
-  facetada + ABC-2 en un dominio de radio 2.5a (`k₀b = 2.5`) + P1 en el fluido.
+  **El piso, descompuesto y bajado (D46, 3.er apéndice).** Fluido solo con datos exactos, una cosa
+  por vez: el **dominio** se llevaba ~5 de los 9 puntos (`2.5a` → *9.30 %*, `4a` → *4.06 %*, `6a` →
+  *3.96 %* por 12× el costo), y el resto es malla (`h=a/3` *10.24 %* → `a/4.5` *4.06 %* → `a/6`
+  *3.03 %*, con el orden cayendo a 1 por el **facetado**). El acoplado completo en el dominio
+  recomendado da **4.21 %** a `h=a/4.5` (32 s) y *3.01 %* a `a/6` (211 s): **el sólido aporta 0.15
+  puntos**. `sphere_shell_tet_mesh` ahora toma `4·radius` y `radius/4.5` por defecto y **avisa** si el
+  radio exterior baja de `3·radius`.
+  Lo que queda sobre la mesa: una condición **Dirichlet-to-Neumann exacta** sobre la esfera exterior
+  permitiría el 4 % al costo de 1.3 s (dominio chico), en vez de 32 s.
   **La restricción tiene dominio de validez medido**: con una esfera indistinguible del medio hay que
   apagarla, porque ahí la onda incidente **sí** ejerce fuerza neta y el desplazamiento medio no es
   cero (con restricción mete dispersión falsa de 1.6 Pa sobre 1 Pa). Está como opción explícita y

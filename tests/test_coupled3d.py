@@ -19,6 +19,8 @@ tests de acoplamiento de acá usan tolerancias holgadas y **medidas**, no una me
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pytest
 
@@ -49,7 +51,7 @@ def test_el_volumen_de_las_esferas_converge():
     a = _radio()
     errores = []
     for div in (3.0, 4.5):
-        malla = sphere_shell_tet_mesh(a, 2.5 * a, a / div)
+        malla = sphere_shell_tet_mesh(a, 4.0 * a, a / div)
         exacto = 4.0 / 3.0 * np.pi * a**3
         errores.append(abs(malla.solid_volume() - exacto) / exacto)
     print(f"\n  error de volumen: {[f'{100*e:.2f} %' for e in errores]}")
@@ -60,7 +62,7 @@ def test_el_volumen_de_las_esferas_converge():
 def test_la_interfaz_es_conforme_y_esta_sobre_la_esfera():
     """Cada cara de interfaz tiene que ser frontera del sólido **y** del fluido, y estar en r = a."""
     a = _radio()
-    malla = sphere_shell_tet_mesh(a, 2.5 * a, a / 3.5)
+    malla = sphere_shell_tet_mesh(a, 4.0 * a, a / 3.5)
 
     def caras_una_vez(tets):
         from ultrasound_sim.meshing3d_sphere import _faces_once, _tet_faces
@@ -85,7 +87,7 @@ def test_la_interfaz_es_conforme_y_esta_sobre_la_esfera():
 
 def test_la_normal_de_la_interfaz_apunta_hacia_afuera_del_solido():
     a = _radio()
-    malla = sphere_shell_tet_mesh(a, 2.5 * a, a / 3.5)
+    malla = sphere_shell_tet_mesh(a, 4.0 * a, a / 3.5)
     n = malla.interface_normals()
     centros = malla.nodes[malla.interface_faces].mean(axis=1)
     radial = centros / np.linalg.norm(centros, axis=1)[:, None]
@@ -150,8 +152,14 @@ def test_el_lame_reconstruye_las_velocidades():
 
 @pytest.fixture(scope="module")
 def malla_esfera():
+    """Malla **rápida** para los tests de límites: dominio de 2.5a, 1.3 s por solve.
+
+    No es la malla de producción: a 2.5a el ABC-2 deja ~9 % de error. La comparación con Faran en el
+    dominio recomendado (4a) va marcada `slow`, porque son 32 s.
+    """
     a = _radio()
-    return sphere_shell_tet_mesh(a, 2.5 * a, a / 3.0)
+    with pytest.warns(UserWarning, match="ABC-2 domina"):
+        return sphere_shell_tet_mesh(a, 2.5 * a, a / 3.0)
 
 
 def _puntos(a, n=13):
@@ -272,3 +280,38 @@ def test_la_restriccion_no_se_usa_cuando_el_cuerpo_es_transparente(malla_esfera)
           f"{np.abs(con['p_s']).max():.3e}")
     assert np.abs(sin["p_s"]).max() < 5e-2
     assert np.abs(con["p_s"]).max() > 0.5
+
+# --------------------------------------------------------------------------- dominio y piso
+
+
+def test_el_dominio_chico_avisa():
+    """El ABC-2 necesita dominio: a 2.5a deja ~9 % de error. Se avisa en vez de devolver un número
+    malo sin decir nada."""
+    a = _radio()
+    with pytest.warns(UserWarning, match="ABC-2 domina"):
+        sphere_shell_tet_mesh(a, 2.5 * a, a / 4.0)
+    # el dominio recomendado no avisa
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        sphere_shell_tet_mesh(a, 4.0 * a, a / 4.0)
+
+
+@pytest.mark.slow
+def test_contra_faran_en_el_dominio_de_produccion():
+    """El número que se reporta: dominio de 4a y h = a/4.5.
+
+    Medido: **4.21 %** (con el fluido solo y datos exactos, 4.06 % — o sea que el sólido aporta 0.15
+    puntos y el resto es malla+ABC). Costo: 32 s y 21 398 nodos, por eso la marca `slow`.
+    """
+    a = _radio()
+    mall = sphere_shell_tet_mesh(a, 4.0 * a, a / 4.5)
+    coef = faran.coeficientes(F, AGUA, ACERO, a)
+    pts = _puntos(a)
+    exacto = faran.campo_dispersado(coef, pts, a)
+    util = np.abs(exacto) > 1e-3 * np.abs(exacto).max()
+
+    r = coupled3d.resolver(mall, AGUA, ACERO, F, abc_order=2)
+    fem = coupled3d._interpolar(mall, r["p_s"], pts)
+    error = np.abs(fem[util] - exacto[util]).max() / np.abs(exacto[util]).max()
+    print(f"\n  4a: error {100*error:.2f} % · {mall.n_nodes} nodos (vs 10.20 % a 2.5a)")
+    assert error < 0.06

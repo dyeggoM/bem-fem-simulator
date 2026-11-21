@@ -94,10 +94,20 @@ def _faces_once(faces: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return uniq[counts == 1], counts
 
 
+#: Radio exterior por defecto, en múltiplos del radio de la esfera. **Medido**, no elegido a gusto:
+#: con `b = 2.5a` el ABC-2 deja un error de 9.3 % en el campo dispersado (y `k₀b = 2.5` es chico para
+#: cualquier condición local), con `4a` baja a 4.1 % y con `6a` ya no mejora (3.96 %) por 12× el
+#: costo. Ver D46, tercer apéndice.
+RADIO_EXTERIOR_DEFECTO = 4.0
+
+#: Debajo de este múltiplo el ABC domina el error. Se avisa en vez de devolver un número malo callado.
+RADIO_EXTERIOR_MINIMO = 3.0
+
+
 def sphere_shell_tet_mesh(
     radius: float,
-    outer_radius: float,
-    spacing: float,
+    outer_radius: float | None = None,
+    spacing: float | None = None,
     *,
     refine_interface: float | None = None,
 ) -> SphereShellMesh:
@@ -111,8 +121,23 @@ def sphere_shell_tet_mesh(
     refine_interface : si se da, tamaño de elemento en la interfaz [m]; útil porque la curvatura
         está en ``r = radius`` y el ABC en ``r = outer_radius``.
     """
-    if not (radius > 0 and outer_radius > radius):
+    if not (radius > 0):
+        raise ValueError(f"radius tiene que ser > 0; llegó {radius!r}")
+    if outer_radius is None:
+        outer_radius = RADIO_EXTERIOR_DEFECTO * radius
+    if outer_radius <= radius:
         raise ValueError(f"hacen falta 0 < radius < outer_radius; llegó {radius!r}, {outer_radius!r}")
+    if outer_radius < RADIO_EXTERIOR_MINIMO * radius:
+        import warnings
+
+        warnings.warn(
+            f"outer_radius = {outer_radius / radius:.2f}·radius: con menos de "
+            f"{RADIO_EXTERIOR_MINIMO:g}·radius el ABC-2 domina el error (medido: 9.3 % a 2.5a contra "
+            f"4.1 % a 4a). Se puede usar para una vista rápida, no para un número que se reporte.",
+            stacklevel=2,
+        )
+    if spacing is None:
+        spacing = radius / 4.5
     if spacing <= 0:
         raise ValueError(f"spacing tiene que ser > 0; llegó {spacing!r}")
 
