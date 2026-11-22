@@ -2632,3 +2632,40 @@ mapas son **idénticos**.
 
 **Test que lo fija** (`test_campo_arreglo_vs_fuentes.py`): la diferencia entre las dos rutas es < 1e-6 dB,
 acercar el foco acerca el pico, y la frecuencia cambia la fase de la misma fuente.
+
+## D65 — La invalidación de fuentes tiene que ser un solo camino (cinco fugas que dejó D64)
+
+**Cómo apareció**: la revisión independiente (`sim-code-check`) encontró que D64 había tapado el caso del
+slider pero dejado la sincronización con **tres implementaciones distintas** de la misma regla. Cinco
+fugas, cada una con su medición:
+
+* **F1 — `material` era una entrada muerta.** Estaba en `CLAVES_QUE_REGENERAN`, pero `enlazar` nunca se
+  llama con `'material'`: el selector tiene su propio listener, que se había quedado con la versión vieja
+  (`regenerarAlVolver` en «fuentes», que nadie consume ahí). Medido: pasar de agua a tejido dejaba
+  **0.00°** de cambio de fase y el cuerpo iba con `material=tejido` y las fases del agua — **215.06° de
+  error**. En «arreglo» además hacía `S.fuentes = null`, el descarte silencioso que D64 decía haber
+  eliminado.
+* **F2 — `syncFrecuencia` no invalidaba.** La frecuencia llega desde cadena/escena/3D y escribía `S.freq`
+  sin tocar las fuentes: 250→400 kHz daba **0.00°** y ni salir y volver a la pestaña lo corregía.
+* **F3 — `aplicar()` heredaba los flags.** Cargar una configuración de 3 fuentes (57.30/114.59/171.89°)
+  terminaba con 16 fuentes a −42.02/−31.60/−22.64°: la próxima visita a «fuentes» las pisaba.
+* **F4 — `instantanea()` guardaba `sources: null`** en modo «arreglo», aunque en ese modo con fuentes
+  movidas el campo **sí** se calcula con ellas (`sources` va en el cuerpo): guardar y recargar daba otro
+  campo.
+* **F5 — en «arreglo» con fuentes movidas, cambiar el foco no llegaba al cuerpo** y no avisaba.
+
+**La regla**: una sola función, `invalidarFuentesDelArreglo(motivo)`, llamada desde los tres caminos
+(slider, selector de material, `syncFrecuencia`). Si el modo es «fuentes», regenera en el acto y avisa; si
+es «arreglo» con fuentes movidas, avisa que el parámetro no tiene efecto hasta «← desde arreglo»; si es
+«arreglo» limpio, marca para regenerar al entrar.
+
+**Verificado en el navegador**: material agua→tejido en «fuentes» → **32 de 32 fases** cambian y sale el
+aviso; frecuencia desde la cadena → `S.freq` 400 y fases nuevas; `instantanea()` en «arreglo» devuelve
+**32 fuentes**; cargar 3 fuentes deja **3** con `regenerarAlVolver` y `fuentesMovidas` en `false`, y
+sobreviven a pasar por «fuentes».
+
+**Y una lección sobre los tests**: el test de D64 era un `grep` que daba verde **por la rama muerta de
+F1** — comprobaba que `'material'` estuviera en el `Set`, y estaba, aunque nadie lo usara. Ahora verifica
+que la función exista y se llame desde los tres sitios, que la rama vieja no esté, y que `aplicar` e
+`instantanea` hagan lo que dicen. Un test que busca una cadena en el archivo no prueba que el camino
+esté conectado; hay que verificar **el uso**, no la declaración.

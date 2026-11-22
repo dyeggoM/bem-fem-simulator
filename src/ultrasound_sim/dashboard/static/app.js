@@ -167,7 +167,15 @@ window.syncFrecuencia = function syncFrecuencia(khz, origen) {
     if (control) control.value = String(valor);
     const etiqueta = document.getElementById(idEtiqueta);
     if (etiqueta) etiqueta.textContent = `${valor} kHz`;
-    if (vista === 'campo') S.freq = valor;
+    if (vista === 'campo') {
+      // la frecuencia llega desde otra vista (cadena, escena, 3D) y también cambia `k`: sin esto las
+      // fases de foco guardadas quedaban viejas y ni salir y volver a la pestaña lo corregía
+      const cambió = S.freq !== valor;
+      S.freq = valor;
+      if (cambió && typeof window.invalidarFuentesDelArreglo === 'function') {
+        window.invalidarFuentesDelArreglo('la frecuencia');
+      }
+    }
     if (vista === 'cadena' && typeof CAD !== 'undefined') CAD.freq = valor;
     if (vista === 'escena' && typeof ESC !== 'undefined') ESC.freq = valor;
     if (vista === 'volumen' && typeof VOL !== 'undefined') VOL.freq = valor;
@@ -850,6 +858,27 @@ document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () 
  * la fase de foco de `−k·|F − y|` con `k = 2π·f/c`, o sea de `fx`, `fy`, `freq` y `material`. Si cambia
  * cualquiera, las fuentes guardadas ya no describen el mismo arreglo. */
 const CLAVES_QUE_REGENERAN = new Set(['n', 'd', 'fx', 'fy', 'freq', 'material']);
+const RENOMBRE = { n: 'la cantidad de elementos', d: 'la apertura', fx: 'el foco', fy: 'el foco lateral',
+  freq: 'la frecuencia', material: 'el material' };
+
+/* Un solo camino para invalidar, porque había tres y dos se quedaron atrás: `enlazar` hacía lo correcto
+ * y el listener de `#mat` seguía con la versión vieja (que en «fuentes» sólo marcaba una bandera que
+ * nadie consume ahí), y `syncFrecuencia` —cuando la frecuencia cambia desde otra vista— no invalidaba
+ * nada. Los tres terminaban simulando fases viejas con la pantalla diciendo otra cosa. */
+function invalidarFuentesDelArreglo(motivo) {
+  if (S.modo === 'manual') {
+    generarDesdeArreglo();
+    S.fuentesMovidas = false;
+    S.regenerarAlVolver = false;
+    avisar(`las fuentes se regeneraron desde el arreglo: cambió ${motivo}`);
+  } else if (S.fuentesMovidas) {
+    // en «arreglo» con fuentes movidas se sigue calculando con ellas: el parámetro no tiene efecto
+    avisar(`cambió ${motivo}, pero se sigue usando lo que moviste; «← desde arreglo» lo aplica`);
+  } else {
+    S.regenerarAlVolver = true;
+  }
+}
+window.invalidarFuentesDelArreglo = invalidarFuentesDelArreglo;
 
 const enlazar = (id, clave, escala = 1) => {
   $(id).addEventListener('input', (e) => {
@@ -858,18 +887,7 @@ const enlazar = (id, clave, escala = 1) => {
     // se miraban `n` y `d`: cambiar el foco, la frecuencia o el material dejaba las fases viejas, y al
     // pasar a «fuentes» se simulaba un arreglo distinto del que se veía en «arreglo» sin ningún aviso.
     // Esas son las cuatro cosas de las que depende la fase de foco: −k·|F − y| con k = 2π·f/c.
-    if (CLAVES_QUE_REGENERAN.has(clave)) {
-      if (S.modo === 'manual') {
-        // en «fuentes» se regenera en el acto: si no, seguiría mostrando y simulando fases viejas
-        // mientras la pestaña dice otra cosa
-        generarDesdeArreglo();
-        S.fuentesMovidas = false;
-        avisar('las fuentes se regeneraron desde el arreglo: cambió n, apertura, foco, frecuencia '
-          + 'o material');
-      } else {
-        S.regenerarAlVolver = true;   // en «arreglo», al entrar a «fuentes»
-      }
-    }
+    if (CLAVES_QUE_REGENERAN.has(clave)) invalidarFuentesDelArreglo(RENOMBRE[clave] || clave);
     sincronizarEtiquetas(); pintarFuentes(); pedir();
   });
 };
@@ -884,7 +902,7 @@ enlazar('fy', 'fy');
 $('mat').addEventListener('change', (e) => {
   S.material = e.target.value;
   // el material cambia `c` y con eso `k`: las fases de foco guardadas dejan de valer
-  if (S.fuentes && S.modo === 'manual') S.regenerarAlVolver = true; else S.fuentes = null;
+  invalidarFuentesDelArreglo('el material');
   sincronizarEtiquetas(); pedir();
 });
 $('model').addEventListener('change', (e) => {
@@ -1095,7 +1113,10 @@ function instantanea() {
     focus_x_mm: S.fx,
     focus_y_mm: S.fy,
     grid: S.grid,
-    sources: S.modo === 'manual' && S.fuentes ? S.fuentes : null,
+    // Se guardan las fuentes que SE ESTÁN SIMULANDO, no sólo las del modo «fuentes»: en «arreglo» con
+    // fuentes movidas el campo se calcula con ellas (`sources` en el body), así que guardar `null` hacía
+    // que recargar la configuración diera otro campo.
+    sources: S.fuentes && S.fuentes.length ? S.fuentes : null,
     // los tres parámetros de la cóclea viajan con la configuración: son parte de lo que el usuario fijó
     coclea: { thickness_mm: COC.espesor, c_s: COC.c_s, alpha_np_m: COC.alpha },
   };
@@ -1117,6 +1138,10 @@ function aplicar(cfg) {
     ? cfg.sources.map((s) => ({ y: Number(s.y), width: Number(s.width),
                                 amp: Number(s.amp ?? 1), phase: Number(s.phase ?? 0) }))
     : null;
+  // recién cargadas, describen exactamente la config cargada: si quedara `regenerarAlVolver` de la
+  // anterior, la próxima visita a «fuentes» las pisaba y el campo cambiaba solo
+  S.regenerarAlVolver = false;
+  S.fuentesMovidas = false;
   if (cfg.coclea) {
     COC.espesor = Number(cfg.coclea.thickness_mm) || COC.espesor;
     COC.c_s = Number(cfg.coclea.c_s) || COC.c_s;

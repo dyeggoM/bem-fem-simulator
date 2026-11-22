@@ -243,8 +243,24 @@ def test_todo_lo_que_cambia_las_fuentes_del_arreglo_las_invalida():
         assert clave in js.split("CLAVES_QUE_REGENERAN = new Set(")[1].split(")")[0], (
             f"{clave} tiene que invalidar las fuentes guardadas"
         )
-    # en «fuentes» se regenera al instante: si no, seguiría simulando fases viejas
-    assert "generarDesdeArreglo();\n        S.fuentesMovidas = false;" in js
+
+    # un solo camino: tener tres fue el bug — el listener de #mat y `syncFrecuencia` se quedaron con la
+    # versión vieja mientras `enlazar` hacía lo correcto
+    assert "function invalidarFuentesDelArreglo(" in js
+    assert "invalidarFuentesDelArreglo(RENOMBRE[clave] || clave)" in js          # el slider
+    assert "invalidarFuentesDelArreglo('el material')" in js                      # el selector
+    assert "invalidarFuentesDelArreglo('la frecuencia')" in js                    # desde cadena/escena/3D
+    # la rama muerta que dejó el material: marcaba una bandera que nadie consume en «fuentes»
+    assert "if (S.fuentes && S.modo === 'manual') S.regenerarAlVolver = true; else S.fuentes = null" not in js
+
+    # cargar una config no puede heredar los flags de la anterior
+    aplicar = js.split("function aplicar(cfg)")[1].split("function ")[0]
+    assert "S.regenerarAlVolver = false" in aplicar
+    assert "S.fuentesMovidas = false" in aplicar
+
+    # se guarda lo que SE ESTÁ SIMULANDO: en «arreglo» con fuentes movidas el campo usa esas fuentes
+    instantanea = js.split("function instantanea()")[1].split("function ")[0]
+    assert "S.fuentes && S.fuentes.length ? S.fuentes : null" in instantanea
 
 
 def test_los_valores_de_la_tabla_de_fuentes_se_pueden_leer_y_ubicar():
